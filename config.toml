@@ -1,0 +1,23 @@
+# battle_test configuration. When the project moves to the smark_iq server,
+# only this file should need to change.
+
+[ollama]
+url = "http://localhost:11434"
+timeout_seconds = 1800
+
+[models]
+# Same model for both roles on the dev laptop; try different models per role
+# once on the server.
+plaintiff = "qwen2.5:7b"
+defendant = "qwen2.5:7b"
+
+[generation]
+# Ollama's default context is too small to hold complaint + motion +
+# opposition, and it truncates silently, so set it explicitly.
+num_ctx = 8192
+temperature = 0.4
+
+[pipeline]
+# 1 = complaint, motion, opposition. 2 = also the plaintiff's reply.
+rounds = 2
+output_dir = "output"
