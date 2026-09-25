@@ -54,9 +54,70 @@ declares a winner.
   structured form of case information for generation.
 - **Legal authority source:** requirement 3 (only current, accurate, valid
   law) means the models can't rely on training data alone, since it may be
-  outdated or invented. This settles the earlier open question: the project
-  needs a grounded source of federal and state law, and citations should be
-  checked against it.
+  outdated or invented. The project needs a grounded source of federal and
+  state law, and every citation is checked against it. See "Law source (v1)"
+  below.
+
+## Law source (v1) — free sources only
+
+Decided: v1 uses free sources only. Paid sources are revisited after v1.
+
+### Statutes, regulations, constitutions, court rules — Open US Law
+
+- [Open US Law](https://www.vaquill.ai/open-us-law) (Vaquill AI): the U.S.
+  Code, federal and state regulations, and the codes, constitutions and court
+  rules of all 50 states, DC and Puerto Rico. About 3M sections in one
+  schema.
+- Downloaded (~4 GB Parquet) and indexed **locally**, so statute lookups
+  never send case facts off the machine.
+- Licence: statute text is public domain; the compilation is CC BY 4.0.
+  Credit line required: "Open US Law by Vaquill AI, CC BY 4.0."
+- Refreshed quarterly (current snapshot v2026.08, dated 2026-08-14). Updating
+  the local copy each quarter is a maintenance task, and every output states
+  the snapshot date its statutes are current as of.
+- A minority of state codes come from commercial aggregators, not official
+  publishers, and have no official source URL. Citations resting on those
+  records are flagged in the output.
+- Statute citations produced by the models are checked against this local
+  corpus. A cited section that isn't in the corpus is rejected.
+
+### Case law — CourtListener (Free Law Project)
+
+- [CourtListener REST API](https://www.courtlistener.com/help/api/rest/):
+  search for relevant cases. Free, requires an API token.
+- [Citation Lookup API](https://wiki.free.law/c/courtlistener/help/api/rest/v4/citation-lookup):
+  every case citation the models produce is checked against ~18M real
+  citations. Citations that don't exist, or are ambiguous, are rejected.
+  - Limits: 60 valid citations per minute, 250 per request.
+  - Case law only: it does not look up statutes. Statutes are checked
+    against Open US Law instead.
+- Privacy: citations are extracted locally with Eyecite (the open-source
+  parser CourtListener itself uses) and only the citation strings are sent,
+  never the complaint or case facts.
+
+### Known gap — "still good law" for cases
+
+- Confirming a case exists doesn't confirm it hasn't been overruled. That
+  needs a citator (KeyCite, Shepard's), and no free one exists yet. Free Law
+  Project is [building an open-source one](https://free.law/2025/05/01/citator/),
+  still in progress and focused on Supreme Court cases. Revisit when it ships.
+- v1 mitigation:
+  1. Use CourtListener's "cited by" data to pull later opinions citing each
+     case, and have a model scan them for negative treatment (overruled,
+     reversed, criticised). This is a **warning signal only**, not a
+     guarantee.
+  2. Every case citation in the output is marked **"verify with
+     KeyCite/Shepard's before filing."**
+- What v1 can honestly claim: every citation exists, and statutes are
+  current as of a stated snapshot date. It can't claim that every case is
+  still good law.
+
+### Deferred paid options (post-v1)
+
+- [OpenLaws](https://openlaws.us/): same statute coverage with weekly federal
+  and monthly state updates. Pricing not published; access by application.
+- vLex/Fastcase (Cert citator), Westlaw (KeyCite), Lexis (Shepard's): would
+  close the good-law gap, but APIs are sales-led or quote-only.
 
 ## Decisions made
 
@@ -65,13 +126,12 @@ declares a winner.
   with a likelihood-of-success estimate.
 - **Grounding:** arguments must be grounded in verified current law, not
   just the uploaded text.
+- **Law source (v1):** free sources only. Open US Law (local) for statutes
+  and regulations, CourtListener for case law and citation checks. Details
+  in "Law source (v1)" above.
 
 ## Open questions
 
-- **Law source and upkeep:** a local corpus (RAG, like the tax project idea),
-  a trusted legal-research API, or both? How is it kept current, and how
-  are citations checked, so that repealed statutes, overturned cases, and
-  made-up citations are caught?
 - **Coverage scope:** all 50 states plus federal law from the start, or
   launch with a few states and expand?
 - **Likelihood estimate:** include it or not, and if so, how is it worded
