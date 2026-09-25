@@ -1,0 +1,20 @@
+# Secrets - never commit
+.env
+
+# Case documents may be sensitive/privileged - never commit
+cases/
+*.pdf
+*.docx
+
+# PyCharm/venv scaffolding
+.venv/
+.idea/
+main.py
+__pycache__/
+
+# Claude Code local session state
+.claude/
+
+# OS junk
+Thumbs.db
+.DS_Store
