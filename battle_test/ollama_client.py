@@ -24,10 +24,12 @@ class OllamaClient:
         system: str,
         user: str,
         on_token: Callable[[str], None] | None = None,
+        json_mode: bool = False,
     ) -> str:
         """Send one system+user exchange and return the full reply.
 
         Streams the response so long drafts show progress via on_token.
+        json_mode constrains the reply to valid JSON.
         """
         body = {
             "model": model,
@@ -38,6 +40,8 @@ class OllamaClient:
             "stream": True,
             "options": {"num_ctx": self.num_ctx, "temperature": self.temperature},
         }
+        if json_mode:
+            body["format"] = "json"
         request = urllib.request.Request(
             f"{self.url}/api/chat",
             data=json.dumps(body).encode("utf-8"),

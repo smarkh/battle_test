@@ -13,11 +13,23 @@ defendant = "qwen2.5:7b"
 
 [generation]
 # Ollama's default context is too small to hold complaint + motion +
-# opposition, and it truncates silently, so set it explicitly.
-num_ctx = 8192
+# opposition + quoted statutes, and it truncates silently, so set it
+# explicitly.
+num_ctx = 12288
 temperature = 0.4
 
 [pipeline]
 # 1 = complaint, motion, opposition. 2 = also the plaintiff's reply.
 rounds = 2
 output_dir = "output"
+
+[corpus]
+# Open US Law snapshot (https://www.vaquill.ai/open-us-law), CC BY 4.0.
+# Refreshed quarterly: bump the version and rebuild to update.
+snapshot = "v2026.08"
+base_url = "https://oss-data-us.vaquill.ai"
+data_dir = "data"
+jurisdictions = ["ut", "ca", "tx", "federal"]
+# Federal regulations (~2.8 GB) are left out for now; add "regulations" to
+# include them.
+document_types = ["statutes", "constitutions", "court_rules"]

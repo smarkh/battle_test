@@ -5,7 +5,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from battle_test.config import DEFAULT_CONFIG_PATH, load_config
+from battle_test.config import DEFAULT_CONFIG_PATH, load_config, load_corpus_config
+from battle_test.law_index import LawIndex
 from battle_test.ollama_client import OllamaClient, OllamaError
 from battle_test.pipeline import run_case
 from battle_test.prompts import SUPPORTED_STATES
@@ -39,6 +40,11 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     cfg = load_config(args.config)
     client = OllamaClient(cfg.ollama_url, cfg.timeout_seconds, cfg.num_ctx, cfg.temperature)
+    try:
+        law = LawIndex(load_corpus_config(args.config).db_path)
+    except FileNotFoundError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
 
     input_path = args.facts or args.complaint
     text = input_path.read_text(encoding="utf-8")
@@ -53,6 +59,7 @@ def main(argv: list[str] | None = None) -> int:
         run = run_case(
             cfg,
             client,
+            law,
             args.state,
             facts=text if args.facts else None,
             complaint=text if args.complaint else None,
@@ -63,6 +70,8 @@ def main(argv: list[str] | None = None) -> int:
     except OllamaError as e:
         print(f"\nerror: {e}", file=sys.stderr)
         return 1
+    finally:
+        law.close()
 
     now = datetime.now()
     out = args.out or cfg.output_dir / f"{now:%Y%m%d-%H%M%S}-{args.state.lower()}.md"

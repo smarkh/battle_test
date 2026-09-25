@@ -21,3 +21,6 @@ Thumbs.db
 
 # Generated case documents - may contain case facts, never commit
 output/
+
+# Downloaded law corpus and search index - rebuilt with python -m battle_test.corpus build
+data/

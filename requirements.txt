@@ -1,0 +1,2 @@
+# Only needed to build the law corpus (reads the Open US Law Parquet files).
+pyarrow>=15
