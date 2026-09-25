@@ -49,7 +49,7 @@ declares a winner.
   single-conversation chat doesn't do this multi-role turn-taking out of the
   box.
 - **State selector:** a US state input that decides which state law applies
-  and is passed to both roles.
+  and is passed to both roles. v1 offers Utah, California and Texas.
 - **Complaint input:** two modes — paste/upload an existing complaint, or a
   structured form of case information for generation.
 - **Legal authority source:** requirement 3 (only current, accurate, valid
@@ -129,11 +129,15 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
 - **Law source (v1):** free sources only. Open US Law (local) for statutes
   and regulations, CourtListener for case law and citation checks. Details
   in "Law source (v1)" above.
+- **State coverage (v1):** Utah, California and Texas, plus federal law.
+  Utah is required. California and Texas are large, heavily litigated, and
+  have civil procedure that differs from Utah's, which tests that switching
+  states really changes the law applied. The state selector offers only
+  these three in v1. Open US Law covers every state, so adding more later
+  means testing output quality for that state, not sourcing new data.
 
 ## Open questions
 
-- **Coverage scope:** all 50 states plus federal law from the start, or
-  launch with a few states and expand?
 - **Likelihood estimate:** include it or not, and if so, how is it worded
   and justified so it doesn't read as a verdict?
 - **Round 2:** confirm it's feasible (context length, runtime on local
