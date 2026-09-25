@@ -135,6 +135,14 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
   states really changes the law applied. The state selector offers only
   these three in v1. Open US Law covers every state, so adding more later
   means testing output quality for that state, not sourcing new data.
+- **Models:** local models via Ollama, so case documents stay on the
+  machine. The only outbound calls are the citation-string checks to
+  CourtListener. Early development happens on this dev laptop (RTX 3050 Ti,
+  4 GB VRAM, `qwen2.5:7b` already pulled). That's enough to build and test the
+  pipeline end to end, but not to judge drafting quality. Once there's real
+  progress, the project migrates to the smark_iq server, where larger models
+  and round-2 feasibility get evaluated. Code should keep the Ollama URL and
+  model names in config so the move is a config change.
 
 ## Open questions
 
@@ -142,9 +150,9 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
   and justified so it doesn't read as a verdict?
 - **Round 2:** confirm it's feasible (context length, runtime on local
   hardware) before committing to it.
-- **Local vs. hosted models:** whether local models are strong enough for
-  legal drafting, or whether a hosted API is needed, which ties into the
-  data-sensitivity question below.
+- **Which local models:** which models on the server are strong enough for
+  legal drafting, and whether the plaintiff and defendant roles should use
+  different models. Evaluated after migration.
 - **Data sensitivity:** complaints and case information are likely
   sensitive/privileged, so the same data-handling considerations as the tax
   idea (and smark_iq's `guardrails.md`) apply. The output also likely needs
