@@ -45,6 +45,10 @@ data_dir = "cases/web"
 # Send the sign-in cookie only over HTTPS. Must be true once deployed behind
 # Caddy + Cloudflare; false only works for http://127.0.0.1 on this machine.
 secure_cookies = false
+# True only in the server's config (config.server.toml): served through Caddy
+# + Cloudflare. A host other than 127.0.0.1/localhost is refused unless both
+# this and secure_cookies are true.
+behind_proxy = false
 # Finished and failed cases (inputs and results) are deleted automatically
 # this many days after they were created. 0 keeps them until deleted by hand.
 retention_days = 90

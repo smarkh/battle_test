@@ -15,7 +15,7 @@ guardrails-style network isolation and data handling).
   - Step 5 parts 1–2: a local web UI with accounts, case deletion, and
     3-month retention.
 
-  107 unit tests pass.
+  123 unit tests pass.
 - **Evaluation (7B):** the search fixes doubled the core authorities cited
   (3 → 6 of 16) and halved off-topic citations (4 → 2). California and
   Utah improved, Texas didn't: keyword search can't cope with each state's
@@ -24,9 +24,11 @@ guardrails-style network isolation and data handling).
   - 3b: semantic search (probably on the server), better selection, then
     re-evaluate on 14B / ~30B.
   - Web UI part 3: upload with text extraction, and `.docx`/PDF export.
-  - Moving to the smark_iq server (web UI part 4, and larger models). Plan
-    written: `plans/server-migration-plan.md`. Waiting on its Phase 0
-    decisions.
+  - Moving to the smark_iq server (web UI part 4, and larger models). Plan:
+    `plans/server-migration-plan.md`. Phases 0–1 are done (decisions, and
+    the container and deployment code, built and tested on the laptop). Next
+    is Phase 2, preparing the server over SSH. ⚠ Cloudflare Access must be
+    added before any real users test it.
   - 3a (the "does it say that?" check), which needs a bigger model.
   - Step 4 (case law via CourtListener).
 - **Waiting on the lawyer:**
@@ -733,6 +735,15 @@ came from third-party summaries.
   See step 5, part 2.
 - **Case retention (default, for now):** 3 months, then automatic deletion.
   Users can delete sooner. See step 5, part 2.
+- **Server deployment (2026-09-25):**
+  - Hostname: `battle.smarkiq.us`, via smark_iq's existing Cloudflare
+    Tunnel and Caddy.
+  - Start with `qwen2.5:14b`.
+  - Back up accounts only.
+  - The app's own login at first. **Cloudflare Access is required before
+    any real users test it.**
+
+  See `plans/server-migration-plan.md`.
 - **End result:** no declared winner and no judge role. The output is the
   document set (complaint, motion, rebuttal, optional reply), optionally
   with a likelihood-of-success estimate.

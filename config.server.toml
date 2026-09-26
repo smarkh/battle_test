@@ -1,0 +1,43 @@
+# battle_test configuration for the smark_iq server (inside the Docker
+# container). Selected by BATTLE_TEST_CONFIG, set in the Dockerfile. The laptop
+# keeps using config.toml. See plans/server-migration-plan.md.
+
+[ollama]
+# Ollama runs natively on the server; containers reach the host this way.
+url = "http://host.docker.internal:11434"
+timeout_seconds = 1800
+
+[models]
+# Decided 2026-09-25: start with 14B (fits fully on the 16 GB GPU with a
+# 12k context), then compare ~30B options with the evaluation.
+plaintiff = "qwen2.5:14b"
+defendant = "qwen2.5:14b"
+
+[generation]
+num_ctx = 12288
+temperature = 0.4
+
+[pipeline]
+rounds = 2
+# Command-line and evaluation output, inside the cases volume (privileged).
+output_dir = "/data/cases/output"
+
+[corpus]
+snapshot = "v2026.08"
+base_url = "https://oss-data-us.vaquill.ai"
+# The battle-law volume.
+data_dir = "/data/law"
+jurisdictions = ["ut", "ca", "tx", "federal"]
+document_types = ["statutes", "constitutions", "court_rules"]
+
+[web]
+# 0.0.0.0 inside the container. No port is published on the host: only Caddy,
+# on smark_iq's Docker network, can reach it. Allowed only because
+# behind_proxy and secure_cookies are both true.
+host = "0.0.0.0"
+port = 8000
+# The battle-cases volume: accounts and case files.
+data_dir = "/data/cases"
+secure_cookies = true
+behind_proxy = true
+retention_days = 90

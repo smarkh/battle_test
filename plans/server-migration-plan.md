@@ -57,11 +57,15 @@ browser ──https──▶ Cloudflare edge ──tunnel──▶ cloudflared �
   - `battle-cases`: accounts (`users.sqlite`) and case files
     (`cases.sqlite` plus one folder per case).
 
-## Decisions (recommended answer in bold)
+## Decisions
 
-1. **Hostname.** **`battle.smarkiq.us`** is a subdomain of the domain
-   smark_iq already uses, so there's no new domain and no DNS migration.
-   Any unused subdomain works.
+Decided 2026-09-25: 1 (`battle.smarkiq.us`), 4 (app login only for now,
+with Access **required before real users**), 5 (`qwen2.5:14b`) and 8
+(accounts only). The rest are as recommended.
+
+1. **Hostname: decided, `battle.smarkiq.us`.** It's a subdomain of the
+   domain smark_iq already uses, so there's no new domain and no DNS
+   migration.
 2. **Run as a container or natively on Windows?** **Container.** It
    matches smark_iq, and the guardrails hardening applies. It also keeps
    privileged case files inside a volume rather than loose on the Windows
@@ -71,15 +75,20 @@ browser ──https──▶ Cloudflare edge ──tunnel──▶ cloudflared �
 3. **Separate compose project, or add to smark_iq's?** **Separate**, joined
    to smark_iq's network. Rebuilding or stopping battle_test never touches
    Open WebUI, and the reverse is also true.
-4. **Second sign-in layer: Cloudflare Access in front?** **Recommended for
-   this app,** unlike smark_iq, where it was deferred. The cases are
-   privileged legal material, and Access adds an email one-time-code check
-   at Cloudflare's edge before a request ever reaches the server. It's free
-   for up to 50 users, and it protects against a bug in the app's own login.
-   The app's accounts stay as they are (Access decides who reaches the
-   site; the app's accounts decide whose cases you see). **Your call:** it
-   adds a step for users.
-5. **Which model on the server?** **`qwen2.5:14b` first,** since it's
+4. **Second sign-in layer: decided, the app's own login only for now.**
+   ⚠ **Cloudflare Access must be added before any real users test this,**
+   i.e. before anyone enters a real case. Until then, only the admin and
+   test accounts with fictional cases may use the public site. Why it
+   matters:
+   - The cases are privileged legal material.
+   - Access adds an email one-time-code check at Cloudflare's edge before a
+     request ever reaches the server, which protects against a bug in the
+     app's own login.
+   - It's free for up to 50 users, and needs no code change (it's a
+     Cloudflare dashboard setting, see Phase 4 step 3).
+   - The app's accounts stay as they are: Access decides who reaches the
+     site, and the app's accounts decide whose cases you see.
+5. **Model: decided, `qwen2.5:14b` first,** since it's
    already pulled and fits fully on the GPU with the 12k context (~9 GB of
    weights plus ~2.4 GB of context cache). That's step 1 of the plan's
    "Model size estimate" path. Then try Qwen3 30B-A3B and Mistral Small 24B
@@ -93,13 +102,11 @@ browser ──https──▶ Cloudflare edge ──tunnel──▶ cloudflared �
    plan already says. Clone the private GitHub repo on the server using a
    **read-only deploy key** (not a personal token), then `git pull` and
    `docker compose up -d --build` for each update.
-8. **Backups.**
-   - **Back up `users.sqlite`** (accounts) on a schedule, e.g. a weekly
-     copy.
-   - **Don't back up case files by default.** They're privileged, they
-     expire after 90 days anyway, and a backup would outlive the retention
-     promise.
-   - **Your call,** ideally with the lawyer's input on record-keeping.
+8. **Backups: decided, accounts only.**
+   - Back up `users.sqlite` (accounts) on a schedule, e.g. a weekly copy.
+   - Don't back up case files. They're privileged, they expire after 90
+     days anyway, and a backup would outlive the retention promise.
+     Revisit if the lawyer's record-keeping advice says otherwise.
 
 ## Privacy note to resolve with the lawyer
 
@@ -194,16 +201,61 @@ changes above take that away:
 
 ## Step-by-step plan
 
-### Phase 0 — Decisions
-Confirm (or change) the recommended answers above: the hostname,
-Cloudflare Access, backups, and the model. Tell the lawyer about the
-Cloudflare TLS point.
+### Phase 0 — Decisions — DONE (2026-09-25)
+Hostname, sign-in layer, model and backups are decided (see Decisions).
+Still to do: tell the lawyer about the Cloudflare TLS point.
 
-### Phase 1 — Code changes on the laptop
+### Phase 1 — Code changes on the laptop — DONE (2026-09-25)
 Make the changes in "Code changes needed first", get the tests passing, and
 build the image locally. Run it with the demo model and a local config to
 check that the container starts, `/healthz` answers, and the non-root user
 can write to its volumes. Commit and push.
+
+**Done:**
+- **New files:**
+  - `Dockerfile`: `python:3.12-slim`, non-root user `battle` (uid 10001),
+    `BATTLE_TEST_CONFIG=/app/config.server.toml`.
+  - `.dockerignore`: keeps `data/`, `cases/`, `output/`, `.venv/`, `.git/`
+    and `.env` out of the image.
+  - `docker-compose.yml`: the `battle-test` service, the `battle-law` and
+    `battle-cases` volumes, and smark_iq's network as external. The
+    network name defaults to `smark_iq_default`, and can be overridden with
+    `SMARK_IQ_NETWORK`.
+  - `config.server.toml`: host Ollama, `qwen2.5:14b`, `/data/...` volume
+    paths, `0.0.0.0` with `secure_cookies` and `behind_proxy` on.
+- **The container's hardening:** `read_only` root filesystem plus `tmpfs
+  /tmp`, `cap_drop: ALL`, `no-new-privileges`, 3 GB / 4 CPUs,
+  `restart: unless-stopped`, and a healthcheck. No host port is published.
+- **Code:**
+  - `BATTLE_TEST_CONFIG` selects the config file.
+  - The new `[web] behind_proxy` setting: a non-local host is refused
+    unless it and `secure_cookies` are both true.
+  - uvicorn trusts proxy headers only in that mode.
+  - `/healthz`.
+  - A progress-stream heartbeat every 15 s.
+  - A case deleted while its progress page is open now ends the stream
+    cleanly (a latent bug found while refactoring).
+  - Paths starting with `/` count as absolute on Windows too.
+  - `corpus info` with no index prints a clean error.
+- **Verified:**
+  - 123 tests pass, including 16 new deployment tests: the serving rule,
+    the server config, the config override, the Docker context and compose
+    hardening, `/healthz`, and the heartbeat.
+  - The image built on the laptop (420 MB).
+  - Run with the compose hardening flags and the demo model, it:
+    - answered `/healthz` with 200, and redirected signed-out requests to
+      `/login`
+    - ran as `uid=10001(battle)`, with a read-only root filesystem and a
+      writable cases volume
+    - created `cases.sqlite` and `users.sqlite` on first start
+    - ran `users list` and `corpus info` inside the container
+  - The laptop config still refuses `0.0.0.0` without `behind_proxy` and
+    `secure_cookies`.
+- **Tip for Git Bash on Windows:** set `MSYS_NO_PATHCONV=1` when passing
+  container paths like `/data/cases` to `docker`, or Git Bash rewrites them
+  into Windows paths.
+- **Not tested on the laptop:** the compose file as a whole. It needs
+  smark_iq's network, which only exists on the server (Phase 2).
 
 ### Phase 2 — Prepare the server (over SSH)
 1. Confirm the smark_iq stack is healthy (`docker compose ps` in smark_iq),
@@ -246,11 +298,13 @@ can write to its volumes. Commit and push.
 2. **Cloudflare dashboard:** add the public hostname `battle.smarkiq.us` to
    the existing tunnel, pointing at `http://caddy:80`. There's no new tunnel
    or token, and `cloudflared` picks it up live.
-3. **Cloudflare Access (if chosen in Phase 0):** create an Access
-   application for `battle.smarkiq.us` with an email one-time-code policy
-   listing the allowed users' addresses. Do this before (or in the same
-   sitting as) step 2, so there's no window where the site is public
-   without it.
+3. **Cloudflare Access: deferred, but a gate before real users** (Decision
+   4). Going public with the app's login alone is fine for the admin and
+   test accounts with fictional cases. **Before any real user or real case,**
+   create an Access application for `battle.smarkiq.us` with an email
+   one-time-code policy listing the allowed users' addresses, then recheck
+   the Phase 5 list. This is a Cloudflare dashboard change; the app needs no
+   code change.
 4. **Optional:** a Cloudflare rate-limiting rule on `POST /login`, on top of
    the app's own per-username lockout.
 
@@ -316,8 +370,8 @@ Each step can be undone on its own, and smark_iq keeps running:
 
 ## Open questions
 
-- Hostname (`battle.smarkiq.us`?), Cloudflare Access (yes/no), and the
-  backup policy. See Decisions 1, 4 and 8.
+- **Before real users:** add Cloudflare Access (Decision 4). This is a
+  requirement, not an option.
 - The lawyer's view on Cloudflare handling case text in transit.
 - Whether GPU sharing with Open WebUI is acceptable during working hours
   (measured in Phase 3).

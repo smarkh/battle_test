@@ -1,0 +1,16 @@
+# Keep case data, the law index, secrets and dev clutter out of the image.
+# The image is built from code only. Data lives in named volumes on the server.
+.git/
+.venv/
+.idea/
+.claude/
+data/
+cases/
+output/
+**/__pycache__/
+*.pdf
+*.docx
+.env
+main.py
+tests/
+plans/

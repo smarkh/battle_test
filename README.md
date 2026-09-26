@@ -138,6 +138,19 @@ python -m battle_test.web --demo-model    # canned drafts, no GPU needed
 the real law index. Only the drafting is canned, and its output is labelled
 `demo`.
 
+## Deploying to the server
+
+The server runs the same code in a Docker container, behind smark_iq's
+existing Caddy and Cloudflare Tunnel, at `https://battle.smarkiq.us`. See
+`plans/server-migration-plan.md` for the full steps.
+- `Dockerfile`, `docker-compose.yml` and `config.server.toml` are only for
+  the server. The container sets `BATTLE_TEST_CONFIG` so every command reads
+  the server config.
+- Local development is unchanged. Without `BATTLE_TEST_CONFIG`, everything
+  uses `config.toml`, and the web UI stays on `127.0.0.1`. Serving on any
+  other address needs `behind_proxy = true` and `secure_cookies = true`,
+  which only the server config sets.
+
 ## Law corpus
 
 Statutes, constitutions and court rules for Utah, California, Texas and

@@ -34,6 +34,10 @@ HERE = Path(__file__).resolve().parent
 MAX_INPUT_CHARS = 60_000  # ~15k tokens: a long complaint, still inside the models' context
 SESSION_COOKIE = "bt_session"
 PURGE_INTERVAL_SECONDS = 3600  # how often expired cases are deleted
+# Cloudflare closes connections that stay silent for ~100 s, and a run can go
+# longer than that between progress events (e.g. while the model thinks
+# during research). A comment line this often keeps the stream open.
+HEARTBEAT_SECONDS = 15
 
 MODES = {
     "facts": "Complaint and motion drafted",
@@ -95,6 +99,39 @@ def safe_next(target: str | None) -> str:
 
 class LoginRequired(Exception):
     pass
+
+
+async def progress_events(worker: Worker, store: JobStore, job_id: str, poll_seconds: float = 0.5):
+    """Server-sent events for a case: stage changes and draft text as they
+    happen, queue position while waiting, and a heartbeat comment whenever
+    the stream would otherwise go quiet for HEARTBEAT_SECONDS."""
+    sent = 0
+    clock = asyncio.get_running_loop().time
+    last_write = clock()
+    while True:
+        progress = worker.progress(job_id)
+        job = store.get(job_id)
+        if job is None:  # deleted while the page was open
+            return
+        if progress is None:
+            # Not tracked in memory (e.g. finished before a restart).
+            if job.status in (DONE, FAILED):
+                yield f"event: {job.status}\ndata: {{}}\n\n"
+                return
+        else:
+            for event in progress.since(sent):
+                sent += 1
+                last_write = clock()
+                yield f"event: {event['type']}\ndata: {json.dumps(event)}\n\n"
+                if event["type"] in (DONE, FAILED):
+                    return
+        if job.status == QUEUED:
+            last_write = clock()
+            yield f"event: queue\ndata: {json.dumps({'position': store.queue_position(job)})}\n\n"
+        if clock() - last_write >= HEARTBEAT_SECONDS:
+            last_write = clock()
+            yield ": keep-alive\n\n"  # an SSE comment line; browsers ignore it
+        await asyncio.sleep(poll_seconds)
 
 
 def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | None = None,
@@ -207,6 +244,11 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
         if job is None or job.user_id != session.user.id:
             raise HTTPException(404, "No such case")
         return job
+
+    @app.get("/healthz")
+    def healthz():
+        """For Docker's healthcheck and Caddy. Needs no sign-in, reveals nothing."""
+        return {"status": "ok"}
 
     # --- signing in ----------------------------------------------------------
 
@@ -342,28 +384,7 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
     async def events(request: Request, job_id: str):
         """Server-sent events: stage changes and draft text as they happen."""
         own_job(job_id, current(request))
-
-        async def stream():
-            sent = 0
-            while True:
-                progress = worker.progress(job_id)
-                job = store.get(job_id)
-                if progress is None:
-                    # Not tracked in memory (e.g. finished before a restart).
-                    if job.status in (DONE, FAILED):
-                        yield f"event: {job.status}\ndata: {{}}\n\n"
-                        return
-                else:
-                    for event in progress.since(sent):
-                        sent += 1
-                        yield f"event: {event['type']}\ndata: {json.dumps(event)}\n\n"
-                        if event["type"] in (DONE, FAILED):
-                            return
-                if job.status == QUEUED:
-                    yield f"event: queue\ndata: {json.dumps({'position': store.queue_position(job)})}\n\n"
-                await asyncio.sleep(0.5)
-
-        return StreamingResponse(stream(), media_type="text/event-stream")
+        return StreamingResponse(progress_events(worker, store, job_id), media_type="text/event-stream")
 
     @app.get("/cases/{job_id}/delete", response_class=HTMLResponse)
     def confirm_delete(request: Request, job_id: str):

@@ -1,0 +1,50 @@
+# battle_test on the smark_iq server. See plans/server-migration-plan.md.
+#
+# A separate compose project from smark_iq, joined to smark_iq's Docker
+# network, so smark_iq's Caddy can proxy battle.smarkiq.us to it by name.
+# Hardening follows smark_iq's guardrails.md.
+
+services:
+  battle-test:
+    build: .
+    image: battle-test
+    container_name: battle-test
+    # No published ports: traffic arrives only from Caddy on the Docker
+    # network. For private testing before going public (migration plan,
+    # Phase 3), temporarily add:
+    #   ports:
+    #     - "127.0.0.1:8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Ollama on the host
+    volumes:
+      - battle-law:/data/law                  # law index (rebuildable)
+      - battle-cases:/data/cases              # accounts + case files (privileged)
+    networks:
+      - smark_iq
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 3g
+    cpus: 4
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  battle-law:
+  battle-cases:
+
+networks:
+  smark_iq:
+    external: true
+    # smark_iq's compose network. Check with `docker network ls` on the
+    # server (migration plan, Phase 2 step 1) and override if it differs.
+    name: ${SMARK_IQ_NETWORK:-smark_iq_default}

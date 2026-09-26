@@ -230,12 +230,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     cfg = load_corpus_config(args.config)
-    if args.command == "build":
-        _cmd_build(cfg)
-    elif args.command == "info":
-        _cmd_info(cfg)
-    else:
-        _cmd_search(cfg, args.state, args.query, args.limit)
+    try:
+        if args.command == "build":
+            _cmd_build(cfg)
+        elif args.command == "info":
+            _cmd_info(cfg)
+        else:
+            _cmd_search(cfg, args.state, args.query, args.limit)
+    except FileNotFoundError as e:  # no index built yet
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     return 0
 
 
