@@ -24,7 +24,9 @@ guardrails-style network isolation and data handling).
   - 3b: semantic search (probably on the server), better selection, then
     re-evaluate on 14B / ~30B.
   - Web UI part 3: upload with text extraction, and `.docx`/PDF export.
-  - Moving to the smark_iq server (web UI part 4, and larger models).
+  - Moving to the smark_iq server (web UI part 4, and larger models). Plan
+    written: `plans/server-migration-plan.md`. Waiting on its Phase 0
+    decisions.
   - 3a (the "does it say that?" check), which needs a bigger model.
   - Step 4 (case law via CourtListener).
 - **Waiting on the lawyer:**
@@ -464,7 +466,7 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
    2. Accounts and login, case history and deletion.
    3. Upload with text extraction, and `.docx`/PDF export.
    4. Containerise and deploy on the server behind Caddy + Cloudflare
-      Tunnel.
+      Tunnel. Detailed plan: `plans/server-migration-plan.md`.
 
    This can start before step 4 is finished. The UI only depends on
    `run_case` and its results, and step 4 adds to those without changing
