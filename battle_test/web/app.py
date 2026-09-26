@@ -279,8 +279,9 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request):
         session = current(request)
+        # With no cases yet, the page shows the new-case form itself.
         return page(request, "index.html", session, jobs=store.list(session.user.id),
-                    deleted=request.query_params.get("deleted") == "1")
+                    deleted=request.query_params.get("deleted") == "1", errors=[], form={})
 
     @app.get("/cases/new", response_class=HTMLResponse)
     def new_case(request: Request):

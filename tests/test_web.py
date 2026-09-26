@@ -132,7 +132,7 @@ class WebAppTest(unittest.TestCase):
         cross = self.client.post("/cases", data={**FACTS, "csrf": self.csrf()},
                                  headers={"origin": "https://evil.example"}, follow_redirects=False)
         self.assertEqual(cross.status_code, 403)
-        self.assertIn("No cases yet", self.client.get("/").text)
+        self.assertIn("Start your first case", self.client.get("/").text)
 
     def test_browser_style_origin_headers(self):
         # Browsers send Origin on form posts. Same-site is fine; "null" (what
@@ -162,10 +162,31 @@ class WebAppTest(unittest.TestCase):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
                 self.assertIn("Sign out", response.text)
-        self.assertIn("No cases yet", self.client.get("/").text)
+        self.assertIn("Start your first case", self.client.get("/").text)
         new = self.client.get("/cases/new").text
         self.assertIn("Draft the complaint and the motion", new)
         self.assertIn("Use my complaint, draft only the motion", new)
+
+    def test_empty_case_list_shows_the_form(self):
+        home = self.client.get("/").text
+        self.assertIn("<h1>Start your first case</h1>", home)
+        self.assertNotIn("Start one", home)
+        self.assertIn('<form method="post" action="/cases" class="case-form">', home)
+        self.assertIn("Draft the complaint and the motion", home)
+        self.assertIn("Use my complaint, draft only the motion", home)
+        self.assertNotIn('<table class="cases">', home)
+
+        # The form on the home page works like the one on /cases/new.
+        token = re.search(r'name="csrf" value="([^"]+)"', home).group(1)
+        response = self.client.post("/cases", data={**FACTS, "csrf": token}, follow_redirects=False)
+        self.assertEqual(response.status_code, 303)
+        self.assertTrue(self.app.state.worker.wait_idle())
+
+        # Once there's a case, the home page is the case list again.
+        home = self.client.get("/").text
+        self.assertIn("<h1>Cases</h1>", home)
+        self.assertIn('<table class="cases">', home)
+        self.assertNotIn('action="/cases" class="case-form"', home)
 
     def test_full_run_from_facts(self):
         case_url = self.finished_case()
@@ -205,7 +226,7 @@ class WebAppTest(unittest.TestCase):
         for path in (case_url, f"{case_url}/events", f"{case_url}/download.md"):
             with self.subTest(path=path):
                 self.assertEqual(other.get(path).status_code, 404)
-        self.assertIn("No cases yet", other.get("/").text)
+        self.assertIn("Start your first case", other.get("/").text)
 
     def test_delete_case(self):
         case_url = self.finished_case()
@@ -255,7 +276,7 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("Choose a state.", response.text)
         self.assertIn("Fill in at least the plaintiff and what happened.", response.text)
         self.assertIn("Kept Name", response.text)
-        self.assertIn("No cases yet", self.client.get("/").text)
+        self.assertIn("Start your first case", self.client.get("/").text)
 
     def test_unknown_case_is_404(self):
         self.assertEqual(self.client.get("/cases/nope").status_code, 404)

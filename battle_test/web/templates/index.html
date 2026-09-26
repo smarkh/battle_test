@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Cases{% endblock %}
+{% block title %}{{ "Cases" if jobs else "Start your first case" }}{% endblock %}
 {% block content %}
+{% if jobs %}
 <h1>Cases</h1>
 {% if deleted %}<p class="notice" role="status">Case deleted.</p>{% endif %}
 {% if retention_days > 0 %}<p class="muted">Finished cases are deleted automatically {{ retention_days }} days after they're started.</p>{% endif %}
-{% if jobs %}
 <table class="cases">
   <thead><tr><th>Case</th><th>State</th><th>Drafted</th><th>Rounds</th><th>Started</th><th>Status</th><th>Deleted on</th></tr></thead>
   <tbody>
@@ -23,6 +23,11 @@
   </tbody>
 </table>
 {% else %}
-<p class="empty">No cases yet. <a href="/cases/new">Start one</a>.</p>
+{# No cases yet: go straight to the form rather than a link to it. #}
+<h1>Start your first case</h1>
+{% if deleted %}<p class="notice" role="status">Case deleted.</p>{% endif %}
+<p class="muted">You don't have any cases yet. Fill this in to start one.
+  {% if retention_days > 0 %}Finished cases are deleted automatically {{ retention_days }} days after they're started.{% endif %}</p>
+{% include "_case_form.html" %}
 {% endif %}
 {% endblock %}

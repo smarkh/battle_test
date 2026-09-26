@@ -105,8 +105,8 @@ python -m battle_test.web --demo-model    # canned drafts, no GPU needed
   `passwd`, `disable`, `enable` or `list` accounts. Users can change their
   own password under their name in the header. Each user sees only their
   own cases.
-- **New case:** pick the state, then choose what to draft, and choose 1 or
-  2 rounds:
+- **New case** (shown straight away if you have no cases yet): pick the
+  state, choose what to draft, and choose 1 or 2 rounds:
   - **"Draft the complaint and the motion"**: fill in the case information.
   - **"Use my complaint, draft only the motion"**: paste a complaint you
     wrote. It's used as written, and its citations are still checked.

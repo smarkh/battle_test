@@ -556,6 +556,10 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
      - **Tested:** 4 store tests (file removal, expiry rules, 0 = keep,
        per-user lists) and 3 web tests (the delete flow with permission and
        CSRF checks, running-case refusal, dates shown).
+   - **Empty case list shows the form (2026-09-25).** A user with no cases
+     lands straight on the new-case form ("Start your first case") instead
+     of a "Start one" link. The form is a shared template
+     (`_case_form.html`), used by this page and the New case page.
    - **Part 2 is now complete.** Next is part 3: upload with text
      extraction, and `.docx`/PDF export.
    - **New-case options renamed** to say what gets drafted: "Draft the

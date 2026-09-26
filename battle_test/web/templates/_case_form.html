@@ -1,0 +1,68 @@
+{# The new-case form. Shared by the New case page and the empty case list. #}
+{% if errors %}
+<div class="errors" role="alert">
+  <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<form method="post" action="/cases" class="case-form">
+  <input type="hidden" name="csrf" value="{{ session.csrf_token }}">
+  <fieldset>
+    <legend>1. State</legend>
+    <p class="hint">That state's law applies, along with federal law.</p>
+    <div class="choices">
+    {% for code, name in states.items() %}
+      <label class="choice"><input type="radio" name="state" value="{{ code }}" required
+        {% if form.get("state") == code %}checked{% endif %}> {{ name }}</label>
+    {% endfor %}
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>2. What to draft</legend>
+    <div class="mode-cards">
+      <label class="mode-card"><input type="radio" name="mode" value="facts" data-mode
+        {% if form.get("mode", "facts") == "facts" %}checked{% endif %}>
+        <span class="mode-title">Draft the complaint and the motion</span>
+        <span class="mode-desc">Fill in the case information. The complaint and the motion for summary
+          judgment are both drafted for you.</span></label>
+      <label class="mode-card"><input type="radio" name="mode" value="complaint" data-mode
+        {% if form.get("mode") == "complaint" %}checked{% endif %}>
+        <span class="mode-title">Use my complaint, draft only the motion</span>
+        <span class="mode-desc">Paste a complaint you've written. It's used as written (its citations are
+          still checked), and only the motion for summary judgment is drafted.</span></label>
+    </div>
+    <p class="hint">Either way, the defendant's opposition follows, and in round 2 the plaintiff's reply.</p>
+
+    <div class="mode-panel" data-panel="facts">
+      {% for key, label, hint in fact_fields %}
+      <label class="field">
+        <span>{{ label }}</span>
+        <small>{{ hint }}</small>
+        <textarea name="{{ key }}" rows="{{ 5 if key == 'timeline' else 2 }}">{{ form.get(key, "") }}</textarea>
+      </label>
+      {% endfor %}
+    </div>
+
+    <div class="mode-panel" data-panel="complaint">
+      <label class="field">
+        <span>Your complaint</span>
+        <small>Paste the full text.</small>
+        <textarea name="complaint" rows="16">{{ form.get("complaint", "") }}</textarea>
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>3. Rounds</legend>
+    <div class="choices">
+      <label class="choice"><input type="radio" name="rounds" value="1"
+        {% if form.get("rounds") == "1" %}checked{% endif %}> 1: complaint, motion, opposition</label>
+      <label class="choice"><input type="radio" name="rounds" value="2"
+        {% if form.get("rounds", "2") == "2" %}checked{% endif %}> 2: also the plaintiff's reply</label>
+    </div>
+  </fieldset>
+
+  <button type="submit" class="button primary">Start the run</button>
+  <p class="hint">A run takes several minutes and continues in the background. You can close the page and come back.</p>
+</form>
