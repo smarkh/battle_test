@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Account{% endblock %}
+{% block content %}
+<div class="narrow">
+  <h1>Account</h1>
+  <p class="muted">Signed in as <strong>{{ session.user.username }}</strong>{% if session.user.is_admin %} (admin){% endif %}.</p>
+  {% if error %}<div class="errors" role="alert"><p>{{ error }}</p></div>{% endif %}
+  {% if message %}<div class="notice" role="status"><p>{{ message }}</p></div>{% endif %}
+  <h2>Change password</h2>
+  <form method="post" action="/account" class="case-form">
+    <input type="hidden" name="csrf" value="{{ session.csrf_token }}">
+    <label class="field"><span>Current password</span>
+      <input type="password" name="current" autocomplete="current-password" required></label>
+    <label class="field"><span>New password</span>
+      <small>At least 12 characters, and not containing your username.</small>
+      <input type="password" name="new" autocomplete="new-password" minlength="12" required></label>
+    <label class="field"><span>Repeat new password</span>
+      <input type="password" name="repeat" autocomplete="new-password" minlength="12" required></label>
+    <button type="submit" class="button primary">Change password</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,86 @@
+# Evaluation case: California kitchen remodel by a contractor whose license
+# had expired, abandoned after demolition.
+#
+# DRAFT, not yet reviewed by a lawyer. Each authority below was checked
+# against the text in the law index (snapshot v2026.08), but choosing the
+# right law is exactly the judgement being tested, so a lawyer should
+# confirm or correct this list before the scores are trusted.
+
+name = "california_remodel"
+state = "CA"
+facts = "../california_remodel_facts.md"
+lawyer_reviewed = false
+
+[[expected]]
+importance = "core"
+citations = ["Cal. CCP § 437c"]
+why = "Summary judgment in California state court."
+
+[[expected]]
+importance = "core"
+citations = ["Cal. CCP § 337"]
+why = "Four-year limitations period for an action on a contract founded on an instrument in writing."
+
+[[expected]]
+importance = "core"
+citations = ["Cal. BPC § 7031"]
+why = "A person who used an unlicensed contractor may sue to recover all compensation paid (subdivision (b)). The license expired before the work."
+
+[[expected]]
+importance = "core"
+citations = ["Cal. BPC § 7159.5"]
+why = "Home improvement down payment may not exceed $1,000 or 10% of the contract price, whichever is less. The $15,000 down payment exceeds it."
+
+[[expected]]
+importance = "core"
+citations = ["Cal. CIV § 3300"]
+why = "Measure of damages for breach of contract."
+
+[[expected]]
+importance = "core"
+citations = ["Cal. CCP § 395"]
+why = "Venue: the superior court of the county where a defendant resides, with contract-specific rules."
+
+[[expected]]
+importance = "useful"
+citations = ["Cal. CIV § 3287", "Cal. CIV § 3289"]
+why = "Prejudgment interest on damages certain, and the 10% default contract rate."
+
+[[expected]]
+importance = "useful"
+citations = ["Cal. BPC § 7159"]
+why = "Required contents of a home improvement contract, including the down payment notice."
+
+[[expected]]
+importance = "useful"
+citations = ["Cal. CCP § 85"]
+why = "Limited vs. unlimited civil case: the amount in controversy exceeds $35,000."
+
+[[expected]]
+importance = "useful"
+citations = ["Cal. CIV § 1717"]
+why = "Reciprocal attorney fees on a contract, but only if the contract has a fee clause (the facts don't say)."
+
+[[off_topic]]
+prefix = "Cal. COM § 2"
+why = "Commercial Code Article 2 governs sales of goods; this is a home improvement services contract."
+
+[[off_topic]]
+prefix = "Cal. COM § 10"
+why = "Commercial Code Division 10 governs leases of goods."
+
+[[off_topic]]
+prefix = "Cal. INS §"
+why = "Insurance code; no insurer is involved."
+
+[[off_topic]]
+prefix = "Cal. PEN §"
+why = "Penal code; this is a civil action."
+
+[[off_topic]]
+prefix = "Cal. VEH §"
+why = "Vehicle code."
+
+[[off_topic]]
+prefix = "Cal. FAM §"
+why = "Family code."

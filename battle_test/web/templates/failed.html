@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Failed: {{ job.title }}{% endblock %}
+{% block content %}
+<h1>{{ job.title }}</h1>
+<div class="errors" role="alert">
+  <p><strong>This run failed.</strong></p>
+  <p><code>{{ job.error }}</code></p>
+</div>
+<p>If it says Ollama couldn't be reached, check that Ollama is running, then <a href="/cases/new">start a new case</a>.</p>
+{% endblock %}

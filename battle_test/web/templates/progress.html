@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Running: {{ job.title }}{% endblock %}
+{% block content %}
+<h1>{{ job.title }}</h1>
+<p class="muted">{{ states[job.state_code] }} · {{ job.rounds }} round{{ "s" if job.rounds > 1 }} · started {{ job.created_at.replace("T", " ")[:16] }}</p>
+
+<div id="progress" data-case="{{ job.id }}">
+  <p id="queue" class="notice" {% if job.status != "queued" %}hidden{% endif %}>
+    Waiting in the queue{% if position %}: position {{ position }}{% endif %}. Runs go one at a time.
+  </p>
+  <p id="status" class="notice" {% if job.status != "running" %}hidden{% endif %}>
+    Running{% if job.stage %}: {{ job.stage }}{% endif %}…
+  </p>
+  <ol id="stages" class="stages"></ol>
+  <section class="live">
+    <h2 id="live-title">Live draft</h2>
+    <pre id="live" class="document"></pre>
+  </section>
+  <noscript><p>This page updates live with JavaScript. Without it, reload to check progress.</p></noscript>
+</div>
+{% endblock %}

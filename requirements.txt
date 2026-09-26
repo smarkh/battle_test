@@ -1,2 +1,13 @@
-# Only needed to build the law corpus (reads the Open US Law Parquet files).
+# The pipeline itself uses only the standard library.
+
+# Building the law corpus (reads the Open US Law Parquet files).
 pyarrow>=15
+
+# Web UI (python -m battle_test.web).
+fastapi>=0.110
+uvicorn>=0.29
+jinja2>=3.1
+python-multipart>=0.0.9
+
+# Tests for the web UI (FastAPI's TestClient).
+httpx2

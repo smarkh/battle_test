@@ -24,7 +24,9 @@ and the Bedrock hosting option.
 
 ## Requirements
 
-- Python 3.11+ (the pipeline uses the standard library only)
+- Python 3.11+. The pipeline uses the standard library only. `pip install -r
+  requirements.txt` adds what's needed to build the law corpus, run the web
+  UI, and run its tests.
 - [Ollama](https://ollama.com) running, with the models named in
   `config.toml` pulled (default `qwen2.5:7b`)
 - The law index, built once (see **Law corpus** below)
@@ -67,10 +69,70 @@ Each output file contains:
 | `battle_test/law_index.py` | Searching the local law index and resolving citations |
 | `battle_test/corpus.py` | Downloading Open US Law and building the index (`python -m battle_test.corpus`) |
 | `battle_test/report.py` | Writing the Markdown output |
+| `battle_test/evaluate.py` | Scoring runs against the sample cases (`python -m battle_test.evaluate`) |
 | `battle_test/ollama_client.py` | Minimal Ollama client (streaming, JSON mode) |
 | `battle_test/config.py` | Loads `config.toml` |
-| `examples/` | Fictional sample case information for testing |
+| `battle_test/web/app.py` | Web UI routes: case form, live progress, results, download |
+| `battle_test/web/jobs.py` | Case storage, the one-at-a-time job queue, live progress events |
+| `battle_test/web/auth.py` | Accounts, password hashing, sessions, login lockout |
+| `battle_test/web/users.py` | Admin command for accounts (`python -m battle_test.web.users`) |
+| `battle_test/web/render.py` | Turning a finished run into HTML (links, highlights, summaries) |
+| `battle_test/web/demo.py` | The demo model for working on the UI without a GPU |
+| `battle_test/web/templates/`, `static/` | Pages, CSS, and the small progress/tabs script |
+| `examples/` | Fictional sample cases (UT, CA, TX) for testing |
+| `examples/eval/` | Expected authorities for each sample case |
 | `plans/plan.md` | Design, decisions, build steps, and open questions |
+
+## Web UI (local preview)
+
+A browser front end for the same pipeline (plan step 5, parts 1–2). First
+create an account. You'll be asked for the password at a hidden prompt, so
+run it yourself in a terminal:
+
+```
+python -m battle_test.web.users add NAME --admin
+```
+
+Then start the server and open http://127.0.0.1:8000:
+
+```
+python -m battle_test.web                 # real model via Ollama
+python -m battle_test.web --demo-model    # canned drafts, no GPU needed
+```
+
+- **Sign in** with that account. There's no self-signup: an admin adds
+  people with `python -m battle_test.web.users add NAME`, and can also
+  `passwd`, `disable`, `enable` or `list` accounts. Users can change their
+  own password under their name in the header. Each user sees only their
+  own cases.
+- **New case:** pick the state, then choose what to draft, and choose 1 or
+  2 rounds:
+  - **"Draft the complaint and the motion"**: fill in the case information.
+  - **"Use my complaint, draft only the motion"**: paste a complaint you
+    wrote. It's used as written, and its citations are still checked.
+- **Progress:** runs go into a queue and execute one at a time. The page
+  shows each stage live and streams the draft text. You can close it and
+  come back.
+- **Results:** the disclaimer and law date, the citation check, and each
+  document in a tab:
+  - ✅ citations link to their official source.
+  - ❌/⚠ marks and `[CITATION NEEDED]` placeholders are highlighted.
+  - Below the documents: the authorities appendix and the research queries.
+  - A Markdown download.
+
+**Security:**
+- Passwords are stored only as salted scrypt hashes.
+- Sessions are HttpOnly cookies, and only a hash of each session token is
+  stored.
+- Every form has a CSRF token, and cross-site posts are refused.
+- Pages load nothing from third parties.
+- Until the HTTPS deployment step, the server refuses to listen on anything
+  but `127.0.0.1` / `localhost`. Set `secure_cookies = true` in `[web]` once
+  it's served over HTTPS.
+- Cases and accounts are stored in `cases/web/` (gitignored).
+`--demo-model` still runs research, selection and citation checking against
+the real law index. Only the drafting is canned, and its output is labelled
+`demo`.
 
 ## Law corpus
 
@@ -90,6 +152,32 @@ Files are checked against the dataset's published SHA256 checksums. Which
 jurisdictions and document types are included, and which quarterly snapshot,
 is set under `[corpus]` in `config.toml`. Everything lives in `data/`, which
 is gitignored.
+
+## Evaluation
+
+Three fictional sample cases in `examples/`, one per state, each have an
+expected-authority list in `examples/eval/*.toml`. Each list names:
+- **core** authorities a competent brief should cite
+- **useful** ones that are welcome if cited
+- **off-topic** code areas (e.g. UCC sales law for a construction contract)
+
+The lists are drafts until a lawyer has reviewed them (`lawyer_reviewed`
+in each file).
+
+```
+python -m battle_test.evaluate --validate          # check the case files against the law index
+python -m battle_test.evaluate --label laptop-7b   # run and score all three cases
+python -m battle_test.evaluate --case texas_foundation --rounds 1
+```
+
+Results go to `output/eval/<timestamp>-<label>/`:
+- `summary.md`: per case, the core/useful authorities cited, what was
+  off-topic, and the citation-check counts
+- `results.json`: for comparing setups
+- each case's full document set
+
+Use a different `--config` file to compare models, e.g. 14B vs. ~30B, or
+local vs. Bedrock.
 
 ## Tests
 

@@ -33,3 +33,15 @@ jurisdictions = ["ut", "ca", "tx", "federal"]
 # Federal regulations (~2.8 GB) are left out for now; add "regulations" to
 # include them.
 document_types = ["statutes", "constitutions", "court_rules"]
+
+[web]
+# Part 1 of the web UI has no login yet, so it must stay on this machine:
+# the server refuses any host other than 127.0.0.1 / localhost.
+host = "127.0.0.1"
+port = 8000
+# Case inputs and results, and the accounts database. Under cases/, which is
+# gitignored: they may hold privileged material.
+data_dir = "cases/web"
+# Send the sign-in cookie only over HTTPS. Must be true once deployed behind
+# Caddy + Cloudflare; false only works for http://127.0.0.1 on this machine.
+secure_cookies = false

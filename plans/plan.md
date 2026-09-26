@@ -6,23 +6,32 @@ This is a standalone project, separate from the smark_iq deployment, but
 expected to reuse lessons learned there (self-hosting, local RAG,
 guardrails-style network isolation and data handling).
 
-## Status (2026-09-24)
+## Status (2026-09-25)
 
-- **Steps 1–3 built** on the dev laptop and run end to end from the command
-  line: pipeline, local law index (UT, CA, TX, federal), grounding, and
-  citation checking. 59 unit tests pass.
-- **Latest Utah run:** 0 invented or outdated citations, and all 36
-  statute/rule citations real and in force. But much of the law cited was
-  the wrong law for the case, and some was misstated. That's the 7B model's
-  limit, tracked as 3a/3b.
+- **Built on the dev laptop:**
+  - Steps 1–3: pipeline, local law index (UT, CA, TX, federal),
+    grounding, and citation checking.
+  - The 3b evaluation set: three sample cases with expected authorities,
+    and a scoring script.
+  - Step 5 parts 1–2: a local web UI with accounts.
+
+  98 unit tests pass.
+- **Baseline evaluation (7B):** only the hard-coded summary judgment rule
+  reached the models. Search is the bottleneck: the model's research
+  queries find 3 of 25 expected authorities, versus 13 of 25 for
+  lawyer-style topic queries. See 3b.
 - **Next up:**
-  - 3a (the "does it say that?" check) and 3b (choosing the right law),
-    both needing a bigger model.
+  - 3b search fixes: topic-style research queries, more results per
+    query, then semantic search.
+  - Web UI: case deletion and history (part 2), then upload/export
+    (part 3) and deployment (part 4).
+  - 3a (the "does it say that?" check), which needs a bigger model.
   - Step 4 (case law via CourtListener).
-  - Step 5 (the web UI).
   - Moving to the smark_iq server.
-- **Waiting on decisions:** local vs. Bedrock models (needs the lawyer's
-  view), and the web UI questions under "Open questions".
+- **Waiting on the lawyer:** a review of the three expected-authority
+  lists, the Texas § 27.004 question, and local vs. Bedrock hosting.
+- **Waiting on you:** the remaining web UI questions (users, sharing,
+  retention, export format) under "Open questions".
 
 ## Goal
 
@@ -321,6 +330,79 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
        3. Semantic (embedding) search alongside keyword search.
      - Keep a small set of expected authorities per sample case, so
        selection quality can be measured instead of eyeballed.
+   - **Evaluation set (built 2026-09-25).** Three fictional sample cases,
+     all residential construction disputes so they're comparable:
+     - **Utah:** roofing contract abandoned mid-job, then storm damage.
+     - **California:** kitchen remodel. The contractor's license had
+       expired, it took a $15,000 down payment, and it abandoned the job
+       after demolition.
+     - **Texas:** foundation repair with piers short of the contract depth,
+       a "guaranteed for life" sales promise, and a certified demand letter.
+
+     Each has an expected-authority list in `examples/eval/*.toml`: *core*
+     (a competent brief should cite it), *useful* (welcome if cited), and
+     *off-topic* code areas (e.g. UCC sales law). Every listed section was
+     checked against its text in the index. `python -m battle_test.evaluate`
+     runs the cases and scores each run:
+     - core authorities given to the models / cited
+     - useful authorities cited
+     - how many of the cited authorities are on the list ("on-target")
+     - off-topic authorities cited
+     - ❌ problem citations and remaining placeholders
+     - runtime
+
+     Results go to `output/eval/`, with a JSON file for comparing setups.
+     `--validate` re-checks the lists against the index, e.g. after a new
+     quarterly law snapshot.
+   - **Baseline (2026-09-25, laptop `qwen2.5:7b`, 2 rounds, ~16 min/case):**
+
+     | Case | Core given to models | Core cited | Useful cited | Cited on-target | Off-topic cited |
+     |---|---|---|---|---|---|
+     | California | 1/6 | 1/6 | 0/4 | 1/4 | 0 |
+     | Texas | 1/6 | 1/6 | 0/2 | 1/6 | 1 |
+     | Utah | 1/4 | 1/4 | 0/3 | 1/5 | 3 |
+
+     The only core authority that ever reached a drafting prompt was the
+     hard-coded summary judgment rule.
+   - **Diagnosis: search is the bottleneck, not selection.** The research
+     queries were replayed offline against the index:
+
+     | Queries | Expected authorities found by search |
+     |---|---|
+     | The model's own research queries | 3 / 25 |
+     | Same, with party names and question words stripped | 4 / 25 |
+     | Short topic queries written lawyer-style (an upper bound: written knowing the targets) | 13 / 25 |
+
+     - Without an example, the 7B writes long questions about the facts,
+       e.g. "Did Golden Oak Remodeling Inc. breach the contract with Priya
+       Natarajan by failing to complete the kitchen remodel…". Keyword
+       search matches the names and details, not statute topics.
+     - Even good topic queries miss ~40%, e.g. the attorney-fee, venue and
+       jurisdiction sections and DTPA § 17.50. Keyword search alone won't be
+       enough.
+   - **Next for 3b, in order:**
+     1. Research prompt asks for short topic queries in statute vocabulary,
+        with no party names and no questions. Use a format template (e.g.
+        `"<legal topic in statute words>"`) rather than a copyable example.
+     2. More results per query (4 → 8), so selection sees more.
+     3. Semantic (embedding) search alongside keyword search, on the server.
+     4. Then re-evaluate on the laptop and on the server's 14B / ~30B.
+     - Watch for overfitting: the expected lists were drafted by the same
+       person tuning the search. The lawyer's review of the lists protects
+       against that.
+   - **Needs the lawyer:**
+     - **The lists are drafts** (`lawyer_reviewed = false`). Choosing the
+       right law is the judgement being measured, so the lists should be
+       reviewed before the scores are trusted.
+     - **Texas RCLA notice.** The index marks Tex. Property Code § 27.004
+       (the Residential Construction Liability Act's pre-suit notice and
+       offer provision) as **repealed in 2023**, while §§ 27.001–27.003 are
+       in force. The lawyer should confirm this. If the data is wrong,
+       that's a data-quality problem worth knowing about beyond this case.
+     - **Conditional authorities.** Attorney-fee statutes that depend on a
+       fee clause (Utah § 78B-5-826, Cal. Civ. Code § 1717) are "useful",
+       not "core", because the sample facts don't say whether the contract
+       has one.
 4. **Case law.** CourtListener search and citation checks, plus the
    "verify with KeyCite/Shepard's before filing" flags.
 5. **Web UI.** Build the browser app described in "Web UI" above, then move
@@ -335,6 +417,81 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
    This can start before step 4 is finished. The UI only depends on
    `run_case` and its results, and step 4 adds to those without changing
    their shape.
+
+   **Part 1: done (2026-09-25),** as `python -m battle_test.web`.
+   - **Stack:** FastAPI with server-rendered Jinja templates and one small
+     script (form mode switch, document tabs, live progress over
+     server-sent events). No front-end build step, and no CDN, so pages
+     load nothing from third parties.
+   - **Queue:** jobs are stored in SQLite and files under `cases/web/`
+     (gitignored). A single worker thread runs one job at a time.
+     - Queued jobs survive a restart.
+     - A job that was mid-run is marked failed, with a message saying the
+       server restarted.
+   - **Pages:**
+     - Case list.
+     - New case: state, generate from a case information form or paste a
+       complaint, 1 or 2 rounds.
+     - Live progress, with queue position, completed stages and the draft
+       streaming.
+     - Results, showing:
+       - the disclaimer with the law date, and the citation-check table
+         with a "to look at" list
+       - the documents in tabs, with ✅ citations linked to their official
+         source and ❌/⚠ marks and placeholders highlighted
+       - the authorities appendix, and the research queries
+     - Failure page.
+     - Markdown download.
+   - **Safety for now:**
+     - No login yet, so the server refuses any host but `127.0.0.1` /
+       `localhost`.
+     - Model output is HTML-escaped before any highlighting is added.
+     - Outbound source links use `rel="noopener noreferrer"`, so case URLs
+       aren't leaked to le.utah.gov and similar sites.
+     - Input is capped at 60,000 characters.
+   - **`--demo-model`:** canned drafts for UI work without a GPU. Research,
+     selection and checking still run against the real index, and the
+     output is labelled `demo`.
+   - **Verified:** 9 web tests (full runs from facts and from a pasted
+     complaint, the event stream, validation, escaping, link matching),
+     plus a manual pass in Chrome with the demo model: form, live
+     progress, results, tabs, and no console errors.
+   - **Not yet tested with the real model** in the UI. The GPU was busy
+     with the evaluation run. That's the next check.
+   - **Part 2, accounts: done (2026-09-25).**
+     - **Accounts:** the app's own. An admin creates them with `python -m
+       battle_test.web.users add NAME [--admin]`, plus `passwd`,
+       `disable`, `enable` and `list`. There's no self-signup.
+     - **Passwords:** typed at a hidden prompt, never as arguments. Stored
+       only as salted scrypt hashes, and must be 12+ characters without the
+       username. Five failed logins lock that username for 15 minutes, and
+       the same error is shown for a wrong username or a wrong password.
+     - **Sessions:** random tokens in an HttpOnly, SameSite=Lax cookie. The
+       database stores only a SHA-256 of each token. Sessions last 7 days.
+       A password change or disabling an account ends that user's sessions.
+     - **Forms:** every form carries a per-session CSRF token, and posts
+       from another origin (including `Origin: null`) are refused.
+     - **Headers:** a Content-Security-Policy allowing only the app's own
+       files, no framing, `no-store` caching on case pages, and a
+       same-origin referrer policy.
+     - **Privacy:** each case belongs to the user who created it. Anyone
+       else gets a 404, the same as for a missing case.
+     - **Account page:** users can change their own password.
+     - **Cookies:** a `secure_cookies` setting in `[web]` must be turned on
+       once served over HTTPS.
+     - **Found in the browser check:** a `no-referrer` policy makes Chrome
+       send `Origin: null` on form posts, which broke sign-in. The fix is
+       the same-origin policy, and a regression test covers it.
+     - **Tested:** 29 web and auth tests, plus a manual sign-in in Chrome.
+     - Accounts live in `cases/web/users.sqlite` (gitignored). Cases
+       created before accounts existed have no owner and aren't shown to
+       anyone.
+   - **Part 2, still to do:** case history management and **case deletion**.
+     This depends on the retention question.
+   - **New-case options renamed** to say what gets drafted: "Draft the
+     complaint and the motion" (from case information) or "Use my
+     complaint, draft only the motion" (paste). The case list shows which
+     was used.
 
 ## Model size estimate
 
@@ -495,6 +652,9 @@ came from third-party summaries.
 
 ## Decisions made
 
+- **Web UI sign-in:** the app's own accounts, created by an admin from the
+  command line, with no self-signup. Each user sees only their own cases.
+  See step 5, part 2.
 - **End result:** no declared winner and no judge role. The output is the
   document set (complaint, motion, rebuttal, optional reply), optionally
   with a likelihood-of-success estimate.
@@ -544,11 +704,9 @@ came from third-party summaries.
   for their lawyer? How many accounts to start with? This affects the
   wording of the case form, how prominent the disclaimers are, and whether
   there should be an admin role.
-- **UI: sign-in.** Options:
-  - The app's own accounts, created by an admin with no self-signup
-    (matches smark_iq).
-  - Cloudflare Access in front of the app.
-  - Both, for defence in depth.
+- **UI: sign-in.** Decided (2026-09-25): the app's own accounts, created by
+  an admin, with no self-signup. Still open: whether to add Cloudflare
+  Access in front as a second layer when it's deployed.
 - **UI: sharing a case.** Can a user share a case with another account
   (e.g. a client with their lawyer), or is every case private to its
   creator?

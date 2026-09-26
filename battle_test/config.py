@@ -68,6 +68,21 @@ def load_corpus_config(path: Path = DEFAULT_CONFIG_PATH) -> CorpusConfig:
     )
 
 
+@dataclass(frozen=True)
+class WebConfig:
+    host: str
+    port: int
+    data_dir: Path
+    secure_cookies: bool
+
+
+def load_web_config(path: Path = DEFAULT_CONFIG_PATH) -> WebConfig:
+    with open(path, "rb") as f:
+        raw = tomllib.load(f)["web"]
+    return WebConfig(raw["host"], raw["port"], _resolve(path, raw["data_dir"]),
+                     raw.get("secure_cookies", False))
+
+
 def _resolve(config_path: Path, value: str) -> Path:
     """Resolve a config path relative to the config file's directory."""
     p = Path(value)

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Cases{% endblock %}
+{% block content %}
+<h1>Cases</h1>
+{% if jobs %}
+<table class="cases">
+  <thead><tr><th>Case</th><th>State</th><th>Drafted</th><th>Rounds</th><th>Started</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for job in jobs %}
+    <tr>
+      <td><a href="/cases/{{ job.id }}">{{ job.title }}</a></td>
+      <td>{{ states[job.state_code] }}</td>
+      <td>{{ modes[job.input_mode] }}</td>
+      <td>{{ job.rounds }}</td>
+      <td>{{ job.created_at.replace("T", " ")[:16] }}</td>
+      <td><span class="status {{ job.status }}">{{ job.status }}</span>
+        {% if job.status == "running" and job.stage %}<span class="muted">· {{ job.stage }}</span>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No cases yet. <a href="/cases/new">Start one</a>.</p>
+{% endif %}
+{% endblock %}

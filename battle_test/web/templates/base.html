@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="same-origin">
+  <title>{% block title %}battle_test{% endblock %} · battle_test</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/">battle_test</a>
+    {% if session %}
+    <nav>
+      <a href="/">Cases</a>
+      <a class="button" href="/cases/new">New case</a>
+      <a href="/account" class="muted">{{ session.user.username }}</a>
+      <form method="post" action="/logout" class="inline">
+        <input type="hidden" name="csrf" value="{{ session.csrf_token }}">
+        <button type="submit" class="link">Sign out</button>
+      </form>
+    </nav>
+    {% endif %}
+  </header>
+  <div class="preview-banner">
+    Local preview, served on this computer only. Draft output for attorney review. Not legal advice.
+  </div>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

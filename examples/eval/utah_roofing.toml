@@ -1,0 +1,73 @@
+# Evaluation case: Utah roofing contract abandoned mid-job.
+#
+# DRAFT, not yet reviewed by a lawyer. Each authority below was checked
+# against the text in the law index (snapshot v2026.08), but choosing the
+# right law is exactly the judgement being tested, so a lawyer should
+# confirm or correct this list before the scores are trusted.
+
+name = "utah_roofing"
+state = "UT"
+facts = "../utah_roofing_facts.md"
+lawyer_reviewed = false
+
+# "core": a competent brief on these facts should cite it.
+# "useful": relevant and welcome, but its absence isn't a failure.
+# `citations` lists alternatives: citing any one of them counts.
+
+[[expected]]
+importance = "core"
+citations = ["Utah R. Civ. P. 56"]
+why = "Summary judgment standard and procedure in Utah state court."
+
+[[expected]]
+importance = "core"
+citations = ["Utah Code § 78B-2-309"]
+why = "Six-year limitations period for an action on a contract founded on an instrument in writing."
+
+[[expected]]
+importance = "core"
+citations = ["Utah Code § 78A-5-102"]
+why = "District court's original jurisdiction in civil matters."
+
+[[expected]]
+importance = "core"
+citations = ["Utah Code § 78B-3a-201"]
+why = "Venue: the county where the cause of action arises or a defendant resides."
+
+[[expected]]
+importance = "useful"
+citations = ["Utah Code § 15-1-1"]
+why = "Legal rate of interest on a contract claim, including a contract for services."
+
+[[expected]]
+importance = "useful"
+citations = ["Utah Code § 78B-5-826"]
+why = "Reciprocal attorney fees on a written contract, but only if the contract has a fee clause (the facts don't say)."
+
+[[expected]]
+importance = "useful"
+citations = ["Utah R. Civ. P. 8"]
+why = "General pleading requirements for the complaint."
+
+# Code areas that don't govern this case. Citing them is a relevance error
+# even though the sections are real and in force. Matched by citation prefix.
+
+[[off_topic]]
+prefix = "Utah Code § 70A-2-"
+why = "UCC Article 2 governs sales of goods; this is a construction services contract."
+
+[[off_topic]]
+prefix = "Utah Code § 70A-2a-"
+why = "UCC Article 2A governs leases of goods."
+
+[[off_topic]]
+prefix = "Utah Code § 31A-"
+why = "Insurance code; no insurer is involved."
+
+[[off_topic]]
+prefix = "15 U.S.C. § 66"
+why = "The federal Y2K Act (15 U.S.C. §§ 6601-6617)."
+
+[[off_topic]]
+prefix = "Utah Code § 78B-6-27"
+why = "Remedies for unlawful disclosure of intimate images."
