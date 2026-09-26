@@ -94,7 +94,9 @@ class PipelineTest(unittest.TestCase):
         run = self.run_case(client, facts="f")
         json_models = [c["model"] for c in client.calls if c["json"]]
         self.assertEqual(json_models, ["p-model", "p-model", "d-model", "d-model"])
-        self.assertEqual(run.research["plaintiff"], ["action upon instrument in writing"])
+        self.assertEqual(run.research["plaintiff"][0], "action upon instrument in writing")
+        self.assertEqual(run.research["plaintiff"][1:], grounding.STANDARD_QUERIES)
+        self.assertEqual(run.candidates["plaintiff"], ["Utah R. Civ. P. 56", "Utah Code § 78B-2-309"])
         self.assertIn("action upon instrument in writing", run.research["defendant"])
 
     def test_authorities_are_quoted_in_every_draft(self):

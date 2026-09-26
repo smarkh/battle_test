@@ -83,15 +83,25 @@ def wrap(title: str, text: str) -> str:
 # Research and selection (JSON replies)
 # ---------------------------------------------------------------------------
 
-# No example query here: the 7B model copied the example word for word
-# into both sides' research, crowding out queries about the actual case.
+# The queries go to a keyword search over statute text, so they must read
+# like statute topics. Two earlier versions failed: a worked example got
+# copied word for word into every case, and with no example the model wrote
+# long questions full of party names ("Did Golden Oak Remodeling Inc.
+# breach..."), which matched names instead of law. So: rules plus a format
+# template, but no copyable example query.
 _QUERY_STYLE = """\
-For each legal question about THIS case, write one short search query in the \
-formal vocabulary statutes and court rules use (terms such as "action", \
-"commenced within", "recover", "liable", "obligation", "breach") rather than \
-everyday phrasing. Each query must be about a specific issue in this case. \
-Respond with JSON only, in exactly this form, with 6 to 10 queries:
-{"queries": ["...", "..."]}"""
+The queries go to a keyword search over the text of statutes and court \
+rules, so write each one as a LEGAL TOPIC in the words a statute would use, \
+not as a question about the facts. Rules for every query:
+- 3 to 8 words.
+- No names of people, companies or places, and no dates or dollar amounts.
+- Not a question: no "Did", "Does", "Is", "Whether" or question marks.
+- Use statute vocabulary, e.g. "action", "commenced within", "instrument in \
+writing", "recover", "damages", "interest", "attorney fees", "venue", \
+"jurisdiction", "contractor", "consumer", "warranty".
+Cover each legal issue in THIS case, one query per issue. Respond with JSON \
+only, in exactly this form, with 6 to 10 queries:
+{"queries": ["<legal topic in statute words>", "<legal topic in statute words>"]}"""
 
 
 def plaintiff_research_task(state: str, materials_title: str, materials: str) -> str:

@@ -2,9 +2,11 @@
 {% block title %}Cases{% endblock %}
 {% block content %}
 <h1>Cases</h1>
+{% if deleted %}<p class="notice" role="status">Case deleted.</p>{% endif %}
+{% if retention_days > 0 %}<p class="muted">Finished cases are deleted automatically {{ retention_days }} days after they're started.</p>{% endif %}
 {% if jobs %}
 <table class="cases">
-  <thead><tr><th>Case</th><th>State</th><th>Drafted</th><th>Rounds</th><th>Started</th><th>Status</th></tr></thead>
+  <thead><tr><th>Case</th><th>State</th><th>Drafted</th><th>Rounds</th><th>Started</th><th>Status</th><th>Deleted on</th></tr></thead>
   <tbody>
   {% for job in jobs %}
     <tr>
@@ -15,6 +17,7 @@
       <td>{{ job.created_at.replace("T", " ")[:16] }}</td>
       <td><span class="status {{ job.status }}">{{ job.status }}</span>
         {% if job.status == "running" and job.stage %}<span class="muted">· {{ job.stage }}</span>{% endif %}</td>
+      <td class="muted">{{ deletes_on(job) or "never" }}</td>
     </tr>
   {% endfor %}
   </tbody>

@@ -74,13 +74,14 @@ class WebConfig:
     port: int
     data_dir: Path
     secure_cookies: bool
+    retention_days: int  # finished cases are deleted after this; 0 = keep forever
 
 
 def load_web_config(path: Path = DEFAULT_CONFIG_PATH) -> WebConfig:
     with open(path, "rb") as f:
         raw = tomllib.load(f)["web"]
     return WebConfig(raw["host"], raw["port"], _resolve(path, raw["data_dir"]),
-                     raw.get("secure_cookies", False))
+                     raw.get("secure_cookies", False), raw.get("retention_days", 90))
 
 
 def _resolve(config_path: Path, value: str) -> Path:

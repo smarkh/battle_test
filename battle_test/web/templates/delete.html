@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Delete: {{ job.title }}{% endblock %}
+{% block content %}
+<div class="narrow">
+  <h1>Delete this case?</h1>
+  <p><strong>{{ job.title }}</strong><br>
+    <span class="muted">{{ states[job.state_code] }} · {{ modes[job.input_mode] }} · started {{ job.created_at.replace("T", " ")[:16] }}</span></p>
+  {% if job.status == "running" %}
+  <div class="errors" role="alert"><p>This case is running. Delete it once it has finished.</p></div>
+  <p><a href="/cases/{{ job.id }}">Back to the case</a></p>
+  {% else %}
+  <p>This permanently deletes the case: what you entered, and every document generated from it.
+    It can't be undone. Download anything you want to keep first.</p>
+  <form method="post" action="/cases/{{ job.id }}/delete" class="actions">
+    <input type="hidden" name="csrf" value="{{ session.csrf_token }}">
+    <button type="submit" class="button danger">Delete permanently</button>
+    <a class="button" href="/cases/{{ job.id }}">Cancel</a>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

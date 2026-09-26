@@ -32,9 +32,13 @@ class ResearchAndSelectionTest(unittest.TestCase):
         self.assertEqual(grounding.parse_json_list('["a"]', "queries"), [])
         self.assertEqual(grounding.parse_json_list('{"queries": "a"}', "queries"), [])
 
-    def test_research_cleans_and_dedupes(self):
-        reply = json.dumps({"queries": ["x", " x ", "", 3, "y"]})
-        self.assertEqual(grounding.research(lambda task: reply, "task"), ["x", "y"])
+    def test_research_cleans_dedupes_and_adds_standard_queries(self):
+        standard = grounding.STANDARD_QUERIES[0]
+        reply = json.dumps({"queries": ["x", " x ", "", 3, "y", standard]})
+        queries = grounding.research(lambda task: reply, "task")
+        self.assertEqual(queries[:3], ["x", "y", standard])  # model's own first
+        self.assertEqual(queries[3:], grounding.STANDARD_QUERIES[1:])  # no duplicate of `standard`
+        self.assertEqual(grounding.research(lambda task: "not json", "task"), grounding.STANDARD_QUERIES)
 
     def test_summary_judgment_rule_per_state(self):
         law = FakeLaw(sections=[section("Utah R. Civ. P. 56"), section("Cal. CCP § 437c", "ca"),

@@ -11,27 +11,29 @@ guardrails-style network isolation and data handling).
 - **Built on the dev laptop:**
   - Steps 1–3: pipeline, local law index (UT, CA, TX, federal),
     grounding, and citation checking.
-  - The 3b evaluation set: three sample cases with expected authorities,
-    and a scoring script.
-  - Step 5 parts 1–2: a local web UI with accounts.
+  - The 3b evaluation set and the first search fixes.
+  - Step 5 parts 1–2: a local web UI with accounts, case deletion, and
+    3-month retention.
 
-  98 unit tests pass.
-- **Baseline evaluation (7B):** only the hard-coded summary judgment rule
-  reached the models. Search is the bottleneck: the model's research
-  queries find 3 of 25 expected authorities, versus 13 of 25 for
-  lawyer-style topic queries. See 3b.
+  107 unit tests pass.
+- **Evaluation (7B):** the search fixes doubled the core authorities cited
+  (3 → 6 of 16) and halved off-topic citations (4 → 2). California and
+  Utah improved, Texas didn't: keyword search can't cope with each state's
+  different statute wording. See 3b.
 - **Next up:**
-  - 3b search fixes: topic-style research queries, more results per
-    query, then semantic search.
-  - Web UI: case deletion and history (part 2), then upload/export
-    (part 3) and deployment (part 4).
+  - 3b: semantic search (probably on the server), better selection, then
+    re-evaluate on 14B / ~30B.
+  - Web UI part 3: upload with text extraction, and `.docx`/PDF export.
+  - Moving to the smark_iq server (web UI part 4, and larger models).
   - 3a (the "does it say that?" check), which needs a bigger model.
   - Step 4 (case law via CourtListener).
-  - Moving to the smark_iq server.
-- **Waiting on the lawyer:** a review of the three expected-authority
-  lists, the Texas § 27.004 question, and local vs. Bedrock hosting.
+- **Waiting on the lawyer:**
+  - a review of the three expected-authority lists
+  - the Texas § 27.004 question
+  - local vs. Bedrock hosting
+  - whether 3-month retention fits any record-keeping duties
 - **Waiting on you:** the remaining web UI questions (users, sharing,
-  retention, export format) under "Open questions".
+  export format) under "Open questions".
 
 ## Goal
 
@@ -380,16 +382,66 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
      - Even good topic queries miss ~40%, e.g. the attorney-fee, venue and
        jurisdiction sections and DTPA § 17.50. Keyword search alone won't be
        enough.
+   - **Search fixes (built 2026-09-25):**
+     1. **Topic-style research queries.** The prompt asks for 3–8 words in
+        statute vocabulary, with no names, dates, amounts or questions, and
+        gives a format template (`"<legal topic in statute words>"`) rather
+        than a copyable example. The queries came out clean but too generic
+        for keyword search ("venue proper", "jurisdiction exists"): alone,
+        they still found only ~1 of 22 expected authorities.
+     2. **Standard procedural queries** (`grounding.STANDARD_QUERIES`) are
+        always searched too: limitations on written contracts, venue,
+        trial-court jurisdiction, attorney fees, prejudgment interest, and
+        contract damages. In the offline replay, topic queries plus these
+        found 8 of 22 (the summary judgment rules excluded, since they're
+        supplied directly). They're procedural topics every contract suit
+        needs, not case-specific law.
+     3. **8 results per query** (up from 4).
+     4. **Tried and dropped:** requiring every query word to match (AND,
+        falling back to OR). It helped hand-written queries (13 → 15 / 25)
+        but not the model's.
+     5. **Diagnostics:** runs record their search candidates, the
+        evaluation scores "found by search" separately, and
+        `--research-only` checks the search step in ~1 minute per case.
+   - **Result (2026-09-25, laptop `qwen2.5:7b`, 2 rounds):**
+
+     | Case | Core cited (baseline → now) | Useful cited | Cited on-target | Off-topic | Minutes |
+     |---|---|---|---|---|---|
+     | California | 1/6 → 3/6 | 0/4 → 1/4 | 1/4 → 4/6 | 0 → 0 | 16 → 13 |
+     | Texas | 1/6 → 1/6 | 0/2 → 0/2 | 1/6 → 1/5 | 1 → 1 | 17 → 14 |
+     | Utah | 1/4 → 2/4 | 0/3 → 0/3 | 1/5 → 2/5 | 3 → 1 | 16 → 12 |
+     | **Total** | **3 → 6 / 16** | 0 → 1 / 9 | 3/15 → 7/16 | **4 → 2** | |
+
+     - **Improved:**
+       - California now cites CCP § 337, Civ. Code § 3300 and § 3287/3289.
+       - Utah cites § 78B-2-309, the six-year limitations statute that
+         every earlier run missed.
+       - UCC sales citations in Utah dropped from 3 to 1.
+     - **Unchanged: Texas.** The standard queries use Utah/California
+       wording ("instrument in writing"), but Texas words these topics
+       differently ("four-year limitations period… debt", "reasonable
+       attorney's fees… oral or written contract"). Keyword search depends
+       on each state's phrasing.
+     - **Still never found:** the case-specific law. That's Cal. B&P §§ 7031
+       and 7159.5 (unlicensed contractor, down payment), and the Texas RCLA
+       and DTPA. The model's case-specific queries ("contractor license
+       required", "consumer protection") are too vague.
+     - **Selection is now a visible second bottleneck:** 3 core
+       authorities were found but not picked (Cal. CCP § 395, Tex. Gov't
+       Code § 24.007, Utah § 15-1-1), and Utah § 78A-5-102 was given to the
+       model but not cited.
    - **Next for 3b, in order:**
-     1. Research prompt asks for short topic queries in statute vocabulary,
-        with no party names and no questions. Use a format template (e.g.
-        `"<legal topic in statute words>"`) rather than a copyable example.
-     2. More results per query (4 → 8), so selection sees more.
-     3. Semantic (embedding) search alongside keyword search, on the server.
-     4. Then re-evaluate on the laptop and on the server's 14B / ~30B.
-     - Watch for overfitting: the expected lists were drafted by the same
-       person tuning the search. The lawyer's review of the lists protects
-       against that.
+     1. **Semantic (embedding) search** alongside keyword search. Texas
+        shows keyword search can't cope with state-by-state wording. This
+        is the biggest remaining gain. Embedding ~150k sections is slow on
+        the laptop, so it's probably built on the server.
+     2. **Selection:** show more of each candidate's text, and consider
+        more than 10 picks.
+     3. **Re-evaluate on the server's 14B / ~30B,** which should write
+        sharper case-specific queries and select better.
+     - **Watch for overfitting:** the expected lists and the standard
+       queries were written by the same person tuning the search. The
+       lawyer's review of the lists protects against that.
    - **Needs the lawyer:**
      - **The lists are drafts** (`lawyer_reviewed = false`). Choosing the
        right law is the judgement being measured, so the lists should be
@@ -486,8 +538,26 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
      - Accounts live in `cases/web/users.sqlite` (gitignored). Cases
        created before accounts existed have no owner and aren't shown to
        anyone.
-   - **Part 2, still to do:** case history management and **case deletion**.
-     This depends on the retention question.
+   - **Part 2, case deletion and retention: done (2026-09-25).**
+     - **Default retention: 3 months.** Finished and failed cases are deleted
+       automatically 90 days after they're started (`retention_days` in
+       `[web]`, where 0 keeps them forever). The server purges at startup
+       and hourly, removing the database row and the case's folder
+       (inputs, results and download). Queued and running cases never
+       expire.
+     - **Manual delete:** a "Delete case" button on results and failure
+       pages leads to a confirmation page. It's a real page rather than a
+       browser pop-up, and says the deletion can't be undone. Only the
+       owner can delete (anyone else gets a 404), the form needs its CSRF
+       token, and a running case can't be deleted.
+     - **Visible deadline:** the case list shows each case's deletion date
+       and states the retention period. The results page repeats the
+       date.
+     - **Tested:** 4 store tests (file removal, expiry rules, 0 = keep,
+       per-user lists) and 3 web tests (the delete flow with permission and
+       CSRF checks, running-case refusal, dates shown).
+   - **Part 2 is now complete.** Next is part 3: upload with text
+     extraction, and `.docx`/PDF export.
    - **New-case options renamed** to say what gets drafted: "Draft the
      complaint and the motion" (from case information) or "Use my
      complaint, draft only the motion" (paste). The case list shows which
@@ -655,6 +725,8 @@ came from third-party summaries.
 - **Web UI sign-in:** the app's own accounts, created by an admin from the
   command line, with no self-signup. Each user sees only their own cases.
   See step 5, part 2.
+- **Case retention (default, for now):** 3 months, then automatic deletion.
+  Users can delete sooner. See step 5, part 2.
 - **End result:** no declared winner and no judge role. The output is the
   document set (complaint, motion, rebuttal, optional reply), optionally
   with a likelihood-of-success estimate.
@@ -712,8 +784,9 @@ came from third-party summaries.
   creator?
 - **UI: export formats.** `.docx` (editable, what lawyers usually work in),
   PDF, or both?
-- **UI: data retention.** Should cases be deleted automatically after a
-  set period, or kept until the user deletes them?
+- **UI: data retention.** Decided for now (2026-09-25): 3 months, then
+  automatic deletion, and users can delete sooner. Worth confirming with the
+  lawyer against any record-keeping duties. It's one setting to change.
 
 ## Restart prompt
 

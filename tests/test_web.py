@@ -207,6 +207,40 @@ class WebAppTest(unittest.TestCase):
                 self.assertEqual(other.get(path).status_code, 404)
         self.assertIn("No cases yet", other.get("/").text)
 
+    def test_delete_case(self):
+        case_url = self.finished_case()
+        job_id = case_url.rsplit("/", 1)[1]
+        page = self.client.get(case_url).text
+        self.assertIn(f'href="{case_url}/delete"', page)
+        self.assertRegex(page, r"deleted automatically on \d{4}-\d{2}-\d{2}")
+        self.assertIn("Delete this case?", self.client.get(f"{case_url}/delete").text)
+
+        self.assertEqual(self.client.post(f"{case_url}/delete", data={"csrf": "wrong"}).status_code, 403)
+        other = TestClient(self.app)
+        self.login("other", client=other)
+        self.assertEqual(other.post(f"{case_url}/delete", data={"csrf": self.csrf(other)}).status_code, 404)
+        self.assertIsNotNone(self.app.state.store.get(job_id))  # neither attempt deleted it
+
+        response = self.client.post(f"{case_url}/delete", data={"csrf": self.csrf()}, follow_redirects=False)
+        self.assertEqual(response.headers["location"], "/?deleted=1")
+        self.assertIsNone(self.app.state.store.get(job_id))
+        self.assertEqual(self.client.get(case_url).status_code, 404)
+        self.assertIn("Case deleted.", self.client.get("/?deleted=1").text)
+
+    def test_running_case_cannot_be_deleted(self):
+        job = self.app.state.store.create(self.app.state.auth.get_user("dana").id, "UT", "facts", "x", 1, "t")
+        self.app.state.store.update(job.id, status="running")
+        response = self.client.post(f"/cases/{job.id}/delete", data={"csrf": self.csrf()})
+        self.assertEqual(response.status_code, 409)
+        self.assertIsNotNone(self.app.state.store.get(job.id))
+        self.app.state.store.update(job.id, status="failed")  # let the worker skip it
+
+    def test_case_list_shows_retention(self):
+        self.finished_case()
+        page = self.client.get("/").text
+        self.assertIn("deleted automatically 90 days after", page)
+        self.assertRegex(page, r'<td class="muted">\d{4}-\d{2}-\d{2}</td>')
+
     def test_events_stream_stages_and_finish(self):
         case_url = self.finished_case()
         body = self.client.get(f"{case_url}/events").text

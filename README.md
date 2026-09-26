@@ -119,6 +119,10 @@ python -m battle_test.web --demo-model    # canned drafts, no GPU needed
   - ❌/⚠ marks and `[CITATION NEEDED]` placeholders are highlighted.
   - Below the documents: the authorities appendix and the research queries.
   - A Markdown download.
+- **Deleting and retention:** "Delete case" (after a confirmation page)
+  removes a case and all its files for good. Finished cases are also deleted
+  automatically after `retention_days` (default 90, set in `[web]`). The
+  case list shows each case's deletion date.
 
 **Security:**
 - Passwords are stored only as salted scrypt hashes.
@@ -168,11 +172,13 @@ in each file).
 python -m battle_test.evaluate --validate          # check the case files against the law index
 python -m battle_test.evaluate --label laptop-7b   # run and score all three cases
 python -m battle_test.evaluate --case texas_foundation --rounds 1
+python -m battle_test.evaluate --research-only     # fast (~1 min/case): score the search step alone
 ```
 
 Results go to `output/eval/<timestamp>-<label>/`:
-- `summary.md`: per case, the core/useful authorities cited, what was
-  off-topic, and the citation-check counts
+- `summary.md`: per case, which core/useful authorities search found, which
+  were given to the models and which were cited, plus anything off-topic
+  and the citation-check counts
 - `results.json`: for comparing setups
 - each case's full document set
 

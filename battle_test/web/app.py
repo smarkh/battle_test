@@ -11,7 +11,7 @@ import hmac
 import json
 import re
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote, urlsplit
 
@@ -33,6 +33,7 @@ from battle_test.web.jobs import DONE, FAILED, QUEUED, RUNNING, Job, JobStore, W
 HERE = Path(__file__).resolve().parent
 MAX_INPUT_CHARS = 60_000  # ~15k tokens: a long complaint, still inside the models' context
 SESSION_COOKIE = "bt_session"
+PURGE_INTERVAL_SECONDS = 3600  # how often expired cases are deleted
 
 MODES = {
     "facts": "Complaint and motion drafted",
@@ -126,10 +127,20 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
 
     worker = Worker(store, runner)
 
+    def purge() -> None:
+        store.purge_expired(web.retention_days)
+
+    async def purge_periodically() -> None:
+        while True:
+            await asyncio.to_thread(purge)
+            await asyncio.sleep(PURGE_INTERVAL_SECONDS)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         worker.start()
+        purger = asyncio.create_task(purge_periodically())  # also runs once at startup
         yield
+        purger.cancel()
         store.close()
         auth.close()
 
@@ -137,7 +148,16 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
     app.state.store, app.state.worker, app.state.auth = store, worker, auth
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
     templates = Jinja2Templates(directory=HERE / "templates")
-    templates.env.globals.update(states=SUPPORTED_STATES, fact_fields=FACT_FIELDS, modes=MODES)
+    templates.env.globals.update(states=SUPPORTED_STATES, fact_fields=FACT_FIELDS, modes=MODES,
+                                 retention_days=web.retention_days)
+
+    def deletes_on(job: Job) -> str:
+        """The date a case will be deleted automatically, or "" if never."""
+        if web.retention_days <= 0:
+            return ""
+        return (datetime.fromisoformat(job.created_at) + timedelta(days=web.retention_days)).strftime("%Y-%m-%d")
+
+    templates.env.globals["deletes_on"] = deletes_on
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -259,7 +279,8 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request):
         session = current(request)
-        return page(request, "index.html", session, jobs=store.list(session.user.id))
+        return page(request, "index.html", session, jobs=store.list(session.user.id),
+                    deleted=request.query_params.get("deleted") == "1")
 
     @app.get("/cases/new", response_class=HTMLResponse)
     def new_case(request: Request):
@@ -342,6 +363,22 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
                 await asyncio.sleep(0.5)
 
         return StreamingResponse(stream(), media_type="text/event-stream")
+
+    @app.get("/cases/{job_id}/delete", response_class=HTMLResponse)
+    def confirm_delete(request: Request, job_id: str):
+        session = current(request)
+        return page(request, "delete.html", session, job=own_job(job_id, session))
+
+    @app.post("/cases/{job_id}/delete")
+    async def delete_case(request: Request, job_id: str):
+        session = current(request)
+        job = own_job(job_id, session)
+        await checked_form(request, session)
+        if job.status == RUNNING:
+            raise HTTPException(409, "This case is running. Delete it once it has finished.")
+        store.delete(job_id)
+        worker.forget(job_id)
+        return RedirectResponse("/?deleted=1", status_code=303)
 
     @app.get("/cases/{job_id}/download.md")
     def download(request: Request, job_id: str):

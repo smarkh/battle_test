@@ -45,3 +45,6 @@ data_dir = "cases/web"
 # Send the sign-in cookie only over HTTPS. Must be true once deployed behind
 # Caddy + Cloudflare; false only works for http://127.0.0.1 on this machine.
 secure_cookies = false
+# Finished and failed cases (inputs and results) are deleted automatically
+# this many days after they were created. 0 keeps them until deleted by hand.
+retention_days = 90

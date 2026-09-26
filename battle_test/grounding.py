@@ -24,7 +24,9 @@ from battle_test.law_index import LawSection
 # the reply (three prior documents + authorities) fits in num_ctx 12288.
 MAX_AUTHORITIES = 10
 EXCERPT_CHARS = 700
-RESULTS_PER_QUERY = 4
+# 8, not 4: in the baseline evaluation, even good topic queries missed ~40%
+# of the expected authorities at 4 results each.
+RESULTS_PER_QUERY = 8
 
 # Every summary judgment brief needs the state's own summary judgment rule.
 # Looked up directly, not left to search and selection: the first grounded
@@ -55,9 +57,28 @@ def parse_json_list(reply: str, key: str) -> list:
     return value if isinstance(value, list) else []
 
 
+# Procedural topics every civil contract suit needs, whatever the facts, in
+# the wording statutes use. Searched alongside the model's own queries: the
+# 7B model's topic queries ("venue proper", "jurisdiction exists") are too
+# generic for keyword search. In the offline replay of the evaluation cases,
+# adding these took search from ~1 to 8 of 22 expected authorities (the
+# summary judgment rules, supplied directly, excluded). Case-specific law
+# (licensing, consumer protection, construction defects) still has to come
+# from the model's research.
+STANDARD_QUERIES = [
+    "limitation of actions contract obligation instrument in writing",
+    "venue county where action brought",
+    "original jurisdiction district court civil",
+    "attorney fees breach of contract",
+    "prejudgment interest contract legal rate",
+    "measure of damages breach of contract",
+]
+
+
 def research(ask: JsonChat, task: str) -> list[str]:
+    """The model's research queries, then the standard procedural ones."""
     queries = [q.strip() for q in parse_json_list(ask(task), "queries") if isinstance(q, str) and q.strip()]
-    return list(dict.fromkeys(queries))
+    return list(dict.fromkeys(queries + STANDARD_QUERIES))
 
 
 def summary_judgment_rule(index: LawSearch, state: str) -> list[LawSection]:

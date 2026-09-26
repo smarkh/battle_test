@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from battle_test import grounding
-from battle_test.evaluate import CASES_DIR, load_case, load_cases, render_summary, score, validate
+from battle_test.evaluate import CASES_DIR, load_case, load_cases, render_research, render_summary, score, validate
 from battle_test.grounding import CitationCheck
 from battle_test.law_index import LawSection
 from battle_test.pipeline import CaseRun, Document
@@ -86,6 +86,20 @@ class EvaluateTest(unittest.TestCase):
         self.assertEqual(s.problems, 1)
         self.assertEqual((s.unchecked_lines, s.placeholders), (1, 1))
 
+    def test_found_by_search_counts_candidates_from_either_side(self):
+        run = self.run_with(Document("Motion", "plaintiff", "", True))
+        run.candidates = {"plaintiff": ["Utah Code § 15-1-1"], "defendant": ["Utah Code § 78B-2-307"]}
+        s = score(run, self.case)
+        self.assertEqual(s.core_found, (1, 2))  # the limits entry, via its alternative citation
+        md = render_summary([s], "test", {"label": "test"})
+        self.assertIn("🔍 found by search, not selected · *useful* · `Utah Code § 15-1-1`", md)
+
+    def test_research_report_totals(self):
+        md = render_research([(self.case, ["limitation of actions"], ["Utah R. Civ. P. 56"])], "test")
+        self.assertIn("**Total: 1/3 expected authorities found by search.**", md)
+        self.assertIn("🔍 found · *core* · `Utah R. Civ. P. 56`", md)
+        self.assertIn("- limitation of actions", md)
+
     def test_any_alternative_counts(self):
         run = self.run_with(Document("Motion", "plaintiff", "", True, checks=(check(LIMITS),)))
         s = score(run, self.case)
@@ -102,7 +116,7 @@ class EvaluateTest(unittest.TestCase):
         md = render_summary([score(run, self.case)], "test", {"label": "test"})
         self.assertIn("✅ cited · *core* · `Utah R. Civ. P. 56`", md)
         self.assertIn("➖ given, not cited · *core*", md)
-        self.assertIn("❌ missing · *useful* · `Utah Code § 15-1-1`", md)
+        self.assertIn("❌ never found by search · *useful* · `Utah Code § 15-1-1`", md)
         self.assertIn("provisional", md)  # not lawyer-reviewed
         self.assertIn("- `Utah Code § 1-1-1`", md)  # listed under "other authorities"
 

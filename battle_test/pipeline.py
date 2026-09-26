@@ -49,6 +49,7 @@ class CaseRun:
     defendant_model: str
     law_meta: dict[str, str] = field(default_factory=dict)
     research: dict[str, list[str]] = field(default_factory=dict)  # role -> search queries
+    candidates: dict[str, list[str]] = field(default_factory=dict)  # role -> citations search found
     documents: list[Document] = field(default_factory=list)
 
     @property
@@ -103,6 +104,7 @@ def run_case(
         queries = grounding.research(asker(role), research_task)
         run.research[role] = queries
         candidates = grounding.gather_candidates(law, queries, sc)
+        run.candidates[role] = [s.citation for s in candidates]
         if not candidates:
             return []
         stage("Selecting authorities", role)

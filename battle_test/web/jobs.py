@@ -5,14 +5,19 @@ later submissions wait in the queue. Each case's input and results live in
 their own folder under the web data dir (inside gitignored cases/).
 """
 
+# Postponed annotations: JobStore has a method named `list`, which would
+# otherwise shadow the built-in in its own `-> list[Job]` annotations.
+from __future__ import annotations
+
 import json
 import queue
+import shutil
 import sqlite3
 import threading
 import time
 import uuid
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -116,6 +121,31 @@ class JobStore:
             ).fetchone()
         return n + 1
 
+    def delete(self, job_id: str) -> None:
+        """Remove a case's row and every file it has. Irreversible."""
+        with self._lock, self._db:
+            self._db.execute("DELETE FROM cases WHERE id = ?", (job_id,))
+        shutil.rmtree(self._dir(job_id), ignore_errors=True)
+
+    def expired(self, retention_days: int, now: datetime | None = None) -> list[Job]:
+        """Finished or failed cases created more than retention_days ago.
+        Queued and running cases never expire. 0 days means keep forever."""
+        if retention_days <= 0:
+            return []
+        cutoff = ((now or datetime.now()) - timedelta(days=retention_days)).isoformat(timespec="seconds")
+        with self._lock:
+            rows = self._db.execute(
+                f"SELECT {_FIELDS} FROM cases WHERE status IN (?, ?) AND created_at < ?",
+                (DONE, FAILED, cutoff),
+            ).fetchall()
+        return [Job(*r) for r in rows]
+
+    def purge_expired(self, retention_days: int, now: datetime | None = None) -> int:
+        jobs = self.expired(retention_days, now)
+        for job in jobs:
+            self.delete(job.id)
+        return len(jobs)
+
     def input_text(self, job_id: str) -> str:
         return (self._dir(job_id) / "input.md").read_text(encoding="utf-8")
 
@@ -209,6 +239,10 @@ class Worker:
 
     def progress(self, job_id: str) -> Progress | None:
         return self._progress.get(job_id)
+
+    def forget(self, job_id: str) -> None:
+        """Drop a deleted case's in-memory progress log."""
+        self._progress.pop(job_id, None)
 
     def wait_idle(self, timeout: float = 30) -> bool:
         """For tests: wait until the queue is empty and nothing is running."""

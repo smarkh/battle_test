@@ -7,8 +7,12 @@
     <p class="muted">{{ result.state }} and federal law · {{ job.rounds }} round{{ "s" if job.rounds > 1 }} ·
       plaintiff model <code>{{ result.plaintiff_model }}</code> · defendant model <code>{{ result.defendant_model }}</code></p>
   </div>
-  <a class="button" href="/cases/{{ job.id }}/download.md">Download (.md)</a>
+  <div class="actions">
+    <a class="button" href="/cases/{{ job.id }}/download.md">Download (.md)</a>
+    <a class="button danger-outline" href="/cases/{{ job.id }}/delete">Delete case</a>
+  </div>
 </div>
+{% if deletes_on(job) %}<p class="muted">This case will be deleted automatically on {{ deletes_on(job) }}.</p>{% endif %}
 
 <div class="disclaimer">
   <strong>Draft for attorney review, not legal advice.</strong>

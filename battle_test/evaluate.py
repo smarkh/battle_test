@@ -3,6 +3,7 @@
     python -m battle_test.evaluate --label laptop-7b          # run and score all cases
     python -m battle_test.evaluate --case utah_roofing --rounds 1
     python -m battle_test.evaluate --validate                 # check the case files only
+    python -m battle_test.evaluate --research-only            # fast: score the search step alone
 
 Each case in examples/eval/*.toml names a facts file, the authorities a
 competent brief should cite ("core") or may usefully cite ("useful"), and
@@ -116,6 +117,7 @@ class ExpectedResult:
     importance: str
     citations: list[str]
     why: str
+    found: bool  # returned by the law-index search for either side
     provided: bool  # given to the models in any drafting prompt
     cited: bool  # cited (and verified in force) in any document
 
@@ -138,6 +140,10 @@ class Score:
     def _rate(self, importance: str, attr: str) -> tuple[int, int]:
         group = [e for e in self.expected if e.importance == importance]
         return sum(getattr(e, attr) for e in group), len(group)
+
+    @property
+    def core_found(self) -> tuple[int, int]:
+        return self._rate("core", "found")
 
     @property
     def core_provided(self) -> tuple[int, int]:
@@ -163,6 +169,7 @@ class Score:
 
 
 def score(run: CaseRun, case: EvalCase, seconds: float = 0.0) -> Score:
+    found = {c for citations in run.candidates.values() for c in citations}
     provided = {s.citation for doc in run.documents for s in doc.authorities}
     cited: list[str] = []
     statuses: Counter = Counter()
@@ -174,6 +181,7 @@ def score(run: CaseRun, case: EvalCase, seconds: float = 0.0) -> Score:
 
     expected = [
         ExpectedResult(e.importance, list(e.citations), e.why,
+                       found=any(c in found for c in e.citations),
                        provided=any(c in provided for c in e.citations),
                        cited=any(c in cited for c in e.citations))
         for e in case.expected
@@ -214,26 +222,29 @@ def render_summary(scores: list[Score], label: str, setup: dict[str, str]) -> st
                       "so treat these scores as provisional."]
     lines += [
         "",
-        "| Case | Core given to models | Core cited | Useful cited | Cited on-target "
+        "| Case | Core found by search | Core given to models | Core cited | Useful cited | Cited on-target "
         "| Off-topic cited | ❌ problems | `[CITATION NEEDED]` | Minutes |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for s in scores:
         lines.append(
-            f"| {s.case} | {_frac(s.core_provided)} | {_frac(s.core_cited)} | {_frac(s.useful_cited)} "
+            f"| {s.case} | {_frac(s.core_found)} | {_frac(s.core_provided)} | {_frac(s.core_cited)} "
+            f"| {_frac(s.useful_cited)} "
             f"| {_frac(s.on_target)} | {len(s.off_topic_cited)} | {s.problems} | {s.placeholders} "
             f"| {s.seconds / 60:.0f} |"
         )
     lines += [
         "",
-        "*Core/useful given to models / cited:* expected authorities that were quoted in a drafting "
-        "prompt, and that were actually cited (verified in force). *Cited on-target:* of the distinct "
-        "authorities cited, how many are on the expected list.",
+        "*Core found by search / given to models / cited:* expected authorities that the law-index "
+        "search returned as candidates, that were then quoted in a drafting prompt, and that were "
+        "actually cited (verified in force). *Cited on-target:* of the distinct authorities cited, "
+        "how many are on the expected list.",
     ]
     for s in scores:
         lines += ["", f"## {s.case} ({s.state})", ""]
         for e in s.expected:
-            mark = "✅ cited" if e.cited else "➖ given, not cited" if e.provided else "❌ missing"
+            mark = ("✅ cited" if e.cited else "➖ given, not cited" if e.provided
+                    else "🔍 found by search, not selected" if e.found else "❌ never found by search")
             lines.append(f"- {mark} · *{e.importance}* · `{' / '.join(e.citations)}`: {e.why}")
         if s.off_topic_cited:
             lines += ["", "**Off-topic authorities cited:**", ""]
@@ -250,9 +261,50 @@ def render_summary(scores: list[Score], label: str, setup: dict[str, str]) -> st
 
 def _score_dict(s: Score) -> dict:
     d = asdict(s)
-    d.update(core_provided=s.core_provided, core_cited=s.core_cited, useful_cited=s.useful_cited,
+    d.update(core_found=s.core_found, core_provided=s.core_provided, core_cited=s.core_cited, useful_cited=s.useful_cited,
              on_target=s.on_target, problems=s.problems)
     return d
+
+
+# ---------------------------------------------------------------------------
+# Research only: a fast check of the search step
+# ---------------------------------------------------------------------------
+
+def research_recall(cfg, client, law, case: EvalCase) -> tuple[list[str], list[str]]:
+    """Run just the plaintiff's research step and the index search.
+
+    Returns (queries, candidate citations). One short model call instead of a
+    full run, so query-prompt changes can be checked in about a minute per
+    case. The defendant's research needs the drafts, so it isn't covered.
+    """
+    from battle_test import grounding, prompts
+
+    state = prompts.SUPPORTED_STATES[case.state]
+    facts = case.facts_path.read_text(encoding="utf-8")
+    task = prompts.plaintiff_research_task(state, "Case information", facts)
+    system = prompts.plaintiff_system(state)
+    queries = grounding.research(lambda t: client.chat(cfg.plaintiff_model, system, t, json_mode=True), task)
+    candidates = grounding.gather_candidates(law, queries, case.state.lower())
+    return queries, [c.citation for c in candidates]
+
+
+def render_research(rows: list[tuple[EvalCase, list[str], list[str]]], label: str) -> str:
+    lines = [f"# Research-only check — {label}", "",
+             "Plaintiff research step only: which expected authorities the law-index search returned.", ""]
+    total = found = 0
+    for case, queries, candidates in rows:
+        hits = [e for e in case.expected if any(c in candidates for c in e.citations)]
+        total += len(case.expected)
+        found += len(hits)
+        lines += [f"## {case.name}: {len(hits)}/{len(case.expected)} found "
+                  f"({len(candidates)} candidates)", "", "**Queries:**", ""]
+        lines += [f"- {q}" for q in queries]
+        lines += ["", "**Expected authorities:**", ""]
+        lines += [f"- {'🔍 found' if e in hits else '❌ not found'} · *{e.importance}* · `{e.citations[0]}`"
+                  for e in case.expected]
+        lines.append("")
+    lines[4:4] = [f"**Total: {found}/{total} expected authorities found by search.**", ""]
+    return "\n".join(lines) + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -266,6 +318,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rounds", type=int, choices=(1, 2), help="Override pipeline.rounds.")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     parser.add_argument("--validate", action="store_true", help="Only check the case files.")
+    parser.add_argument("--research-only", action="store_true",
+                        help="Only run the plaintiff's research step and score the search (fast).")
     args = parser.parse_args(argv)
 
     cfg = load_config(args.config)
@@ -286,6 +340,20 @@ def main(argv: list[str] | None = None) -> int:
         started = datetime.now()
         out_dir = cfg.output_dir / "eval" / f"{started:%Y%m%d-%H%M%S}-{args.label}"
         out_dir.mkdir(parents=True, exist_ok=True)
+
+        if args.research_only:
+            rows = []
+            for case in cases:
+                print(f"=== {case.name}: research", file=sys.stderr, flush=True)
+                try:
+                    rows.append((case, *research_recall(cfg, client, law, case)))
+                except OllamaError as e:
+                    print(f"error: {e}", file=sys.stderr)
+                    return 1
+            report = render_research(rows, args.label)
+            (out_dir / "research.md").write_text(report, encoding="utf-8")
+            print(report)
+            return 0
         setup = {
             "label": args.label,
             "started": f"{started:%Y-%m-%d %H:%M}",
