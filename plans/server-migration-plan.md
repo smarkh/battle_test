@@ -269,34 +269,148 @@ can write to its volumes. Commit and push.
      `docker-compose.yml`'s default is corrected to match.
    - `qwen2.5:14b` is already pulled, and there's 752 GB free.
 2. Add a read-only deploy key for the GitHub repo, then clone battle_test
-   next to smark_iq.
+   next to smark_iq. **Done 2026-09-28:**
+   - The key `~/.ssh/battle_test_deploy` (no passphrase, server only) was
+     created on the server, and added to GitHub as a read-only deploy key.
+   - The server's SSH config has a `Host github-battle-test` entry using
+     only that key.
+   - GitHub's host key in `known_hosts` was checked against the
+     fingerprint GitHub's API publishes
+     (`SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU`). `ssh-keyscan`
+     hangs on Windows, so the API was used instead.
+   - Cloned to `C:\Users\smark\Documents\work\battle_test` from
+     `git@github-battle-test:smarkh/battle_test.git`.
 3. `ollama pull qwen2.5:14b` if it's not there. Check `ollama ps` shows
    `100% GPU` during a test prompt. (smark_iq hit a silent CPU fallback
-   once; the fix is in its hardware-migration plan.)
+   once; the fix is in its hardware-migration plan.) **Done:** it was
+   already pulled, and runs **100% GPU** at 83 tok/s, using 11 GB with the
+   12k context.
 4. Build the image, and create the volumes with `docker compose up
-   --no-start`.
+   --no-start`. **Done, from Chrome Remote Desktop,** because it can't be
+   done over SSH (see below):
+   - Image `battle-test` is 420 MB.
+   - The container is on `smarkiq_default`, running as `battle`, with a
+     read-only root filesystem, `cap_drop ALL`, `no-new-privileges`, a
+     3 GB limit, no published ports, and `restart: unless-stopped`.
+   - Volumes: `battle_test_battle-law` and `battle_test_battle-cases`.
 5. **Build the law index** into `battle-law`: `docker compose run --rm
    battle-test python -m battle_test.corpus build`. Check it with `...
    corpus info`, which should show snapshot v2026.08 and 369,896 sections.
+   **Done over SSH, in 36 s:** 369,896 sections, snapshot v2026.08
+   (2026-08-14). `evaluate --validate` passes for all three cases.
 6. **Create the first admin account** (interactive, so run it over SSH with
    a TTY): `docker compose run --rm battle-test python -m
-   battle_test.web.users add NAME --admin`.
+   battle_test.web.users add NAME --admin`. **Done, with one lesson:**
+   - The account was first created from Chrome Remote Desktop, and the
+     password then didn't work from the laptop's browser. Remote Desktop
+     can translate some keys differently when the two machines' keyboard
+     settings differ. Both password prompts went through the same
+     translation, so they matched each other but not what the laptop
+     sends.
+   - **Set passwords over SSH from the machine whose keyboard will be used
+     to sign in** (`ssh -t smark@smark-iq`, then the `users` command), or
+     at the server itself. Never through Remote Desktop.
+   - Reset over SSH with `users passwd`, and confirmed with a one-line
+     `AuthStore.authenticate` check in the container before trying the
+     browser.
+   - Heads-up: the account is currently named `yourname`, because the
+     example command's placeholder was used. Add a real-username admin and
+     `disable yourname` when convenient.
+
+**Found in Phase 2: Docker image downloads don't work over SSH on this
+server.**
+- Any pull or build that fetches an image fails with `error getting
+  credentials … A specified logon session does not exist`. That happens
+  even for public images, and even with the client's credential helper
+  removed.
+- Docker Desktop handles registry access through the signed-in desktop
+  session's Windows credential store, which an SSH (network) logon can't
+  use.
+- Everything that uses images already on the server works fine over SSH:
+  `docker compose run`, `up`, `ps`, `logs`, and so on.
+- So for updates: `git pull` works over SSH, but **`docker compose build`
+  must be run from Chrome Remote Desktop**. The alternatives, if updates
+  become frequent: build on the laptop and `docker save` / `scp` /
+  `docker load`, or trigger the build as a scheduled task that runs inside
+  the desktop session.
+- Other Windows-over-SSH notes:
+  - The server's shell is Windows PowerShell 5.1, so there's no `&&`.
+  - Send scripts with `powershell -EncodedCommand` so quoting survives.
+  - Force TLS 1.2 for `Invoke-RestMethod`.
+  - Filter out the `#< CLIXML` progress noise.
 
 ### Phase 3 — Run privately and test on the server
 1. Start the container with a temporary `127.0.0.1:8000` port published.
    Reach it from the laptop through an SSH tunnel over Tailscale (`ssh -L
    8000:127.0.0.1:8000 server`). It still isn't on the internet or the LAN.
+   **Done 2026-09-28.**
+   - The port was added with an untracked override file,
+     `docker-compose.local-test.yml` (`docker compose -f docker-compose.yml
+     -f docker-compose.local-test.yml up -d`).
+   - Container `healthy`, port `127.0.0.1:8000` only, `/healthz` ok, and
+     signed-out requests redirect to `/login`.
+   - The tunnel is `ssh -N -L 8000:127.0.0.1:8000 smark@smark-iq`, then
+     browse to `http://localhost:8000`. Chrome accepts the Secure cookie
+     on `localhost` over plain HTTP.
 2. Test with the real 14B model: sign in, then run the Utah sample case
    end to end. Check that live progress streams, results render, citations
-   link, the download works, and deletion works.
+   link, the download works, and deletion works. **Done 2026-09-28. All
+   worked:**
+   - **Sign-in:** needed the password reset over SSH (Phase 2 step 6).
+   - **Speed:** the Utah case ran in **90 s** end to end (8 model calls,
+     2 rounds), against ~13–16 min on the laptop. The documents were
+     complete, at 600–800 words each, with signature blocks.
+   - **Live progress:** stages ticked off, and the page switched to the
+     results on its own.
+   - **Results:** 10 ✅ citations linking to official sources, 0 ❌, 0
+     placeholders, and the auto-delete date shown (2026-12-27).
+   - **Download:** `result.md` confirmed on the server. Reading it in the
+     browser was blocked by the automation tool, but the route is covered
+     by the tests.
+   - **Delete:** the confirmation page, then "Case deleted.", and the
+     folder and database row were both gone.
+   - **Resources during the run:**
+     - GPU 95% busy, 11.8 of 16 GB, model 100% GPU.
+     - Container 1.0 of 3 GB.
+     - ⚠ Server RAM only 2.7 GB free of 23.4 GB, down from 5.1 GB idle.
+       See Risks.
+   - **Quality on 14B:** still noisy selection. It cited Utah Code
+     § 78A-5-102 (expected), § 13-11-19 (consumer sales, plausible),
+     § 63G-7-403 (Governmental Immunity Act, off-topic) and § 70A-2-701
+     (UCC sales, off-topic). The authorities quoted to it included federal
+     consumer-finance and trust-law sections unrelated to the case. The
+     evaluation (step 3) measures this.
 3. Run the evaluation on the server (`python -m battle_test.evaluate
    --label server-14b`) for the first real comparison against the laptop's
-   7B. This is also the start of 3b's "re-evaluate on 14B".
+   7B. This is also the start of 3b's "re-evaluate on 14B". **Done
+   2026-09-28:**
+   - The three cases took ~6 min in total (2 min each), against ~40 min on
+     the laptop.
+   - Run with `docker compose run --rm -T battle-test python -m
+     battle_test.evaluate --label server-14b`, over SSH.
+   - Results are in the cases volume at
+     `/data/cases/output/eval/20260928-201608-server-14b/`.
+   - Core cited: 4/16 (laptop 7B 6/16), off-topic: 3 (7B 2). There was no
+     measurable gain in legal choice from the bigger model. See
+     `plans/plan.md` 3b.
 4. Check GPU sharing with Open WebUI: start a battle_test run while chatting
    in Open WebUI. Expect slower responses while models swap in and out of
    VRAM. Decide whether that's acceptable, or whether to set Ollama's
    `OLLAMA_MAX_LOADED_MODELS` / keep-alive differently (see Risks).
-5. Remove the temporary port.
+   **Skipped for now (2026-09-28).** Do it before real users. The low free
+   RAM seen during the Utah run (2.7 GB of 23.4 GB) makes it worth
+   checking.
+5. Remove the temporary port. **Done 2026-09-28:**
+   - The container was restarted with only `docker-compose.yml`. It's
+     healthy, with no published ports, and `127.0.0.1:8000` on the server
+     refuses connections.
+   - The override is kept as `docker-compose.local-test.yml.disabled`
+     (gitignored) for future private tests. Rename it back and use `-f
+     docker-compose.yml -f docker-compose.local-test.yml up -d`.
+
+**Phase 3 is done, except the GPU-sharing check.** The app is running on
+the server, unreachable except from inside Docker's network, waiting for
+Phase 4.
 
 ### Phase 4 — Go public
 1. **Caddy (in the smark_iq repo):** add a site block `http://battle.smarkiq.us`

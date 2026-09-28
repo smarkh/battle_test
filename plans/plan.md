@@ -25,10 +25,11 @@ guardrails-style network isolation and data handling).
     re-evaluate on 14B / ~30B.
   - Web UI part 3: upload with text extraction, and `.docx`/PDF export.
   - Moving to the smark_iq server (web UI part 4, and larger models). Plan:
-    `plans/server-migration-plan.md`. Phases 0–1 are done (decisions, and
-    the container and deployment code, built and tested on the laptop). Next
-    is Phase 2, preparing the server over SSH. ⚠ Cloudflare Access must be
-    added before any real users test it.
+    `plans/server-migration-plan.md`. Phases 0–3 are done (2026-09-28):
+    the app runs on the server, and was tested privately over an SSH
+    tunnel, taking 90 s per case on 14B. The GPU-sharing check was skipped.
+    Next is Phase 4 (Caddy block + `battle.smarkiq.us`). ⚠ Cloudflare
+    Access must be added before any real users test it.
   - 3a (the "does it say that?" check), which needs a bigger model.
   - Step 4 (case law via CourtListener).
 - **Waiting on the lawyer:**
@@ -438,15 +439,41 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
        authorities were found but not picked (Cal. CCP § 395, Tex. Gov't
        Code § 24.007, Utah § 15-1-1), and Utah § 78A-5-102 was given to the
        model but not cited.
-   - **Next for 3b, in order:**
+   - **First server result (2026-09-28, `qwen2.5:14b` on the smark_iq
+     server, same code and search fixes, 2 rounds):**
+
+     | Case | Core cited (laptop 7B → server 14B) | Useful cited | Cited on-target | Off-topic | Minutes/case |
+     |---|---|---|---|---|---|
+     | California | 3/6 → 2/6 | 1/4 → 1/4 | 4/6 → 3/6 | 0 → 2 | 13 → 2 |
+     | Texas | 1/6 → 1/6 | 0/2 → 0/2 | 1/5 → 1/4 | 1 → 1 | 14 → 2 |
+     | Utah | 2/4 → 1/4 | 0/3 → 1/3 | 2/5 → 2/5 | 1 → 0 | 12 → 2 |
+     | **Total** | **6 → 4 / 16** | 1 → 2 / 9 | 7/16 → 6/15 | 2 → 3 | ~40 → ~6 min |
+
+     - **The bigger model gave no measurable gain** in legal choice. With
+       one run per case at temperature 0.4, a ±1 swing is noise.
+     - **Search and selection are confirmed as the bottleneck, not model
+       size.** The model only sees what search returns, and search still
+       misses the case-specific law. In Utah, search found 2/4 core
+       authorities but selection passed on only 1.
+     - California and Texas both cited UCC buyer's remedies ("cover", buyer's
+       damages) for construction contracts.
+     - **Speed is the big win:** a full three-case evaluation now takes
+       ~6 min, so search and selection changes can be tested quickly on the
+       server.
+   - **Next for 3b, in order** (reordered after the 14B result; model size
+     comes last):
      1. **Semantic (embedding) search** alongside keyword search. Texas
         shows keyword search can't cope with state-by-state wording. This
         is the biggest remaining gain. Embedding ~150k sections is slow on
-        the laptop, so it's probably built on the server.
-     2. **Selection:** show more of each candidate's text, and consider
-        more than 10 picks.
-     3. **Re-evaluate on the server's 14B / ~30B,** which should write
-        sharper case-specific queries and select better.
+        the laptop, so build it on the server.
+     2. **Selection:** show more of each candidate's text, consider more
+        than 10 picks, and consider a case-type classification step first
+        ("construction services contract, residential") to steer it away
+        from UCC sales law.
+     3. **Several runs per case** (e.g. 3) in the evaluation, averaged, so
+        a change is judged on more than a single noisy run. It's affordable
+        now at 2 min per case.
+     4. **Then try ~30B** (Qwen3 30B-A3B, Mistral Small 24B) and compare.
      - **Watch for overfitting:** the expected lists and the standard
        queries were written by the same person tuning the search. The
        lawyer's review of the lists protects against that.

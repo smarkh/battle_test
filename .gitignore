@@ -24,3 +24,6 @@ output/
 
 # Downloaded law corpus and search index - rebuilt with python -m battle_test.corpus build
 data/
+
+# Temporary compose override for private testing on the server (migration Phase 3)
+docker-compose.local-test.yml*
