@@ -38,6 +38,10 @@ guardrails-style network isolation and data handling).
   - whether 3-month retention fits any record-keeping duties
 - **Waiting on you:** the remaining web UI questions (users, sharing,
   export format) under "Open questions".
+- **Ideas registered, not scheduled:** client intake from a lawyer's
+  website. A plaintiff submits their situation, is told to call, and the
+  lawyer receives pre-drafted documents. See "Proposed feature: client
+  intake" (needs the lawyer's input first).
 
 ## Goal
 
@@ -728,6 +732,105 @@ came from third-party summaries.
    and compare using the 3b scoring.
 4. Decide per model role: drafting, 3a check, or both.
 
+## Proposed feature: client intake from a lawyer's website (idea, not scheduled)
+
+**Status: an idea registered 2026-09-28. Not decided and not scheduled.**
+It needs the lawyer's input (below) before any design work.
+
+### The idea
+
+A potential plaintiff fills in their situation on **the lawyer's own
+website**, then:
+1. **The plaintiff sees a short response:** that their situation may be
+   worth discussing with the lawyer, and that they should call.
+2. **Behind the scenes,** battle_test runs the pipeline on what they
+   entered: complaint, motion, opposition, and the citation check.
+3. **The documents go to the lawyer,** so when the plaintiff calls, the
+   lawyer already has a draft case file ready to review, with the
+   weaknesses the opposition found already on the table.
+
+This turns the tool from something a lawyer runs into an intake step that
+feeds the lawyer prepared work. The pipeline itself wouldn't change.
+
+### How it could fit what's built
+
+- **An intake form embedded on the lawyer's site**, reusing the existing
+  "Draft the complaint and the motion" case information fields in plainer
+  language for non-lawyers (e.g. "What happened, in date order"). It posts
+  to battle_test, not to the lawyer's own web host, so case facts don't sit
+  on a marketing website.
+- **Submissions become cases owned by that lawyer's account.** They appear
+  in the lawyer's case list marked as intake, with the plaintiff's contact
+  details. The per-user case privacy, deletion and retention already built
+  apply as they are.
+- **The lawyer is notified without any case content,** e.g. "New intake
+  from J. Smith, sign in to view", by email or text. Case facts stay in
+  battle_test behind the lawyer's login, never in an email body.
+- **The plaintiff gets no documents and no citations.** Only the response
+  message, plus a copy of what they entered if wanted. The drafts are work
+  product for the lawyer.
+- **Several lawyers or firms later:** each would get their own intake link
+  or embed tied to their account. v1 would be one lawyer.
+
+### What changes because the public uses it
+
+- **What the plaintiff is told.**
+  - This is the biggest question. "You might have a case" coming from
+    software, before any lawyer has looked, can read as legal advice or a
+    promise. That raises the unauthorized-practice-of-law and
+    attorney-advertising concerns the lawyer will know better than we do.
+  - A safer default: a message that's the same for everyone (or nearly
+    so), e.g. "Thanks, the attorney has your information and will review
+    it. Please call [number] to discuss." Any merit signal, if used at all,
+    would be worded by the lawyer and never read as a verdict.
+  - This connects to the existing open question on a likelihood estimate,
+    and to the no-winner principle.
+- **Confidentiality of prospective clients.** What a prospective client
+  tells a lawyer is generally confidential even if they never hire them
+  (e.g. ABA Model Rule 1.18). Intake data is at least as sensitive as case
+  data, so the same handling applies: stored only in battle_test,
+  retention, deletion, and no content in notifications. It also raises the
+  local vs. Bedrock and Cloudflare-in-transit questions again, now for
+  members of the public.
+- **Consent and disclosures on the form:** that submitting doesn't create
+  an attorney-client relationship, what happens to the information, how
+  long it's kept, and that an AI tool prepares drafts for the attorney's
+  review. The lawyer should word these.
+- **Conflict checks.** The form names the other party, so the lawyer may
+  need to check for conflicts before reviewing the details.
+- **Abuse and cost.** A public form can be spammed, and each submission
+  costs a full model run (~13 min on the laptop, less on the server, and
+  real money if Bedrock is used). It would need rate limits, a bot check
+  (e.g. Cloudflare Turnstile), a daily cap, and perhaps a short triage step
+  first, so obviously unsuitable submissions don't use a full run.
+- **Speed.** Runs are queued one at a time, so the plaintiff should get
+  their response message immediately. The drafts are ready for the lawyer
+  minutes later, not while the plaintiff waits.
+- **Case types.** Intake would bring in whatever the public submits, not
+  just contract disputes. Out-of-scope matters (criminal, family, other
+  states) should be recognised and routed to "please call" without running
+  the pipeline.
+
+### Rough build outline (if it goes ahead)
+
+1. **Lawyer's input first:** the plaintiff-facing wording, disclosures,
+   consent, conflict-check needs, retention for non-clients, and whether
+   any merit signal is acceptable.
+2. **A public intake form and endpoint:** no sign-in, but a bot check,
+   rate limits and a daily cap. Submissions are queued as intake cases on
+   the lawyer's account.
+3. **A triage step** that screens state and case type before the full run.
+4. **Content-free notifications** to the lawyer.
+5. **An intake view** in the lawyer's case list: contact details, what the
+   plaintiff wrote, the generated documents, and "mark as contacted" /
+   "declined".
+6. **An embed snippet or link** for the lawyer's website.
+
+It depends on the server deployment (a public URL) and on Cloudflare
+Access. Access can't sit in front of a public intake form, so the intake
+endpoint would need to sit outside the Access-protected app, with its own
+protections (item 2 above).
+
 ## Decisions made
 
 - **Web UI sign-in:** the app's own accounts, created by an admin from the
@@ -773,6 +876,15 @@ came from third-party summaries.
 
 - **Likelihood estimate:** include it or not, and if so, how is it worded
   and justified so it doesn't read as a verdict?
+- **Client intake from a lawyer's website** (proposed feature, see its
+  section). For the lawyer:
+  - what a plaintiff may be told (if anything) about the strength of their
+    situation
+  - the disclosures and consent on the form
+  - prospective-client confidentiality and retention for people who never
+    become clients
+  - conflict checks
+  - whether they want it at all
 - **Round 2:** it runs end to end on the laptop at `num_ctx` 12288 (every
   Utah test so far ran both rounds). Still to confirm on the server: that
   quality holds as the reply's input grows, and the runtime with larger
@@ -808,43 +920,70 @@ came from third-party summaries.
 ## Restart prompt
 
 Paste this into a new Claude Code session, opened in the `battle_test`
-folder, to pick up where the 2026-09-24 session left off:
+folder, to pick up where the 2026-09-25 session left off:
 
 ```
 We're continuing work on battle_test, the legal adversarial argument system.
-Start by reading plans/plan.md (especially "Status", "Build steps", "Model
-size estimate", "Option: hosted models on Amazon Bedrock (not decided)" and
-"Open questions") and README.md, then skim the code in battle_test/ and
-tests/.
+Start by reading plans/plan.md (especially "Status", build steps 3 and 5,
+"Model size estimate", the Bedrock option and "Open questions"),
+plans/server-migration-plan.md, and README.md. Then skim the code in
+battle_test/ (including battle_test/web/) and tests/.
 
 Where things stand:
-- Steps 1-3 are built and run from the command line on this dev laptop
-  (RTX 3050 Ti, 4 GB VRAM, Ollama with qwen2.5:7b): pipeline, local Open US
-  Law index for UT/CA/TX/federal (data/law.sqlite), grounded research ->
-  selection -> drafting, and code-level citation checking with inline flags.
-- The latest Utah sample run had 0 invented/outdated citations, but the 7B
-  model often chose the wrong law (UCC sales/lease sections for a
-  construction contract) and misstated statutes. That's tracked as 3a
-  ("does it say that?" check) and 3b (better selection).
-- Local vs. Bedrock hosting is NOT decided. It's waiting on the lawyer's
-  view of sending case material to AWS.
+- Built on this dev laptop (RTX 3050 Ti, 4 GB VRAM, Ollama with qwen2.5:7b):
+  - Pipeline, local Open US Law index for UT/CA/TX/federal
+    (data/law.sqlite), grounded research -> selection -> drafting, and
+    code-level citation checking.
+  - 3b evaluation set: three sample cases with expected authorities, and
+    python -m battle_test.evaluate (--research-only for a fast search check).
+  - Web UI: python -m battle_test.web, with accounts, per-user cases,
+    deletion, 90-day retention, and the new-case form shown when a user has
+    no cases.
+- 3b search fixes doubled core authorities cited on the 7B (3 -> 6 of 16).
+  Texas didn't improve: keyword search can't cope with each state's
+  different statute wording. The next 3b steps are semantic search
+  (probably on the server), better selection, and re-evaluating on 14B /
+  ~30B.
+- Server migration (plans/server-migration-plan.md):
+  - Phase 0 (decisions) and Phase 1 (Dockerfile, docker-compose.yml,
+    config.server.toml, behind_proxy mode, /healthz, progress heartbeat)
+    are done and committed. The image was built and run hardened on the
+    laptop.
+  - NEXT is Phase 2: prepare the smark_iq server over SSH.
+  - Cloudflare Access MUST be added before any real users or real cases.
+- Waiting on the lawyer: a review of the expected-authority lists, the Texas
+  Property Code § 27.004 question, local vs. Bedrock, retention vs.
+  record-keeping, and Cloudflare handling case text in transit.
 
 Before doing anything else:
 1. Run `python -m unittest` (use .venv/Scripts/python) and confirm all
-   tests pass.
+   tests pass (123 as of 2026-09-25).
 2. Check that data/law.sqlite exists. If it doesn't, rebuild it with
    `python -m battle_test.corpus build`.
-3. Tell me what you think the next step should be, given the plan's Status
-   section, and wait for me to confirm before starting it.
+3. Check `git status` is clean, and that the latest commit is pushed to
+   GitHub, since the server will clone from there.
+4. Tell me what you think the next step should be (probably migration
+   Phase 2), including which parts need me personally: adding the GitHub
+   deploy key, typing the admin password at the server, and the Cloudflare
+   dashboard. Then wait for me to confirm before starting.
 
 Working rules for this project:
 - Don't git commit or push. I handle all commits and pushes myself. When
   you finish something, list the changed files and suggest a commit message.
-- Record decisions and findings in plans/plan.md as we go, and keep
+- Record decisions and findings in plans/plan.md (and
+  plans/server-migration-plan.md for deployment) as we go, and keep
   README.md accurate.
-- Test changes against the real model with the Utah sample case
-  (examples/utah_roofing_facts.md), not just unit tests, and report the
-  results honestly, including what got worse.
+- Test changes against the real model with the sample cases
+  (examples/*_facts.md, scored with battle_test.evaluate), not just unit
+  tests, and report results honestly, including what got worse.
+- For web UI changes, also check the pages in a browser with
+  `python -m battle_test.web --demo-model`, using a throwaway test account
+  in a scratch config, never the real accounts database.
 - Case documents are sensitive. Keep them in cases/ or output/ (both
-  gitignored), and don't send case content to any external service.
+  gitignored), never in git or a Docker image, and don't send case content
+  to any external service.
+- Never set real passwords or put credentials in files, commands or chat.
+  Interactive steps like creating accounts are mine to run.
+- On Windows Git Bash, set MSYS_NO_PATHCONV=1 when passing container paths
+  like /data/... to docker.
 ```

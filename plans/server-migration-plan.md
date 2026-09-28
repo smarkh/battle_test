@@ -219,8 +219,8 @@ can write to its volumes. Commit and push.
     and `.env` out of the image.
   - `docker-compose.yml`: the `battle-test` service, the `battle-law` and
     `battle-cases` volumes, and smark_iq's network as external. The
-    network name defaults to `smark_iq_default`, and can be overridden with
-    `SMARK_IQ_NETWORK`.
+    network name defaults to `smarkiq_default` (confirmed on the server),
+    and can be overridden with `SMARK_IQ_NETWORK`.
   - `config.server.toml`: host Ollama, `qwen2.5:14b`, `/data/...` volume
     paths, `0.0.0.0` with `secure_cookies` and `behind_proxy` on.
 - **The container's hardening:** `read_only` root filesystem plus `tmpfs
@@ -259,8 +259,15 @@ can write to its volumes. Commit and push.
 
 ### Phase 2 — Prepare the server (over SSH)
 1. Confirm the smark_iq stack is healthy (`docker compose ps` in smark_iq),
-   and note its network name (`docker network ls`, probably
-   `smark_iq_default`).
+   and note its network name (`docker network ls`). **Done 2026-09-28:**
+   - SSH from the laptop works once its key is loaded into Windows'
+     `ssh-agent`. The server's shell is Windows PowerShell 5.1 (no `&&`).
+   - The stack is healthy: the compose project is `smarkiq` at
+     `C:\Users\smark\Documents\work\smarkiq`, and all three containers
+     have been up 4 days.
+   - The network is **`smarkiq_default`**, not `smark_iq_default`.
+     `docker-compose.yml`'s default is corrected to match.
+   - `qwen2.5:14b` is already pulled, and there's 752 GB free.
 2. Add a read-only deploy key for the GitHub repo, then clone battle_test
    next to smark_iq.
 3. `ollama pull qwen2.5:14b` if it's not there. Check `ollama ps` shows

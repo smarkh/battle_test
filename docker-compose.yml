@@ -45,6 +45,7 @@ volumes:
 networks:
   smark_iq:
     external: true
-    # smark_iq's compose network. Check with `docker network ls` on the
-    # server (migration plan, Phase 2 step 1) and override if it differs.
-    name: ${SMARK_IQ_NETWORK:-smark_iq_default}
+    # smark_iq's compose network (project "smarkiq", confirmed on the server
+    # 2026-09-28 with `docker network ls`). Override with SMARK_IQ_NETWORK if
+    # it ever changes.
+    name: ${SMARK_IQ_NETWORK:-smarkiq_default}
