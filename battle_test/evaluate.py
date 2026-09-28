@@ -336,7 +336,7 @@ def main(argv: list[str] | None = None) -> int:
             print("Fix the case files (or run --validate) before evaluating.", file=sys.stderr)
             return 1
 
-        client = OllamaClient(cfg.ollama_url, cfg.timeout_seconds, cfg.num_ctx, cfg.temperature)
+        client = OllamaClient.from_config(cfg)
         started = datetime.now()
         out_dir = cfg.output_dir / "eval" / f"{started:%Y%m%d-%H%M%S}-{args.label}"
         out_dir.mkdir(parents=True, exist_ok=True)

@@ -23,6 +23,10 @@ class Config:
     temperature: float
     rounds: int
     output_dir: Path
+    # How long Ollama keeps the model loaded after each request, e.g. "30s".
+    # None uses Ollama's default (5 minutes). On the shared server GPU a short
+    # value frees the card for Open WebUI soon after a run finishes.
+    keep_alive: str | None = None
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
@@ -42,6 +46,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
         temperature=raw["generation"]["temperature"],
         rounds=rounds,
         output_dir=_resolve(path, raw["pipeline"]["output_dir"]),
+        keep_alive=raw["ollama"].get("keep_alive"),
     )
 
 

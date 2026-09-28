@@ -39,7 +39,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     cfg = load_config(args.config)
-    client = OllamaClient(cfg.ollama_url, cfg.timeout_seconds, cfg.num_ctx, cfg.temperature)
+    client = OllamaClient.from_config(cfg)
     try:
         law = LawIndex(load_corpus_config(args.config).db_path)
     except FileNotFoundError as e:

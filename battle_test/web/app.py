@@ -145,7 +145,7 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
         cfg = dataclasses.replace(cfg, plaintiff_model=model_label, defendant_model=model_label)
     corpus = load_corpus_config(config_path)
     web = load_web_config(config_path)
-    client = client or OllamaClient(cfg.ollama_url, cfg.timeout_seconds, cfg.num_ctx, cfg.temperature)
+    client = client or OllamaClient.from_config(cfg)
     root = data_dir or web.data_dir
     store = JobStore(root)
     auth = AuthStore(root / "users.sqlite")
@@ -200,6 +200,11 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
         response.headers.update(SECURITY_HEADERS)
+        if web.behind_proxy:
+            # Deployed behind its own Cloudflare Tunnel with no reverse proxy
+            # in front, so the app sends HSTS itself: browsers then refuse
+            # plain HTTP for the site. Never on the laptop's http://localhost.
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         if request.url.path != "/login" and not request.url.path.startswith("/static"):
             response.headers["Cache-Control"] = "no-store"  # case pages shouldn't linger in caches
         return response

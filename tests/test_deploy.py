@@ -96,15 +96,66 @@ class DockerContextTest(unittest.TestCase):
         self.assertIn("USER battle", dockerfile)
         self.assertIn("BATTLE_TEST_CONFIG=/app/config.server.toml", dockerfile)
 
-    def test_compose_hardening(self):
+    def active_compose_lines(self):
         compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+        return [line for line in compose.splitlines() if not line.strip().startswith("#")]
+
+    def test_compose_hardening_for_both_services(self):
+        active = "\n".join(self.active_compose_lines())
+        self.assertIn("host.docker.internal:host-gateway", active)
         for setting in ("cap_drop:", "- ALL", "no-new-privileges:true", "read_only: true",
-                        "mem_limit:", "external: true", "host.docker.internal:host-gateway"):
+                        "mem_limit:", "restart: unless-stopped"):
             with self.subTest(setting=setting):
-                self.assertIn(setting, compose)
-        # No port published on the host except as a commented-out testing note.
-        active = [line for line in compose.splitlines() if not line.strip().startswith("#")]
-        self.assertFalse(any(line.strip() == "ports:" for line in active))
+                self.assertEqual(active.count(setting), 2, f"{setting!r} should appear once per service")
+        # No port published on the host (private testing uses a separate override file).
+        self.assertFalse(any(line.strip() == "ports:" for line in self.active_compose_lines()))
+
+    def test_compose_is_independent_of_smark_iq(self):
+        active = "\n".join(self.active_compose_lines())
+        for coupling in ("smarkiq", "smark_iq", "external:", "caddy"):
+            with self.subTest(coupling=coupling):
+                self.assertNotIn(coupling, active)
+        self.assertIn("cloudflared:", active)
+        self.assertIn("container_name: battle-test-cloudflared", active)
+
+    def test_tunnel_token_only_from_env(self):
+        active = "\n".join(self.active_compose_lines())
+        self.assertIn("TUNNEL_TOKEN: ${BATTLE_TUNNEL_TOKEN:-}", active)
+        example = (ROOT / ".env.example").read_text(encoding="utf-8")
+        self.assertIn("BATTLE_TUNNEL_TOKEN=\n", example)  # placeholder, no value
+        gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8").split()
+        self.assertIn(".env", gitignore)
+
+
+class KeepAliveTest(unittest.TestCase):
+    def test_server_unloads_model_soon_after_runs(self):
+        self.assertEqual(load_config(ROOT / "config.server.toml").keep_alive, "30s")
+        self.assertIsNone(load_config(ROOT / "config.toml").keep_alive)  # laptop: Ollama's default
+
+    def test_keep_alive_is_sent_only_when_set(self):
+        import json
+        from unittest import mock
+
+        from battle_test.ollama_client import OllamaClient
+
+        sent = []
+
+        class FakeResponse:
+            def __enter__(self):
+                return iter([json.dumps({"message": {"content": "ok"}, "done": True}).encode()])
+
+            def __exit__(self, *exc):
+                return False
+
+        def fake_urlopen(request, timeout):
+            sent.append(json.loads(request.data))
+            return FakeResponse()
+
+        with mock.patch("urllib.request.urlopen", fake_urlopen):
+            OllamaClient("http://x", 5, 100, 0.0, keep_alive="30s").chat("m", "s", "u")
+            OllamaClient("http://x", 5, 100, 0.0).chat("m", "s", "u")
+        self.assertEqual(sent[0]["keep_alive"], "30s")
+        self.assertNotIn("keep_alive", sent[1])
 
 
 @unittest.skipIf(TestClient is None, "web dependencies not installed")
@@ -123,6 +174,20 @@ class HealthAndHeartbeatTest(unittest.TestCase):
     def test_healthz_needs_no_sign_in(self):
         response = self.client.get("/healthz")
         self.assertEqual((response.status_code, response.json()), (200, {"status": "ok"}))
+
+    def test_no_hsts_on_the_laptop(self):
+        self.assertNotIn("strict-transport-security", self.client.get("/healthz").headers)
+
+    def test_hsts_when_deployed_behind_the_tunnel(self):
+        server_like = Path(self.tmp.name) / "server-like.toml"
+        text = (ROOT / "config.toml").read_text(encoding="utf-8").replace("behind_proxy = false",
+                                                                         "behind_proxy = true")
+        server_like.write_text(text, encoding="utf-8")
+        app = create_app(server_like, client=DemoClient(delay_per_word=0),
+                         data_dir=Path(self.tmp.name) / "cases2")
+        with TestClient(app) as client:
+            headers = client.get("/healthz").headers
+        self.assertEqual(headers["strict-transport-security"], "max-age=31536000; includeSubDomains")
 
     def collect(self, job_id, until, limit=5.0):
         """Run the event stream directly until `until(chunk)` or `limit` seconds."""

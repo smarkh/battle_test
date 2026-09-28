@@ -28,8 +28,10 @@ guardrails-style network isolation and data handling).
     `plans/server-migration-plan.md`. Phases 0–3 are done (2026-09-28):
     the app runs on the server, and was tested privately over an SSH
     tunnel, taking 90 s per case on 14B. The GPU-sharing check was skipped.
-    Next is Phase 4 (Caddy block + `battle.smarkiq.us`). ⚠ Cloudflare
-    Access must be added before any real users test it.
+    Next is Phase 4. It was revised 2026-09-28 so that battle_test runs
+    **fully independently of smark_iq**, with its own network and its own
+    Cloudflare Tunnel at `battle.smarkiq.us`. ⚠ Cloudflare Access must be
+    added before any real users test it.
   - 3a (the "does it say that?" check), which needs a bigger model.
   - Step 4 (case law via CourtListener).
 - **Waiting on the lawyer:**
@@ -872,6 +874,11 @@ protections (item 2 above).
   - Back up accounts only.
   - The app's own login at first. **Cloudflare Access is required before
     any real users test it.**
+  - **Fully independent of smark_iq** (revised 2026-09-28): battle_test's
+    own Docker network and its own Cloudflare Tunnel connector, with no
+    shared Caddy, tunnel or network. Only the GPU is shared, through the
+    native Ollama. battle_test unloads its model 30 s after a run
+    (`keep_alive`), and hosted models (Bedrock) may replace that later.
 
   See `plans/server-migration-plan.md`.
 - **End result:** no declared winner and no judge role. The output is the

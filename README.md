@@ -140,9 +140,13 @@ the real law index. Only the drafting is canned, and its output is labelled
 
 ## Deploying to the server
 
-The server runs the same code in a Docker container, behind smark_iq's
-existing Caddy and Cloudflare Tunnel, at `https://battle.smarkiq.us`. See
-`plans/server-migration-plan.md` for the full steps.
+The server runs the same code in Docker, at `https://battle.smarkiq.us`,
+fully independent of smark_iq: its own compose project and network, and
+its own Cloudflare Tunnel connector (`battle-test-cloudflared`). Only the
+server's GPU, through Ollama, is shared. See `plans/server-migration-plan.md`
+for the full steps.
+- The tunnel token goes in `.env` on the server (gitignored). See
+  `.env.example`.
 - `Dockerfile`, `docker-compose.yml` and `config.server.toml` are only for
   the server. The container sets `BATTLE_TEST_CONFIG` so every command reads
   the server config.

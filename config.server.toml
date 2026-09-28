@@ -6,6 +6,11 @@
 # Ollama runs natively on the server; containers reach the host this way.
 url = "http://host.docker.internal:11434"
 timeout_seconds = 1800
+# The GPU is shared with smark_iq's Open WebUI (one 16 GB card). Unload the
+# model 30 s after the last request: it stays loaded through a run, whose
+# calls come back to back, and frees the card soon after (decided 2026-09-28,
+# "option 1"; hosted models via Bedrock may replace this later).
+keep_alive = "30s"
 
 [models]
 # Decided 2026-09-25: start with 14B (fits fully on the 16 GB GPU with a

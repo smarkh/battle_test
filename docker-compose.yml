@@ -1,7 +1,10 @@
 # battle_test on the smark_iq server. See plans/server-migration-plan.md.
 #
-# A separate compose project from smark_iq, joined to smark_iq's Docker
-# network, so smark_iq's Caddy can proxy battle.smarkiq.us to it by name.
+# Fully independent of smark_iq (decided 2026-09-28): its own compose project,
+# its own Docker network, and its own Cloudflare Tunnel connector. Nothing
+# here touches smark_iq's containers, network, Caddy or tunnel, so either
+# stack can be stopped, updated or removed without affecting the other.
+# The only shared resource is the server's GPU, through the native Ollama.
 # Hardening follows smark_iq's guardrails.md.
 
 services:
@@ -9,18 +12,14 @@ services:
     build: .
     image: battle-test
     container_name: battle-test
-    # No published ports: traffic arrives only from Caddy on the Docker
-    # network. For private testing before going public (migration plan,
-    # Phase 3), temporarily add:
-    #   ports:
-    #     - "127.0.0.1:8000:8000"
+    # No published ports: traffic arrives only from cloudflared on this
+    # project's own network. For private testing (migration plan, Phase 3),
+    # use the docker-compose.local-test.yml override.
     extra_hosts:
       - "host.docker.internal:host-gateway"   # Ollama on the host
     volumes:
       - battle-law:/data/law                  # law index (rebuildable)
       - battle-cases:/data/cases              # accounts + case files (privileged)
-    networks:
-      - smark_iq
     read_only: true
     tmpfs:
       - /tmp
@@ -38,14 +37,31 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+  # battle_test's own Cloudflare Tunnel connector (a separate tunnel from
+  # smark_iq's). Outbound-only: no router ports. In the Cloudflare dashboard
+  # the tunnel's public hostname battle.smarkiq.us points at
+  # http://battle-test:8000. The token is read from .env on the server
+  # (gitignored). See .env.example.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: battle-test-cloudflared
+    command: tunnel --no-autoupdate run
+    environment:
+      # Empty if .env is missing: cloudflared then fails to connect (see its
+      # logs), while other compose commands (run, ps, ...) keep working.
+      TUNNEL_TOKEN: ${BATTLE_TUNNEL_TOKEN:-}
+    depends_on:
+      battle-test:
+        condition: service_healthy
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 1
+    restart: unless-stopped
+
 volumes:
   battle-law:
   battle-cases:
-
-networks:
-  smark_iq:
-    external: true
-    # smark_iq's compose network (project "smarkiq", confirmed on the server
-    # 2026-09-28 with `docker network ls`). Override with SMARK_IQ_NETWORK if
-    # it ever changes.
-    name: ${SMARK_IQ_NETWORK:-smarkiq_default}

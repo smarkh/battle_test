@@ -12,11 +12,17 @@ class OllamaError(RuntimeError):
 
 
 class OllamaClient:
-    def __init__(self, url: str, timeout_seconds: int, num_ctx: int, temperature: float):
+    def __init__(self, url: str, timeout_seconds: int, num_ctx: int, temperature: float,
+                 keep_alive: str | None = None):
         self.url = url
         self.timeout_seconds = timeout_seconds
         self.num_ctx = num_ctx
         self.temperature = temperature
+        self.keep_alive = keep_alive
+
+    @classmethod
+    def from_config(cls, cfg) -> "OllamaClient":
+        return cls(cfg.ollama_url, cfg.timeout_seconds, cfg.num_ctx, cfg.temperature, cfg.keep_alive)
 
     def chat(
         self,
@@ -42,6 +48,8 @@ class OllamaClient:
         }
         if json_mode:
             body["format"] = "json"
+        if self.keep_alive is not None:
+            body["keep_alive"] = self.keep_alive
         request = urllib.request.Request(
             f"{self.url}/api/chat",
             data=json.dumps(body).encode("utf-8"),

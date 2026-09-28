@@ -1,9 +1,17 @@
 # Plan — Moving battle_test to the smark_iq Server (Public Access)
 
-This is a plan, not a change log. Nothing here has been done yet. It covers
-build step 5, part 4 of `plans/plan.md`: move battle_test from the dev
-laptop to the smark_iq server, and make the web UI reachable from anywhere
-at a public URL, the same way `llm.smarkiq.us` is.
+This plan covers build step 5, part 4 of `plans/plan.md`: move battle_test
+from the dev laptop to the smark_iq server, and make the web UI reachable
+from anywhere at a public URL. Phases 0–3 are done (see the step-by-step
+plan).
+
+**Revised 2026-09-28: battle_test runs fully independently of smark_iq.**
+It has its own Docker network and its **own Cloudflare Tunnel** (its own
+`cloudflared` connector), not smark_iq's Caddy and tunnel. The earlier
+design, which joined smark_iq's network and added a Caddy site block, was
+dropped before it was deployed, and the Caddyfile edit was discarded
+uncommitted. The only thing the two share is the server's GPU, through the
+native Ollama (see Decision 9).
 
 ## Goal
 
@@ -12,7 +20,8 @@ start a case, watch it run, and read the results. Everything runs on the
 smark_iq server:
 - models on its GPU
 - law index and case files on its disk
-- the public path through the Cloudflare Tunnel that smark_iq already has
+- the public path through battle_test's own Cloudflare Tunnel, on the
+  `smarkiq.us` domain but separate from smark_iq's tunnel
 
 The laptop stays the development machine.
 
@@ -28,28 +37,35 @@ The laptop stays the development machine.
 | Hardening standard | smark_iq's `guardrails.md`: named volumes (no host bind mounts), no Docker socket, `cap_drop: ALL`, `no-new-privileges`, memory/CPU limits |
 | Reboots | No auto-login. After a reboot someone signs in via Chrome Remote Desktop, then Docker and Ollama come back on their own. |
 
-battle_test reuses all of this. The only public-facing changes are one new
-hostname on the existing tunnel and one new site block in the existing
-Caddyfile.
+battle_test reuses the hardware, Ollama, Docker Desktop, the domain, admin
+access and the hardening standard. It does **not** use smark_iq's
+containers, network, Caddy or tunnel.
 
 ## Target architecture
 
 ```
-browser ──https──▶ Cloudflare edge ──tunnel──▶ cloudflared ──▶ caddy ──▶ battle-test:8000
-                    (TLS, optional                 (smark_iq containers)   (new container)
-                     Cloudflare Access)                                         │
-                                                                               ▼
-                                                            Ollama on the host (GPU)
-                                                            via host.docker.internal:11434
+browser ──https──▶ Cloudflare edge ──battle_test's tunnel──▶ battle-test-cloudflared ──▶ battle-test:8000
+                    (TLS, Cloudflare Access                  (battle_test's own network, battle_test_default)
+                     before real users)                                                      │
+                                                                                             ▼
+smark_iq, unchanged:  llm.smarkiq.us ─▶ its own tunnel ─▶ cloudflared ─▶ caddy ─▶ open-webui │
+                                                                                             ▼
+                                                                 Ollama on the host (one GPU, shared)
 ```
 
-- **New `battle-test` container**, defined in battle_test's own
-  `docker-compose.yml`, not added to smark_iq's. It joins smark_iq's Docker
-  network as an external network, so the existing `caddy` can reach it by
-  name. The two projects stay separate repos with separate lifecycles.
-- **No published host port** in normal operation. Traffic reaches it only
-  through Caddy on the Docker network. For testing before going public, a
-  `127.0.0.1:8000` port is published temporarily and reached over SSH.
+- **Two containers** in battle_test's own compose project and network
+  (`battle_test_default`): the app, `battle-test`, and its tunnel
+  connector, `battle-test-cloudflared`. The connector makes an outbound
+  connection to Cloudflare, so no router ports are opened, and it forwards
+  `battle.smarkiq.us` to `http://battle-test:8000`. There's no reverse
+  proxy: the app sets its own security headers, including HSTS in deployed
+  mode.
+- **Nothing shared with smark_iq's stack.** Either project can be stopped,
+  updated, rebuilt or removed without affecting the other. See the
+  2026-09-28 incident below for why that matters.
+- **No published host port** in normal operation. For private testing,
+  the `docker-compose.local-test.yml` override publishes `127.0.0.1:8000`,
+  reached over an SSH tunnel.
 - **Two named volumes**, following the guardrails rule of no host bind
   mounts:
   - `battle-law`: the law index (`law.sqlite`, ~1.3 GB, plus the
@@ -72,9 +88,10 @@ with Access **required before real users**), 5 (`qwen2.5:14b`) and 8
    filesystem, and the image is reproducible from the repo. Ollama stays
    native, as smark_iq already decided (Docker Desktop's GPU handling was
    unreliable).
-3. **Separate compose project, or add to smark_iq's?** **Separate**, joined
-   to smark_iq's network. Rebuilding or stopping battle_test never touches
-   Open WebUI, and the reverse is also true.
+3. **Separate compose project, or add to smark_iq's?** **Separate and
+   fully independent** (revised 2026-09-28): its own network and its own
+   Cloudflare Tunnel. It originally joined smark_iq's network behind
+   smark_iq's Caddy, but that coupling was dropped before going public.
 4. **Second sign-in layer: decided, the app's own login only for now.**
    ⚠ **Cloudflare Access must be added before any real users test this,**
    i.e. before anyone enters a real case. Until then, only the admin and
@@ -107,6 +124,19 @@ with Access **required before real users**), 5 (`qwen2.5:14b`) and 8
    - Don't back up case files. They're privileged, they expire after 90
      days anyway, and a backup would outlive the retention promise.
      Revisit if the lawyer's record-keeping advice says otherwise.
+9. **GPU sharing with Open WebUI: decided 2026-09-28, "option 1" for
+   now.** One 16 GB card can't hold battle_test's 14B (11 GB with its
+   context) and a typical Open WebUI chat model at once, so they share it:
+   - battle_test sets Ollama's `keep_alive` to **30 s**
+     (`config.server.toml`). The model stays loaded through a run, whose
+     calls come back to back, and is unloaded 30 s after the last call, so
+     the card is free for Open WebUI soon after.
+   - Chats may slow down only while a battle_test run is going (~90 s per
+     case on 14B).
+   - **Later: hosted models via Bedrock** (see `plans/plan.md`), which
+     would take battle_test off the GPU entirely. The other options were
+     a second GPU (the 750 W PSU and the case may not allow it) or a
+     separate machine.
 
 ## Privacy note to resolve with the lawyer
 
@@ -169,10 +199,11 @@ weakening that default:
      can go longer than that between events, e.g. while the model thinks
      during research or selection. The progress stream needs a heartbeat
      comment every ~15 seconds.
-   - Caddy passes server-sent events through without buffering, but that
-     should be checked.
+   - (There's no Caddy since the 2026-09-28 revision: `cloudflared` goes
+     straight to the app. Check in Phase 5 that the stream isn't buffered.)
 6. **`/healthz`:** returns 200 without signing in and reveals nothing. It's
-   for the compose healthcheck and for Caddy.
+   for the compose healthcheck, which `cloudflared` waits on before
+   starting.
 7. **Tests** for: the deployed-mode guard (refuses a public host without
    secure cookies and proxy mode), the heartbeat, `/healthz`, and the
    `BATTLE_TEST_CONFIG` override.
@@ -412,32 +443,92 @@ server.**
 the server, unreachable except from inside Docker's network, waiting for
 Phase 4.
 
+### Incident, 2026-09-28: smark_iq's containers disappeared
+
+Found at the start of Phase 4.
+- **What happened:** `open-webui`, `caddy` and `cloudflared` no longer
+  existed (not just stopped), and `llm.smarkiq.us` returned Cloudflare 530.
+- **What was left:** the `open-webui` data volume, all the images, and the
+  `smarkiq_default` network. The server hadn't rebooted since 2026-09-23.
+- **Timing:** they were present at this morning's Phase 2 survey (up 4
+  days), and already gone at the resource snapshots around 19:45. Docker's
+  event history (in memory, and filled by health-check events) was too
+  short to show the cause.
+- **Cause: unknown.** The pattern (containers gone, network kept because
+  `battle-test` was attached to it) fits `docker compose down` in the
+  smark_iq folder, or removing the containers in Docker Desktop. None of
+  battle_test's commands target smark_iq: they're a different compose
+  project, run in a different folder, with no `--remove-orphans`.
+- **Fix:** `docker compose up -d` in smark_iq's folder, over SSH. That
+  used the existing images and `.env`, so no downloads were needed.
+  `open-webui` was healthy and `llm.smarkiq.us` back to 200 within a
+  minute, with the data volume reattached intact.
+- **Lessons:**
+  - **To stop either stack, use `docker compose stop` or `restart`, never
+    `down`,** unless removing it on purpose.
+  - **battle_test depends on smark_iq for public access, not the other way
+    round.** smark_iq runs fine without battle_test. battle_test keeps
+    running without smark_iq but isn't reachable, and can't start if the
+    shared network is gone.
+  - **Possible improvement:** a shared network owned by neither project
+    (`docker network create edge`, joined as external by both compose
+    files), so neither stack's up or down affects the other's networking.
+    Not done yet. It needs a small change in smark_iq's compose file too.
+  - Before Phase 4, and after any server work, check both stacks with
+    `docker ps` and that `llm.smarkiq.us` answers.
+
 ### Phase 4 — Go public
-1. **Caddy (in the smark_iq repo):** add a site block `http://battle.smarkiq.us`
-   that proxies to `battle-test:8000`, with the same HSTS and security
-   headers as the `llm` block. Reload Caddy.
-2. **Cloudflare dashboard:** add the public hostname `battle.smarkiq.us` to
-   the existing tunnel, pointing at `http://caddy:80`. There's no new tunnel
-   or token, and `cloudflared` picks it up live.
-3. **Cloudflare Access: deferred, but a gate before real users** (Decision
+Revised 2026-09-28: battle_test uses its own tunnel, and smark_iq isn't
+touched.
+1. **Code (done on the laptop, 2026-09-28):**
+   - `docker-compose.yml` now has battle_test's own `cloudflared` service
+     (`battle-test-cloudflared`), hardened like the app: read-only,
+     `cap_drop ALL`, `no-new-privileges`, 256 MB.
+   - Both services use battle_test's own default network. The external
+     smark_iq network is gone.
+   - The tunnel token comes from `BATTLE_TUNNEL_TOKEN` in `.env`
+     (gitignored; see `.env.example`).
+   - The app sends HSTS itself when `behind_proxy` is on.
+   - `keep_alive = "30s"` is set in `config.server.toml` (Decision 9).
+2. **You, in the Cloudflare Zero Trust dashboard:**
+   1. **Create a new tunnel** (Networks → Tunnels → Create a tunnel →
+      Cloudflared), named e.g. `battle-test`. It's separate from
+      smark_iq's.
+   2. **Copy its token** (the long string in the "install connector"
+      command), without pasting it anywhere else.
+   3. **Add its public hostname:** `battle.smarkiq.us`, service type
+      `HTTP`, URL `battle-test:8000`.
+3. **You, on the server:** create
+   `C:\Users\smark\Documents\work\battle_test\.env` containing
+   `BATTLE_TUNNEL_TOKEN=<token>`, from Remote Desktop (Notepad) or over
+   SSH. Never commit it or share it.
+4. **Server update:**
+   - `git pull` over SSH (the deploy key works).
+   - **Rebuild the image in Remote Desktop,** since the code changed and
+     builds can't run over SSH: `docker compose build`.
+   - Then `docker compose up -d` (over SSH is fine). That recreates
+     `battle-test` on its own network and starts `battle-test-cloudflared`.
+     The `cloudflared` image is already on the server, so nothing is
+     downloaded.
+5. **Cloudflare Access: deferred, but a gate before real users** (Decision
    4). Going public with the app's login alone is fine for the admin and
    test accounts with fictional cases. **Before any real user or real case,**
    create an Access application for `battle.smarkiq.us` with an email
    one-time-code policy listing the allowed users' addresses, then recheck
    the Phase 5 list. This is a Cloudflare dashboard change; the app needs no
    code change.
-4. **Optional:** a Cloudflare rate-limiting rule on `POST /login`, on top of
+6. **Optional:** a Cloudflare rate-limiting rule on `POST /login`, on top of
    the app's own per-username lockout.
 
 ### Phase 5 — Verify the public path
-All of these checks go through the real path (DNS → Cloudflare → tunnel →
-Caddy → app):
+All of these checks go through the real path (DNS → Cloudflare →
+battle_test's tunnel → `battle-test-cloudflared` → app):
 - The site loads over HTTPS. Signed-out requests to `/`, `/cases/…` and
   `/cases/…/download.md` redirect to `/login` (or to the Access prompt, if
   enabled).
 - The sign-in cookie has `Secure; HttpOnly; SameSite=Lax`.
-- Security headers are present (CSP, `X-Frame-Options: DENY`, HSTS from
-  Caddy).
+- Security headers are present: CSP, `X-Frame-Options: DENY`, and HSTS,
+  all from the app.
 - A wrong password is refused, and 5 failures lock the username.
 - A form post with a foreign `Origin` gets 403. A normal sign-in from a
   browser works (the `Origin: null` bug found on the laptop must not come
@@ -470,24 +561,25 @@ Caddy → app):
 
 | Risk | Handling |
 |---|---|
-| **GPU contention with Open WebUI.** One 16 GB card; a 14B battle_test model plus an Open WebUI chat model may not both fit. | Runs are one at a time. Ollama swaps models (slower, but it works). Measure it in Phase 3. If it's a problem, schedule runs off-hours, use the same model for both, or tune Ollama's keep-alive. |
+| **GPU contention with Open WebUI.** One 16 GB card; a 14B battle_test model plus an Open WebUI chat model may not both fit. | Decision 9: battle_test unloads its model 30 s after a run (`keep_alive`), so chats slow down only during a run (~90 s per case). Runs are one at a time. Later: Bedrock would take battle_test off the GPU entirely. The GPU-sharing check (Phase 3 step 4) is still to do before real users. |
 | **RAM (24 GB total).** Open WebUI 4 GB limit, Ollama CPU-side buffers, the 1.3 GB law index in page cache, Windows itself. | Memory limit on the battle-test container (~3 GB). Watch Task Manager in Phase 3. The board takes up to 256 GB if needed. |
 | **Cloudflare idle timeout breaks live progress.** | Heartbeat every ~15 s (code change 5), verified in Phase 5. |
 | **Docker Desktop instability** (smark_iq hit an image-pull error once). | Nothing new here: battle_test uses Docker the same way Open WebUI already does. The GPU stays with native Ollama. |
 | **App login bug exposes cases.** | Cloudflare Access in front (decision 4), plus the app's own sign-in, CSRF and per-user checks, which are already tested. |
 | **Privileged data in transit through Cloudflare.** | Raise with the lawyer (see Privacy note). Tailscale-only access is the fallback. |
 | **Case data leaking into backups or git.** | Case files live only in the `battle-cases` volume. The build context excludes data. Backups cover accounts only, unless decided otherwise. |
-| **A deploy breaks smark_iq.** | Separate compose project, and the only shared-file edit is one new Caddy site block. Rollback below. |
+| **A deploy breaks smark_iq.** | Fully independent since 2026-09-28: own network, own tunnel, no shared files, so battle_test's up, down or rebuild can't touch smark_iq. On 2026-09-28 smark_iq's containers disappeared anyway, for an unknown cause (see Incident). Use `stop`/`restart`, never `down`, and check both stacks after server work. |
 
 ## Rollback
 
-Each step can be undone on its own, and smark_iq keeps running:
-1. Remove the `battle.smarkiq.us` public hostname in the Cloudflare
-   dashboard. The site is off the internet immediately.
-2. Remove the Caddy site block and reload Caddy.
-3. `docker compose down` in battle_test. The volumes (accounts, cases, law
-   index) survive, unless they're deliberately removed with `docker volume
-   rm`.
+Each step can be undone on its own. smark_iq is never involved:
+1. In the Cloudflare dashboard, remove the `battle.smarkiq.us` public
+   hostname, or stop or delete battle_test's tunnel. The site is off the
+   internet immediately.
+2. `docker compose stop` in battle_test stops the app and its connector.
+   Use `stop`, not `down`, unless removing it on purpose; `down` removes
+   the containers. The volumes (accounts, cases, law index) survive either
+   way, unless they're deliberately removed with `docker volume rm`.
 
 ## Open questions
 
