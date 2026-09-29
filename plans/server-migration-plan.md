@@ -480,6 +480,28 @@ Found at the start of Phase 4.
 ### Phase 4 — Go public
 Revised 2026-09-28: battle_test uses its own tunnel, and smark_iq isn't
 touched.
+
+**Paused 2026-09-28, partway through.** Where things stand:
+- **Done:**
+  - step 1 (the code, pushed as `4ec991f` and pulled on the server)
+  - step 2 (the `battle-test` tunnel created, and its token refreshed after
+    appearing in chat)
+  - a blank `.env` (`BATTLE_TUNNEL_TOKEN=`) created on the server
+- **Running meanwhile, privately:** `battle-test` only, on its own network
+  `battle_test_default`, with the private-test override
+  (`127.0.0.1:8000`, reached through `ssh -N -L 8000:127.0.0.1:8000
+  smark@smark-iq`). `battle-test-cloudflared` isn't running, so nothing is
+  public. It's the image built this morning, without the `keep_alive` or
+  HSTS changes.
+- **To resume:**
+  1. You put the refreshed token in the server's `.env`, in Remote
+     Desktop.
+  2. You run `docker compose build`, in Remote Desktop.
+  3. Rename `docker-compose.local-test.yml` back to `.disabled`, then run
+     `docker compose up -d`, which starts both services.
+  4. Check that the tunnel connects (from `docker logs
+     battle-test-cloudflared`, without printing the token), then run
+     Phase 5.
 1. **Code (done on the laptop, 2026-09-28):**
    - `docker-compose.yml` now has battle_test's own `cloudflared` service
      (`battle-test-cloudflared`), hardened like the app: read-only,

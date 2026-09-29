@@ -6,7 +6,7 @@ This is a standalone project, separate from the smark_iq deployment, but
 expected to reuse lessons learned there (self-hosting, local RAG,
 guardrails-style network isolation and data handling).
 
-## Status (2026-09-25)
+## Status (2026-09-28)
 
 - **Built on the dev laptop:**
   - Steps 1–3: pipeline, local law index (UT, CA, TX, federal),
@@ -15,7 +15,12 @@ guardrails-style network isolation and data handling).
   - Step 5 parts 1–2: a local web UI with accounts, case deletion, and
     3-month retention.
 
-  123 unit tests pass.
+  129 unit tests pass.
+- **On the smark_iq server (2026-09-28):**
+  - Deployed in Docker, fully independent of smark_iq, and running
+    privately (reach it through the SSH tunnel; see "Start and stop" below).
+  - 14B runs a case in ~90 s, and the three-case evaluation in ~6 min.
+  - Phase 4 (going public) is paused partway.
 - **Evaluation (7B):** the search fixes doubled the core authorities cited
   (3 → 6 of 16) and halved off-topic citations (4 → 2). California and
   Utah improved, Texas didn't: keyword search can't cope with each state's
@@ -28,10 +33,12 @@ guardrails-style network isolation and data handling).
     `plans/server-migration-plan.md`. Phases 0–3 are done (2026-09-28):
     the app runs on the server, and was tested privately over an SSH
     tunnel, taking 90 s per case on 14B. The GPU-sharing check was skipped.
-    Next is Phase 4. It was revised 2026-09-28 so that battle_test runs
-    **fully independently of smark_iq**, with its own network and its own
-    Cloudflare Tunnel at `battle.smarkiq.us`. ⚠ Cloudflare Access must be
-    added before any real users test it.
+    Phase 4 was revised 2026-09-28 so that battle_test runs **fully
+    independently of smark_iq**, with its own network and its own Cloudflare
+    Tunnel at `battle.smarkiq.us`. **Phase 4 is paused partway:** the app
+    runs privately on the server (SSH tunnel to `localhost:8000`), and isn't
+    public yet. Resume steps are in the migration plan. ⚠ Cloudflare Access
+    must be added before any real users test it.
   - 3a (the "does it say that?" check), which needs a bigger model.
   - Step 4 (case law via CourtListener).
 - **Waiting on the lawyer:**
@@ -45,6 +52,125 @@ guardrails-style network isolation and data handling).
   website. A plaintiff submits their situation, is told to call, and the
   lawyer receives pre-drafted documents. See "Proposed feature: client
   intake" (needs the lawyer's input first).
+
+## Start and stop: how to run it
+
+There are two ways to use battle_test today:
+- **A. Locally on the laptop,** for development and testing (the 7B model,
+  slower).
+- **B. On the server, reached from the laptop** through an SSH tunnel
+  (14B, ~90 s per case, private).
+- **C. Public at `battle.smarkiq.us`,** once Phase 4 is finished.
+
+All commands below are for PowerShell on the laptop, from
+`C:\Users\smark\Documents\work\battle_test`, unless marked **(server)**.
+
+### A. Locally on the laptop
+
+**Before starting:**
+- Ollama is running: it starts with Windows, and `ollama list` should
+  show `qwen2.5:7b`.
+- The law index exists: `data\law.sqlite`. If it's missing, run
+  `.venv\Scripts\python -m battle_test.corpus build` (~1 min).
+
+**Start the web UI:**
+```powershell
+.venv\Scripts\python -m battle_test.web                # real model (qwen2.5:7b)
+.venv\Scripts\python -m battle_test.web --demo-model   # canned drafts, no GPU needed
+```
+Then open **http://127.0.0.1:8000**.
+- The laptop has its **own accounts,** in `cases\web\users.sqlite`,
+  separate from the server's. Create one once, in your own terminal (it
+  asks for the password):
+  `.venv\Scripts\python -m battle_test.web.users add NAME --admin`
+- ⚠ **Port 8000 is also used by the server tunnel (B).** To run both at
+  once, start the local one on another port: `... -m battle_test.web --port
+  8001`, then use http://127.0.0.1:8001.
+
+**Stop:** press **Ctrl+C** in the window running it. If a run was in
+progress, it's marked failed ("interrupted") the next time the server
+starts. Queued cases just resume.
+
+**Other local commands:**
+| What | Command |
+|---|---|
+| One case from the command line | `.venv\Scripts\python -m battle_test --state UT --facts examples\utah_roofing_facts.md` |
+| Evaluation (all three sample cases, ~40 min on the laptop) | `.venv\Scripts\python -m battle_test.evaluate --label laptop-7b` |
+| Fast search-only check (~1 min/case) | `.venv\Scripts\python -m battle_test.evaluate --research-only` |
+| Unit tests | `.venv\Scripts\python -m unittest` |
+
+The laptop always uses `config.toml`, and serves on `127.0.0.1` only.
+
+### B. On the server, reached from the laptop (private)
+
+**Once per laptop session (usually once ever):** the SSH key must be in
+Windows' agent. Windows keeps it across reboots, so repeat this only if SSH
+starts asking for a passphrase or is refused:
+```powershell
+& "$env:WINDIR\System32\OpenSSH\ssh-add.exe" "$env:USERPROFILE\.ssh\id_ed25519"
+```
+
+**Start the app on the server** (skip this if `docker ps` already shows
+`battle-test` with `127.0.0.1:8000->8000`):
+```powershell
+ssh smark@smark-iq
+# (server) then:
+cd C:\Users\smark\Documents\work\battle_test
+docker compose -f docker-compose.yml -f docker-compose.local-test.yml up -d battle-test
+docker ps
+exit
+```
+- This starts **only the app,** with the private port `127.0.0.1:8000` on
+  the server. The tunnel connector stays off, so nothing is public.
+- If `docker-compose.local-test.yml` is missing, it's been renamed to
+  `docker-compose.local-test.yml.disabled` (which is what going public
+  does). Rename it back first.
+- The server's shell is Windows PowerShell 5.1, so use `;` rather than
+  `&&` to chain commands.
+
+**Connect from the laptop:** open the tunnel in a PowerShell window, and
+leave it open:
+```powershell
+ssh -N -L 8000:127.0.0.1:8000 smark@smark-iq
+```
+Then browse to **http://localhost:8000** and sign in with a **server**
+account (`smarkh`).
+
+**Stop:**
+- **Disconnect only:** press **Ctrl+C** in the tunnel window. The app
+  keeps running on the server.
+- **Stop the app on the server:** `ssh smark@smark-iq`, then **(server)**
+  `cd C:\Users\smark\Documents\work\battle_test; docker compose stop
+  battle-test`.
+- ⚠ **Use `stop`, never `down`,** for battle_test or smark_iq. `down`
+  removes the containers.
+
+**Other server tasks:**
+| What | Where | Command |
+|---|---|---|
+| Update the code | SSH | **(server)** `git pull` |
+| Rebuild after a code change | **Remote Desktop** (image builds fail over SSH) | **(server)** `docker compose build`, then the start command above |
+| Add an account or change a password | **SSH from the laptop** (not Remote Desktop: its keyboard mapping can garble passwords) | **(server)** `docker compose run --rm battle-test python -m battle_test.web.users add NAME` (or `passwd NAME`, `disable NAME`, `list`) |
+| Evaluation on 14B (~6 min) | SSH | **(server)** `docker compose run --rm -T battle-test python -m battle_test.evaluate --label server-14b` |
+| Read an evaluation summary | SSH | **(server)** `docker exec battle-test cat /data/cases/output/eval/<folder>/summary.md` |
+| Check both stacks are healthy | SSH | **(server)** `docker ps`: `battle-test`, `open-webui`, `caddy`, `cloudflared` |
+
+The server always uses `config.server.toml` (14B, `keep_alive` 30 s), set
+by the image.
+
+### C. Public at `battle.smarkiq.us` (after Phase 4)
+
+These take effect once the token is in the server's `.env` and Phase 4 is
+finished. Cloudflare Access is required before real users.
+- **Start:** **(server)** rename `docker-compose.local-test.yml` to
+  `.disabled`, then run `docker compose up -d` (both services: the app and
+  its tunnel connector).
+- **Stop being public:** **(server)** `docker compose stop cloudflared`.
+  The app keeps running privately.
+- **Stop everything:** **(server)** `docker compose stop`.
+- **Instant off-switch without the server:** in the Cloudflare dashboard,
+  remove the `battle.smarkiq.us` hostname or stop the `battle-test`
+  tunnel.
 
 ## Goal
 
@@ -954,7 +1080,7 @@ protections (item 2 above).
 ## Restart prompt
 
 Paste this into a new Claude Code session, opened in the `battle_test`
-folder, to pick up where the 2026-09-25 session left off:
+folder, to pick up where the 2026-09-28 session left off:
 
 ```
 We're continuing work on battle_test, the legal adversarial argument system.
@@ -979,27 +1105,45 @@ Where things stand:
   (probably on the server), better selection, and re-evaluating on 14B /
   ~30B.
 - Server migration (plans/server-migration-plan.md):
-  - Phase 0 (decisions) and Phase 1 (Dockerfile, docker-compose.yml,
-    config.server.toml, behind_proxy mode, /healthz, progress heartbeat)
-    are done and committed. The image was built and run hardened on the
-    laptop.
-  - NEXT is Phase 2: prepare the smark_iq server over SSH.
+  - Phases 0-3 are done. The app runs on the smark_iq server in Docker, and
+    was tested privately: 90 s per case on qwen2.5:14b.
+  - Revised 2026-09-28: battle_test is FULLY INDEPENDENT of smark_iq, with
+    its own network and its own Cloudflare Tunnel (battle-test-cloudflared)
+    at battle.smarkiq.us. Only the GPU is shared, and keep_alive = 30s
+    frees it after runs.
+  - Phase 4 is PAUSED partway. The app runs privately (reach it with
+    ssh -N -L 8000:127.0.0.1:8000 smark@smark-iq, then localhost:8000).
+    The resume steps are in the migration plan: the token goes in the
+    server's .env (the user does this), docker compose build in Remote
+    Desktop, then disable the local-test override, docker compose up -d,
+    and the Phase 5 checks.
+  - Server gotchas:
+    - Docker image builds and pulls, and smark_iq's git pull, fail over
+      SSH (Windows Credential Manager), so do them in Remote Desktop.
+    - Set passwords over SSH, not Remote Desktop (keyboard mapping).
+    - Use `docker compose stop`, never `down`.
+    - smark_iq's containers vanished once, for an unknown cause (see the
+      Incident in the migration plan).
   - Cloudflare Access MUST be added before any real users or real cases.
+- 14B on the server scored no better than 7B on law selection (4 vs 6
+  core authorities of 16). Search and selection are the bottleneck; see 3b.
 - Waiting on the lawyer: a review of the expected-authority lists, the Texas
   Property Code § 27.004 question, local vs. Bedrock, retention vs.
   record-keeping, and Cloudflare handling case text in transit.
 
 Before doing anything else:
 1. Run `python -m unittest` (use .venv/Scripts/python) and confirm all
-   tests pass (123 as of 2026-09-25).
+   tests pass (129 as of 2026-09-28).
 2. Check that data/law.sqlite exists. If it doesn't, rebuild it with
    `python -m battle_test.corpus build`.
 3. Check `git status` is clean, and that the latest commit is pushed to
    GitHub, since the server will clone from there.
-4. Tell me what you think the next step should be (probably migration
-   Phase 2), including which parts need me personally: adding the GitHub
-   deploy key, typing the admin password at the server, and the Cloudflare
-   dashboard. Then wait for me to confirm before starting.
+4. Check the server over SSH (Windows ssh.exe, key loaded in ssh-agent):
+   that both stacks are running (docker ps) and llm.smarkiq.us answers.
+5. Tell me what you think the next step should be (probably resuming
+   migration Phase 4), including which parts need me personally: the
+   token in .env, the Remote Desktop build, and the Cloudflare dashboard.
+   Then wait for me to confirm before starting.
 
 Working rules for this project:
 - Don't git commit or push. I handle all commits and pushes myself. When

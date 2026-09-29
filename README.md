@@ -140,6 +140,10 @@ the real law index. Only the drafting is canned, and its output is labelled
 
 ## Deploying to the server
 
+**Day-to-day start and stop instructions** are in `plans/plan.md`, under
+"Start and stop: how to run it". That covers running on the laptop, on the
+server through an SSH tunnel, and publicly.
+
 The server runs the same code in Docker, at `https://battle.smarkiq.us`,
 fully independent of smark_iq: its own compose project and network, and
 its own Cloudflare Tunnel connector (`battle-test-cloudflared`). Only the
