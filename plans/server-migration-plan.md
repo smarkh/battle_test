@@ -2,8 +2,15 @@
 
 This plan covers build step 5, part 4 of `plans/plan.md`: move battle_test
 from the dev laptop to the smark_iq server, and make the web UI reachable
-from anywhere at a public URL. Phases 0–3 are done (see the step-by-step
-plan).
+from anywhere at a public URL.
+
+**Status (2026-10-03):**
+- Phases 0–4 are done: **`https://battle.smarkiq.us` is live.**
+- Phase 5's anonymous checks passed. The signed-in checks (cookie flags,
+  live progress through Cloudflare, a phone on mobile data) are still for
+  the user to run.
+- Before real users: Cloudflare Access. Real users are a long way off,
+  and models may be on Bedrock by then.
 
 **Revised 2026-09-28: battle_test runs fully independently of smark_iq.**
 It has its own Docker network and its **own Cloudflare Tunnel** (its own
@@ -481,27 +488,39 @@ Found at the start of Phase 4.
 Revised 2026-09-28: battle_test uses its own tunnel, and smark_iq isn't
 touched.
 
-**Paused 2026-09-28, partway through.** Where things stand:
-- **Done:**
-  - step 1 (the code, pushed as `4ec991f` and pulled on the server)
-  - step 2 (the `battle-test` tunnel created, and its token refreshed after
-    appearing in chat)
-  - a blank `.env` (`BATTLE_TUNNEL_TOKEN=`) created on the server
-- **Running meanwhile, privately:** `battle-test` only, on its own network
-  `battle_test_default`, with the private-test override
-  (`127.0.0.1:8000`, reached through `ssh -N -L 8000:127.0.0.1:8000
-  smark@smark-iq`). `battle-test-cloudflared` isn't running, so nothing is
-  public. It's the image built this morning, without the `keep_alive` or
-  HSTS changes.
-- **To resume:**
-  1. You put the refreshed token in the server's `.env`, in Remote
-     Desktop.
-  2. You run `docker compose build`, in Remote Desktop.
-  3. Rename `docker-compose.local-test.yml` back to `.disabled`, then run
-     `docker compose up -d`, which starts both services.
-  4. Check that the tunnel connects (from `docker logs
-     battle-test-cloudflared`, without printing the token), then run
-     Phase 5.
+**Done 2026-09-28: `https://battle.smarkiq.us` is live.** Everything
+below the log is in place: the code, battle_test's own tunnel and route,
+the token in the server's `.env`, the rebuilt image, and both services
+running on `battle_test_default`. What happened along the way:
+- **Token and image on the laptop by mistake:** the `.env` and the image
+  build were first done on the laptop, whose folder names match the
+  server's.
+- **`scp` overwrote smark_iq's `.env`:** copying the laptop `.env` to the
+  server first landed on **smark_iq's** `.env`, replacing its
+  `CLOUDFLARE_TUNNEL_TOKEN` and `WEBUI_SECRET_KEY`. The user restored
+  them, and they were confirmed identical to the running containers'
+  values by comparing hashes. smark_iq was never restarted in between, so
+  it didn't go down. **Lesson:** use a plain home-relative `scp`
+  destination, and check which project's file you're writing.
+- **Image copied instead of rebuilt:** the fresh laptop image was moved
+  to the server with `docker save` → `scp` → `docker load`, which
+  downloads nothing, so it works over SSH. It was 97 MB compressed, and
+  took 7 s to copy. It had the same image ID on both machines. **This is
+  a working alternative to building in Remote Desktop.**
+- **Invalid token:** `battle-test-cloudflared` first crash-looped with
+  "Provided Tunnel token is not valid". The whole install command
+  (`cloudflared.exe service install <token>`) had been pasted into
+  `.env`. The prefix was stripped in place without the token being shown,
+  and the connector then registered 4 connections (slc01, den03).
+- **Tunnel ID:** the tunnel in use is **`04dcccfb-1dc1-461c-be03-a54748c20c86`**.
+  The token refresh left a new tunnel, not the earlier `a7df488c-…` one.
+  If that old tunnel still exists with no replicas, it can be deleted.
+- **Route and DNS:** the tunnel showed "Healthy" but `Routes: 0`, and
+  `battle.smarkiq.us` had no DNS record. Adding a **Published
+  application** route (`battle.smarkiq.us` → `http://battle-test:8000`)
+  created the DNS record.
+
+Original steps, for reference:
 1. **Code (done on the laptop, 2026-09-28):**
    - `docker-compose.yml` now has battle_test's own `cloudflared` service
      (`battle-test-cloudflared`), hardened like the app: read-only,
@@ -562,13 +581,51 @@ battle_test's tunnel → `battle-test-cloudflared` → app):
 - Last, the manual check: from a phone on mobile data (not home Wi-Fi, and
   Tailscale off), sign in and start a case.
 
+**Results, 2026-09-28** (from the laptop, through the public path):
+
+| Check | Result |
+|---|---|
+| DNS, `/healthz` over HTTPS | ✅ Resolves to Cloudflare, 200 |
+| Signed-out `/`, `/cases/x/download.md` | ✅ 303 → `https://battle.smarkiq.us/login?next=…` |
+| Security headers | ✅ HSTS `max-age=31536000; includeSubDomains`, CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, `Server: cloudflare` |
+| Wrong password (nonexistent username) | ✅ 401 "Wrong username or password." |
+| Cross-site sign-in (`Origin: evil.example`, `Origin: null`) | ✅ 403, 403 |
+| `llm.smarkiq.us` | ✅ 200, unaffected |
+| **Plain `http://`** | ⚠ **Not redirected to HTTPS:** it reaches the app over HTTP. HSTS covers repeat visits, and sign-in can't work over HTTP (Secure cookie), so nothing sensitive is exposed that way. **Decision 2026-09-28: leave Cloudflare's "Always Use HTTPS" off for now.** Note that it's a zone-wide setting, so it would affect `llm.smarkiq.us` too. If wanted later, an app-only alternative is for battle_test to redirect `http://` to `https://` itself, when `behind_proxy` is on and Cloudflare reports the request came in over HTTP. That's a small code change and doesn't touch smark_iq. |
+| Cookie flags, live progress through Cloudflare, phone on mobile data | ⏳ **For the user** (they need signing in): DevTools → Application → Cookies (`bt_session`: Secure, HttpOnly, SameSite Lax); run the Utah sample and watch it stream to the end; sign in from a phone with Wi-Fi and Tailscale off |
+| Another account can't see a case | Covered by the web tests. Optional to repeat live with a second test account |
+
+**Still required before real users:** Cloudflare Access (Decision 4), and
+the GPU-sharing check (Phase 3 step 4).
+- **Timing (2026-09-28):** real users are a long way off, and battle_test
+  may be on Bedrock by then. That would make the GPU-sharing check moot,
+  since battle_test would no longer use the server's GPU.
+- **Cloudflare Access stays required either way:** it protects the site,
+  wherever the models run.
+
+**Tidying done 2026-09-28:**
+- The laptop's `.env` (which held the tunnel token) is deleted, so the only
+  copy is the server's.
+- The laptop's `.env.example` is restored.
+- No stale tunnel was left in Cloudflare: the account has exactly two
+  tunnels, `battle-test` and `smark-iq`, both healthy with 1 route each.
+
 ### Phase 6 — Operations and hand-off
-- **Adding users:** `docker compose exec battle-test python -m
-  battle_test.web.users add NAME` over SSH. With Access, also add their
-  email to the Access policy.
-- **Updating the app:** `git pull && docker compose up -d --build`. Running
-  jobs are interrupted by a restart, and the app marks them failed with a
-  message, so update between runs.
+The day-to-day commands now live in `plans/plan.md`, under "Start and stop:
+how to run it". That replaces the separate `deploy.md` planned here.
+- **Adding users:** over SSH **from the laptop** (not Remote Desktop, whose
+  keyboard mapping can garble passwords): `docker compose run --rm
+  battle-test python -m battle_test.web.users add NAME`. With Access, also
+  add their email to the Access policy.
+- **Updating the app:**
+  - `git pull` over SSH (the deploy key works).
+  - Then either `docker compose build` **in Remote Desktop**, or build on
+    the laptop and copy the image (`docker save` → `scp` → `docker load`).
+  - Then `docker compose up -d`.
+  - Running jobs are interrupted by a restart, and the app marks them
+    failed with a message, so update between runs.
+  - (`&&` doesn't work in the server's PowerShell 5.1, so run the steps
+    separately or chain them with `;`.)
 - **Quarterly law refresh:** bump `corpus.snapshot` in
   `config.server.toml`, then rerun `corpus build`. The index swap is atomic,
   and `evaluate --validate` confirms the expected-authority lists still
@@ -576,8 +633,16 @@ battle_test's tunnel → `battle-test-cloudflared` → app):
 - **After a reboot:** sign in via Chrome Remote Desktop. Docker Desktop,
   then the containers (`restart: unless-stopped`), come back on their own.
 - **Retention** runs itself (hourly purge, 90 days).
-- Write a short `deploy.md` in this repo with these commands, like
-  smark_iq's `remote-access.md`.
+- **"Site can't be reached":**
+  - First check this machine's internet connection. It was the cause on
+    2026-10-03.
+  - Then DNS caching: run `ipconfig /flushdns`, and clear Chrome's cache
+    at `chrome://net-internals/#dns`.
+  - Then the server: over SSH, check `docker ps` shows `battle-test`
+    (healthy) and `battle-test-cloudflared`, and look at `docker logs
+    battle-test-cloudflared` for "Registered tunnel connection".
+  - `curl -4 https://battle.smarkiq.us/healthz` from the laptop separates
+    a local DNS problem from a real outage.
 
 ## Risks and how they're handled
 

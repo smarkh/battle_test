@@ -6,7 +6,7 @@ This is a standalone project, separate from the smark_iq deployment, but
 expected to reuse lessons learned there (self-hosting, local RAG,
 guardrails-style network isolation and data handling).
 
-## Status (2026-09-28)
+## Status (2026-10-03)
 
 - **Built on the dev laptop:**
   - Steps 1–3: pipeline, local law index (UT, CA, TX, federal),
@@ -17,10 +17,11 @@ guardrails-style network isolation and data handling).
 
   129 unit tests pass.
 - **On the smark_iq server (2026-09-28):**
-  - Deployed in Docker, fully independent of smark_iq, and running
-    privately (reach it through the SSH tunnel; see "Start and stop" below).
+  - Deployed in Docker, fully independent of smark_iq, and **live at
+    `https://battle.smarkiq.us`** through its own Cloudflare Tunnel.
   - 14B runs a case in ~90 s, and the three-case evaluation in ~6 min.
-  - Phase 4 (going public) is paused partway.
+  - For now, test accounts and fictional cases only. **Cloudflare Access is
+    required before real users.**
 - **Evaluation (7B):** the search fixes doubled the core authorities cited
   (3 → 6 of 16) and halved off-topic citations (4 → 2). California and
   Utah improved, Texas didn't: keyword search can't cope with each state's
@@ -29,16 +30,16 @@ guardrails-style network isolation and data handling).
   - 3b: semantic search (probably on the server), better selection, then
     re-evaluate on 14B / ~30B.
   - Web UI part 3: upload with text extraction, and `.docx`/PDF export.
-  - Moving to the smark_iq server (web UI part 4, and larger models). Plan:
-    `plans/server-migration-plan.md`. Phases 0–3 are done (2026-09-28):
-    the app runs on the server, and was tested privately over an SSH
-    tunnel, taking 90 s per case on 14B. The GPU-sharing check was skipped.
-    Phase 4 was revised 2026-09-28 so that battle_test runs **fully
-    independently of smark_iq**, with its own network and its own Cloudflare
-    Tunnel at `battle.smarkiq.us`. **Phase 4 is paused partway:** the app
-    runs privately on the server (SSH tunnel to `localhost:8000`), and isn't
-    public yet. Resume steps are in the migration plan. ⚠ Cloudflare Access
-    must be added before any real users test it.
+  - Server deployment (web UI part 4): **done, and live** (see
+    `plans/server-migration-plan.md`). Still open:
+    - your signed-in checks (cookie flags, live progress through
+      Cloudflare, a phone on mobile data)
+    - the GPU-sharing check, which may become moot with Bedrock
+    - Cloudflare's "Always Use HTTPS" was declined for now
+
+    ⚠ Cloudflare Access must be added before any real users test it.
+  - Bedrock (later): try hosted models, which would take battle_test off
+    the server's GPU.
   - 3a (the "does it say that?" check), which needs a bigger model.
   - Step 4 (case law via CourtListener).
 - **Waiting on the lawyer:**
@@ -46,6 +47,8 @@ guardrails-style network isolation and data handling).
   - the Texas § 27.004 question
   - local vs. Bedrock hosting
   - whether 3-month retention fits any record-keeping duties
+  - Cloudflare handling case text in transit (its tunnel ends TLS at
+    Cloudflare's edge)
 - **Waiting on you:** the remaining web UI questions (users, sharing,
   export format) under "Open questions".
 - **Ideas registered, not scheduled:** client intake from a lawyer's
@@ -158,19 +161,48 @@ account (`smarkh`).
 The server always uses `config.server.toml` (14B, `keep_alive` 30 s), set
 by the image.
 
-### C. Public at `battle.smarkiq.us` (after Phase 4)
+### C. Public at `battle.smarkiq.us` (live since 2026-09-28)
 
-These take effect once the token is in the server's `.env` and Phase 4 is
-finished. Cloudflare Access is required before real users.
-- **Start:** **(server)** rename `docker-compose.local-test.yml` to
-  `.disabled`, then run `docker compose up -d` (both services: the app and
-  its tunnel connector).
+This is the current mode: both services are running. Open
+**https://battle.smarkiq.us** from anywhere and sign in with a server
+account. Cloudflare Access is required before real users.
+- **Start** (e.g. after stopping, or to switch back from private mode B):
+  **(server)** rename `docker-compose.local-test.yml` to `.disabled` if it
+  exists, then run `docker compose up -d`. That starts both services: the
+  app and its tunnel connector.
 - **Stop being public:** **(server)** `docker compose stop cloudflared`.
   The app keeps running privately.
 - **Stop everything:** **(server)** `docker compose stop`.
 - **Instant off-switch without the server:** in the Cloudflare dashboard,
-  remove the `battle.smarkiq.us` hostname or stop the `battle-test`
-  tunnel.
+  remove the `battle.smarkiq.us` route or stop the `battle-test` tunnel
+  (ID `04dcccfb-…`).
+- **Updating the image without Remote Desktop:**
+  1. Build on the laptop: `docker compose build`.
+  2. `docker save -o battle-test-image.tar battle-test:latest`
+  3. `scp battle-test-image.tar smark@smark-iq:battle-test-image.tar`, a
+     plain home-relative destination.
+  4. **(server)** `docker load -i $HOME\battle-test-image.tar`, then
+     `docker compose up -d`, then delete the `.tar` on both machines.
+
+  The laptop must be on the same commit as the server.
+
+Mode B (private over SSH) still works alongside this, because the app keeps
+its internal port. To use B while C is live, start with the local-test
+override as described in B.
+
+### If the site can't be reached
+
+Work through these in order:
+1. **Check this machine's internet connection.** It was the cause on
+   2026-10-03.
+2. **Clear stale DNS:** run `ipconfig /flushdns`, and in Chrome go to
+   `chrome://net-internals/#dns` → **Clear host cache**.
+   `curl -4 https://battle.smarkiq.us/healthz` returning `{"status":"ok"}`
+   means the site is up and the problem is local.
+3. **Check the server** over SSH: `docker ps` should show `battle-test`
+   (healthy) and `battle-test-cloudflared`, and `docker logs
+   battle-test-cloudflared` should show "Registered tunnel connection".
+   The migration plan's Phase 6 has more.
 
 ## Goal
 
@@ -1080,7 +1112,7 @@ protections (item 2 above).
 ## Restart prompt
 
 Paste this into a new Claude Code session, opened in the `battle_test`
-folder, to pick up where the 2026-09-28 session left off:
+folder, to pick up where the 2026-10-03 session left off:
 
 ```
 We're continuing work on battle_test, the legal adversarial argument system.
@@ -1111,12 +1143,16 @@ Where things stand:
     its own network and its own Cloudflare Tunnel (battle-test-cloudflared)
     at battle.smarkiq.us. Only the GPU is shared, and keep_alive = 30s
     frees it after runs.
-  - Phase 4 is PAUSED partway. The app runs privately (reach it with
-    ssh -N -L 8000:127.0.0.1:8000 smark@smark-iq, then localhost:8000).
-    The resume steps are in the migration plan: the token goes in the
-    server's .env (the user does this), docker compose build in Remote
-    Desktop, then disable the local-test override, docker compose up -d,
-    and the Phase 5 checks.
+  - Phase 4 is DONE: live at https://battle.smarkiq.us (tunnel ID
+    04dcccfb-...). Phase 5's anonymous checks pass. Still open:
+    - the user's signed-in checks
+    - (Cloudflare "Always Use HTTPS" was declined for now; an app-only
+      redirect is possible later)
+    - the GPU-sharing check
+    - Cloudflare Access (required before real users)
+  - Updating the image without Remote Desktop: build on the laptop, then
+    docker save -> scp to the server's home folder -> docker load over SSH
+    (see the migration plan).
   - Server gotchas:
     - Docker image builds and pulls, and smark_iq's git pull, fail over
       SSH (Windows Credential Manager), so do them in Remote Desktop.
@@ -1133,7 +1169,7 @@ Where things stand:
 
 Before doing anything else:
 1. Run `python -m unittest` (use .venv/Scripts/python) and confirm all
-   tests pass (129 as of 2026-09-28).
+   tests pass (129 as of 2026-10-03).
 2. Check that data/law.sqlite exists. If it doesn't, rebuild it with
    `python -m battle_test.corpus build`.
 3. Check `git status` is clean, and that the latest commit is pushed to

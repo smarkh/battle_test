@@ -5,7 +5,10 @@ the complaint (or takes yours) and a motion for summary judgment. A defendant
 model writes the opposition, and optionally the plaintiff model replies. No
 winner is declared. See `plans/plan.md` for the full design.
 
-**Status: plan step 3.** Drafts are grounded in a local copy of the law:
+**Status (2026-10-03):** plan steps 1–3 are built. The web UI (step 5,
+parts 1–2) runs locally, and is deployed on the smark_iq server at
+**https://battle.smarkiq.us**, for testing with fictional cases only until
+Cloudflare Access is added. Drafts are grounded in a local copy of the law:
 1. Before drafting, each side searches the law index for the statutes and
    rules it needs.
 2. It may cite only the sections it's shown, and everything else gets a
@@ -17,10 +20,12 @@ winner is declared. See `plans/plan.md` for the full design.
 Case law isn't checked yet (plan step 4), so the models are told not to cite
 cases, and any case citation that appears is flagged.
 
-On the dev laptop's 7B model the checking works, but the model often picks
-the wrong law or misstates it. `plans/plan.md` covers the model size needed
-("Model size estimate"), the planned fixes (3a/3b), the web UI (step 5),
-and the Bedrock hosting option.
+The checking works, but the models often pick the wrong law or misstate it.
+That's true on the laptop's 7B and on the server's 14B, which scored no
+better. Search and selection are the bottleneck. `plans/plan.md` covers the
+model size estimate, the planned fixes (3a/3b), the web UI (step 5), and
+the Bedrock hosting option. **Day-to-day start/stop instructions** are in
+`plans/plan.md`, under "Start and stop: how to run it".
 
 ## Requirements
 
@@ -83,11 +88,13 @@ Each output file contains:
 | `examples/eval/` | Expected authorities for each sample case |
 | `plans/plan.md` | Design, decisions, build steps, and open questions |
 
-## Web UI (local preview)
+## Web UI
 
-A browser front end for the same pipeline (plan step 5, parts 1–2). First
-create an account. You'll be asked for the password at a hidden prompt, so
-run it yourself in a terminal:
+A browser front end for the same pipeline (plan step 5, parts 1–2). It's
+live on the server at https://battle.smarkiq.us (see "Deploying to the
+server"). To run it on the laptop instead, first create a local account.
+Laptop and server accounts are separate. You'll be asked for the password at
+a hidden prompt, so run it yourself in a terminal:
 
 ```
 python -m battle_test.web.users add NAME --admin
@@ -130,10 +137,14 @@ python -m battle_test.web --demo-model    # canned drafts, no GPU needed
   stored.
 - Every form has a CSRF token, and cross-site posts are refused.
 - Pages load nothing from third parties.
-- Until the HTTPS deployment step, the server refuses to listen on anything
-  but `127.0.0.1` / `localhost`. Set `secure_cookies = true` in `[web]` once
-  it's served over HTTPS.
-- Cases and accounts are stored in `cases/web/` (gitignored).
+- **On the laptop,** the server refuses to listen on anything but
+  `127.0.0.1` / `localhost`. Serving on any other address (the deployed
+  container) needs both `behind_proxy = true` and `secure_cookies = true`
+  in `[web]`, which only `config.server.toml` sets. In that mode the app
+  also sends HSTS.
+- On the laptop, cases and accounts are stored in `cases/web/`
+  (gitignored). On the server they're in the `battle-cases` Docker volume.
+
 `--demo-model` still runs research, selection and citation checking against
 the real law index. Only the drafting is canned, and its output is labelled
 `demo`.
