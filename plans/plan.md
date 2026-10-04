@@ -38,8 +38,16 @@ guardrails-style network isolation and data handling).
     - Cloudflare's "Always Use HTTPS" was declined for now
 
     ⚠ Cloudflare Access must be added before any real users test it.
-  - Bedrock (later): try hosted models, which would take battle_test off
-    the server's GPU.
+  - **AWS hosting** (Bedrock models + an EC2 app server), which would
+    take battle_test off the smark_iq server entirely. Plan and cost
+    estimates are in `plans/aws-bedrock-plan.md`: ~$0.10/case on the
+    recommended mix, ~$30/month fixed. It needs the lawyer's sign-off
+    first.
+  - **Selling to lawyers:** pricing, costs, profit by subscriber count and
+    24-month scenarios are in `plans/profitability-plan.md`. Gross margin
+    is ~87–94%, and break-even is ~8 subscribers before marketing. Price,
+    acquisition cost and churn matter far more than model cost. Product
+    quality and the listed prerequisites come before charging anyone.
   - 3a (the "does it say that?" check), which needs a bigger model.
   - Step 4 (case law via CourtListener).
 - **Waiting on the lawyer:**
@@ -842,6 +850,13 @@ background job queue can absorb.
 decision is still local models via Ollama (see "Decisions made"). This
 section records what Bedrock would offer and cost, so it can be decided
 later with the lawyer.
+
+> **Superseded for detail by `plans/aws-bedrock-plan.md` (2026-10-03).**
+> That plan moves the whole app to AWS: Bedrock for models and a small EC2
+> server for the app. It has a **measured** token count per case (~39k in
+> / ~7k out), current prices, cost tables by users × usage, and the
+> step-by-step move. The table below is the earlier rough estimate, kept
+> for history. Its Llama 3.3 70B price is out of date (now $0.99 / $1.32).
 
 ### What it would change
 

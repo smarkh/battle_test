@@ -24,7 +24,9 @@ The checking works, but the models often pick the wrong law or misstate it.
 That's true on the laptop's 7B and on the server's 14B, which scored no
 better. Search and selection are the bottleneck. `plans/plan.md` covers the
 model size estimate, the planned fixes (3a/3b), the web UI (step 5), and
-the Bedrock hosting option. **Day-to-day start/stop instructions** are in
+the Bedrock hosting option. AWS hosting costs are in
+`plans/aws-bedrock-plan.md`, and pricing and profit in
+`plans/profitability-plan.md`. **Day-to-day start/stop instructions** are in
 `plans/plan.md`, under "Start and stop: how to run it".
 
 ## Requirements
