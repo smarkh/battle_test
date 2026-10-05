@@ -371,6 +371,18 @@ server.**
   become frequent: build on the laptop and `docker save` / `scp` /
   `docker load`, or trigger the build as a scheduled task that runs inside
   the desktop session.
+- **Revised 2026-10-04: a rebuild after a code change worked over SSH.**
+  `docker compose build` over SSH produced a good image for the accounts
+  and admin update, which changed only the app's code and config.
+  - **Likely reason (not confirmed):** the base image and the installed
+    packages were already on the server from the first build, so nothing
+    had to be downloaded, and the download is the part SSH can't do.
+  - **So:** try the build over SSH first. Expect it to fail, with the
+    credentials error above, when it needs a download: a new base image
+    version, or (probably) a changed `requirements.txt`. Then use Remote
+    Desktop or the laptop build.
+  - Check the result before restarting: `docker images battle-test` should
+    show an image a few minutes old.
 - Other Windows-over-SSH notes:
   - The server's shell is Windows PowerShell 5.1, so there's no `&&`.
   - Send scripts with `powershell -EncodedCommand` so quoting survives.
@@ -546,7 +558,9 @@ Original steps, for reference:
 4. **Server update:**
    - `git pull` over SSH (the deploy key works).
    - **Rebuild the image in Remote Desktop,** since the code changed and
-     builds can't run over SSH: `docker compose build`.
+     builds can't run over SSH: `docker compose build`. (Since found,
+     2026-10-04: a code-only rebuild does work over SSH. See "Found in
+     Phase 2".)
    - Then `docker compose up -d` (over SSH is fine). That recreates
      `battle-test` on its own network and starts `battle-test-cloudflared`.
      The `cloudflared` image is already on the server, so nothing is
@@ -619,9 +633,17 @@ how to run it". That replaces the separate `deploy.md` planned here.
   add their email to the Access policy.
 - **Updating the app:**
   - `git pull` over SSH (the deploy key works).
-  - Then either `docker compose build` **in Remote Desktop**, or build on
-    the laptop and copy the image (`docker save` → `scp` → `docker load`).
+  - Back up the accounts first when the update changes the accounts
+    database: `docker cp battle-test:/data/cases/users.sqlite
+    $HOME\users-backup.sqlite`. Delete the copy once the update is checked.
+  - Then `docker compose build`. **Try it over SSH first:** it worked on
+    2026-10-04 for a code-only change. If it fails with the credentials
+    error, run it **in Remote Desktop**, or build on the laptop and copy
+    the image (`docker save` → `scp` → `docker load`).
   - Then `docker compose up -d`.
+  - **Last done 2026-10-04:** setup links, plans, firm pooling, the queue
+    cap, plan expiry and the admin pages (commit `ef1475d`), all over SSH.
+    The accounts database upgraded itself on first start.
   - Running jobs are interrupted by a restart, and the app marks them
     failed with a message, so update between runs.
   - (`&&` doesn't work in the server's PowerShell 5.1, so run the steps

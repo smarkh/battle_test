@@ -6,7 +6,7 @@ This is a standalone project, separate from the smark_iq deployment, but
 expected to reuse lessons learned there (self-hosting, local RAG,
 guardrails-style network isolation and data handling).
 
-## Status (2026-10-03)
+## Status (2026-10-04)
 
 - **Built on the dev laptop:**
   - Steps 1–3: pipeline, local law index (UT, CA, TX, federal),
@@ -22,6 +22,9 @@ guardrails-style network isolation and data handling).
   - 14B runs a case in ~90 s, and the three-case evaluation in ~6 min.
   - For now, test accounts and fictional cases only. **Cloudflare Access is
     required before real users.**
+  - **Updated 2026-10-04** (commit `ef1475d`): setup links, plans and
+    usage limits, firm pooling, the queue cap, plan expiry, and the admin
+    pages with the activity log are live. Built and restarted over SSH.
 - **Evaluation (7B):** the search fixes doubled the core authorities cited
   (3 → 6 of 16) and halved off-topic citations (4 → 2). California and
   Utah improved, Texas didn't: keyword search can't cope with each state's
@@ -41,8 +44,10 @@ guardrails-style network isolation and data handling).
   - **AWS hosting** (Bedrock models + an EC2 app server), which would
     take battle_test off the smark_iq server entirely. Plan and cost
     estimates are in `plans/aws-bedrock-plan.md`: ~$0.10/case on the
-    recommended mix, ~$30/month fixed. It needs the lawyer's sign-off
-    first.
+    recommended mix, ~$30/month fixed. **Decided 2026-10-04: this comes
+    before billing** (see "Decisions made"). The lawyer's sign-off on
+    sending case material to AWS is still open, and is needed before real
+    cases run there.
   - **Selling to lawyers:** pricing, costs, profit by subscriber count and
     24-month scenarios are in `plans/profitability-plan.md`. Gross margin
     is ~87–94%, and break-even is ~8 subscribers before marketing. Price,
@@ -160,7 +165,7 @@ account (`smarkh`).
 | What | Where | Command |
 |---|---|---|
 | Update the code | SSH | **(server)** `git pull` |
-| Rebuild after a code change | **Remote Desktop** (image builds fail over SSH) | **(server)** `docker compose build`, then the start command above |
+| Rebuild after a code change | **SSH first** (worked 2026-10-04 for a code-only change). **Remote Desktop** if it fails with a credentials error, which happens when the build has to download something | **(server)** `docker compose build`, then the start command above |
 | Add an account or change a password | **SSH from the laptop** (not Remote Desktop: its keyboard mapping can garble passwords) | **(server)** `docker compose run --rm battle-test python -m battle_test.web.users add NAME --plan PLAN`, which prints a one-time setup link to send them (or `invite NAME`, `plan NAME PLAN`, `usage`, `passwd NAME`, `disable NAME`, `list`) |
 | Evaluation on 14B (~6 min) | SSH | **(server)** `docker compose run --rm -T battle-test python -m battle_test.evaluate --label server-14b` |
 | Read an evaluation summary | SSH | **(server)** `docker exec battle-test cat /data/cases/output/eval/<folder>/summary.md` |
@@ -857,7 +862,8 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
        - **Still needed:** Cloudflare Access in front of `/admin` (and
          the whole site) before real users. The password re-check is the
          only second barrier until then.
-     - **Not built:** overage, pay-per-case, and Stripe.
+     - **Not built:** overage, pay-per-case, and Stripe. Billing is
+       deferred until closer to rollout (see "Decisions made").
      - **Tested:** 52 new tests (181 in all), plus a Chrome pass on the
        demo model with a throwaway account: setup link, sign-in, one case,
        then the form refusing a second on a 1-case trial.
@@ -943,6 +949,11 @@ background job queue can absorb.
    job runs.
 
 ## Option: hosted models on Amazon Bedrock (not decided)
+
+**Update 2026-10-04:** deploying on Bedrock is now the next piece of work,
+ahead of billing (see "Decisions made"). What's still not decided is
+whether real case material may go to AWS, which is the lawyer's call. The
+rest of this section is as written before that.
 
 **Status: an option under consideration, not a decision.** The current
 decision is still local models via Ollama (see "Decisions made"). This
@@ -1136,6 +1147,32 @@ protections (item 2 above).
 - **Web UI sign-in:** the app's own accounts, with no self-signup. Each user
   sees only their own cases. Accounts are managed by an admin, from the
   admin pages (since 2026-10-04) or the command line. See step 5, part 2.
+- **Order of work: Bedrock before billing (2026-10-04).** Deploy on
+  Bedrock first. No Stripe or other billing work until the product is
+  closer to rollout.
+  - **Why billing can wait:** the app already enforces plans, allowances
+    and a paid-through date, set by hand from the admin pages. A paid
+    pilot of 5–10 lawyers needs a few minutes a month: send a Stripe
+    invoice or payment link by hand, then set the date.
+  - **What Stripe would add, when it's built:**
+    - a payment moves the paid-through date on its own, and a failed card
+      lets it lapse
+    - customers sign up, change cards, switch plans and cancel on
+      Stripe's hosted pages, so card details never touch the app
+    - invoices and receipts, which firms and the accountant will want
+    - revenue, churn and failed-payment figures
+  - **What it costs:** ~2.9% + $0.30 per charge, the work of mapping
+    plans, mid-month changes, firm seats and grace periods, and the app's
+    first endpoint that isn't behind a login (Stripe's payment
+    notifications), which needs care.
+  - **When to build it:** when renewing by hand becomes a chore, or a
+    missed renewal costs a customer. Probably past 15–20 subscribers.
+  - **Still ahead of charging anyone:** product quality (3b, 3a, case
+    law), Cloudflare Access, terms of service and insurance. See
+    `plans/profitability-plan.md`, "Prerequisites".
+  - **Bedrock:** this decides the order of work. Whether real case
+    material may go to AWS is still the lawyer's call (see "Open
+    questions"), so until then Bedrock runs fictional cases only.
 - **Case retention (default, for now):** 3 months, then automatic deletion.
   Users can delete sooner. See step 5, part 2.
 - **Server deployment (2026-09-25):**
@@ -1199,7 +1236,8 @@ protections (item 2 above).
   different models. Evaluated after migration. See "Model size estimate"
   for the starting point: 14B baseline, then the ~30B tier.
 - **Local vs. Bedrock:** stay fully local, or move model calls to Amazon
-  Bedrock? This hinges on the lawyer's view of sending case material to
+  Bedrock? Decided 2026-10-04 to deploy on Bedrock next, ahead of billing.
+  Still open: the lawyer's view of sending real case material to
   AWS. See "Option: hosted models on Amazon Bedrock (not decided)".
 - **Data sensitivity:** complaints and case information are likely
   sensitive/privileged, so the same data-handling considerations as the tax
@@ -1225,7 +1263,7 @@ protections (item 2 above).
 ## Restart prompt
 
 Paste this into a new Claude Code session, opened in the `battle_test`
-folder, to pick up where the 2026-10-03 session left off:
+folder, to pick up where the 2026-10-04 session left off:
 
 ```
 We're continuing work on battle_test, the legal adversarial argument system.
@@ -1242,8 +1280,9 @@ Where things stand:
   - 3b evaluation set: three sample cases with expected authorities, and
     python -m battle_test.evaluate (--research-only for a fast search check).
   - Web UI: python -m battle_test.web, with accounts, per-user cases,
-    deletion, 90-day retention, and the new-case form shown when a user has
-    no cases.
+    deletion, 90-day retention, one-time setup links, plans with case
+    allowances (firm pooling, queue cap, plan expiry), and admin pages
+    with an activity log at /admin. All of it is live on the server.
 - 3b search fixes doubled core authorities cited on the 7B (3 -> 6 of 16).
   Texas didn't improve: keyword search can't cope with each state's
   different statute wording. The next 3b steps are semantic search
@@ -1267,8 +1306,10 @@ Where things stand:
     docker save -> scp to the server's home folder -> docker load over SSH
     (see the migration plan).
   - Server gotchas:
-    - Docker image builds and pulls, and smark_iq's git pull, fail over
-      SSH (Windows Credential Manager), so do them in Remote Desktop.
+    - Docker image pulls, and smark_iq's git pull, fail over SSH (Windows
+      Credential Manager), so do them in Remote Desktop. A code-only
+      `docker compose build` does work over SSH (2026-10-04); one that
+      has to download something doesn't.
     - Set passwords over SSH, not Remote Desktop (keyboard mapping).
     - Use `docker compose stop`, never `down`.
     - smark_iq's containers vanished once, for an unknown cause (see the
@@ -1289,10 +1330,11 @@ Before doing anything else:
    GitHub, since the server will clone from there.
 4. Check the server over SSH (Windows ssh.exe, key loaded in ssh-agent):
    that both stacks are running (docker ps) and llm.smarkiq.us answers.
-5. Tell me what you think the next step should be (probably resuming
-   migration Phase 4), including which parts need me personally: the
-   token in .env, the Remote Desktop build, and the Cloudflare dashboard.
-   Then wait for me to confirm before starting.
+5. Tell me what you think the next step should be (probably the Bedrock
+   deployment in plans/aws-bedrock-plan.md, which I decided on 2026-10-04
+   comes before any Stripe billing work), including which parts need me
+   personally: the AWS account and credentials, and the Cloudflare
+   dashboard. Then wait for me to confirm before starting.
 
 Working rules for this project:
 - Don't git commit or push. I handle all commits and pushes myself. When

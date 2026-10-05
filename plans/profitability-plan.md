@@ -231,7 +231,17 @@ First profitable month: 3. **Peak cash needed: ~$4,000.**
 4. **Insurance:** tech errors & omissions and cyber cover, before the first
    paying customer.
 5. **Billing:** Stripe subscriptions, case limits per plan, a trial, and
-   per-user monthly caps. That's code work.
+   per-user monthly caps.
+   - **Built (2026-10-04):** plans with case limits, a trial, firm seats
+     sharing an allowance, a paid-through date that blocks new cases when
+     it passes, and admin pages to manage them.
+   - **Deferred (decided 2026-10-04):** Stripe. It waits until the product
+     is closer to rollout, after the Bedrock deployment. Until then, send
+     invoices or payment links by hand and set the paid-through date in
+     the admin pages, which is workable up to roughly 15–20 subscribers.
+     Reasons and what Stripe would add are in `plans/plan.md`, "Decisions
+     made".
+   - Not built: overage and pay-per-case.
 6. **States:** only Utah, California and Texas are supported. Market to
    lawyers in those states first, and add states as demand shows (each
    needs evaluation cases).
