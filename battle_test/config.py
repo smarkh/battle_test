@@ -3,6 +3,7 @@
 import os
 import tomllib
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 # The laptop uses config.toml next to the code. The server's container sets
@@ -87,6 +88,16 @@ class WebConfig:
     secure_cookies: bool
     retention_days: int  # finished cases are deleted after this; 0 = keep forever
     behind_proxy: bool  # served through Caddy + Cloudflare (the deployed setup)
+    # The address users reach the site at, for the setup links the admin
+    # command prints. "" means http://host:port (the laptop).
+    public_url: str = ""
+    # How many cases one user may have waiting or running at once, so nobody
+    # fills the one-at-a-time queue. 0 = no cap.
+    max_active_cases: int = 3
+
+    @property
+    def base_url(self) -> str:
+        return self.public_url.rstrip("/") or f"http://{self.host}:{self.port}"
 
     def public_serving_problem(self) -> str | None:
         """Why this config may not serve on its host, or None if it may.
@@ -114,7 +125,70 @@ def load_web_config(path: Path = DEFAULT_CONFIG_PATH) -> WebConfig:
         raw = tomllib.load(f)["web"]
     return WebConfig(raw["host"], raw["port"], _resolve(path, raw["data_dir"]),
                      raw.get("secure_cookies", False), raw.get("retention_days", 90),
-                     raw.get("behind_proxy", False))
+                     raw.get("behind_proxy", False), raw.get("public_url", ""),
+                     raw.get("max_active_cases", 3))
+
+
+PERIODS = ("month", "total")
+
+
+@dataclass(frozen=True)
+class Plan:
+    """A service package: how many cases an account may run, and how often
+    that allowance renews."""
+    name: str
+    label: str
+    cases: int | None  # None = no limit
+    period: str        # "month": renews on the 1st. "total": never renews (a trial).
+
+    def period_start(self, now: datetime) -> str:
+        """Cases started at or after this count against the allowance.
+        "" means every case ever."""
+        if self.period == "total":
+            return ""
+        return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat(timespec="seconds")
+
+    def renews_on(self, now: datetime) -> str:
+        """The date the allowance next renews, or "" if it never does."""
+        if self.period == "total":
+            return ""
+        return datetime(now.year + now.month // 12, now.month % 12 + 1, 1).strftime("%Y-%m-%d")
+
+
+@dataclass(frozen=True)
+class Plans:
+    by_name: dict[str, Plan]
+    default: str  # for accounts with no plan, or one that's no longer in the config
+
+    def get(self, name: str) -> Plan:
+        return self.by_name.get(name) or self.by_name[self.default]
+
+    def pooled_cases(self, seat_plans: list[str]) -> int | None:
+        """The allowance a firm's seats share: the sum of each seat's plan.
+        None (no limit) if any seat's plan has none."""
+        cases = [self.get(name).cases for name in seat_plans]
+        return None if None in cases else sum(cases)
+
+
+def load_plans(path: Path = DEFAULT_CONFIG_PATH) -> Plans:
+    with open(path, "rb") as f:
+        raw = tomllib.load(f).get("plans")
+    if not raw:
+        raise ValueError(f"{path} has no [plans] section, so no account could be given a case allowance.")
+    by_name = {}
+    for name, value in raw.items():
+        if not isinstance(value, dict):
+            continue  # "default"
+        cases, period = value.get("cases"), value.get("period", "month")
+        if cases is not None and (not isinstance(cases, int) or isinstance(cases, bool) or cases < 0):
+            raise ValueError(f"plans.{name}.cases must be a whole number (or left out for no limit), got {cases!r}")
+        if period not in PERIODS:
+            raise ValueError(f"plans.{name}.period must be one of {PERIODS}, got {period!r}")
+        by_name[name] = Plan(name, value.get("label", name.capitalize()), cases, period)
+    default = raw.get("default")
+    if default not in by_name:
+        raise ValueError(f"plans.default must name one of the plans ({', '.join(by_name)}), got {default!r}")
+    return Plans(by_name, default)
 
 
 def _resolve(config_path: Path, value: str) -> Path:

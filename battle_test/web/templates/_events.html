@@ -1,0 +1,16 @@
+{# Rows of the activity log. Shared by the account page and the full log. #}
+{% if events %}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>When</th><th>Account</th><th>What</th><th>By</th></tr></thead>
+  <tbody>
+  {% for e in events %}
+    <tr><td class="muted">{{ e.at.replace("T", " ") }}</td>
+      <td><a href="/admin/users/{{ e.subject }}">{{ e.subject }}</a></td>
+      <td>{{ e.kind }}{% if e.detail %} <span class="muted">· {{ e.detail }}</span>{% endif %}</td>
+      <td>{{ e.actor or "–" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}<p class="empty">Nothing recorded yet.</p>{% endif %}

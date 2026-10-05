@@ -15,7 +15,7 @@ guardrails-style network isolation and data handling).
   - Step 5 parts 1–2: a local web UI with accounts, case deletion, and
     3-month retention.
 
-  129 unit tests pass.
+  181 unit tests pass.
 - **On the smark_iq server (2026-09-28):**
   - Deployed in Docker, fully independent of smark_iq, and **live at
     `https://battle.smarkiq.us`** through its own Cloudflare Tunnel.
@@ -93,7 +93,7 @@ Then open **http://127.0.0.1:8000**.
 - The laptop has its **own accounts,** in `cases\web\users.sqlite`,
   separate from the server's. Create one once, in your own terminal (it
   asks for the password):
-  `.venv\Scripts\python -m battle_test.web.users add NAME --admin`
+  `.venv\Scripts\python -m battle_test.web.users add NAME --admin --password --plan unlimited`
 - ⚠ **Port 8000 is also used by the server tunnel (B).** To run both at
   once, start the local one on another port: `... -m battle_test.web --port
   8001`, then use http://127.0.0.1:8001.
@@ -161,7 +161,7 @@ account (`smarkh`).
 |---|---|---|
 | Update the code | SSH | **(server)** `git pull` |
 | Rebuild after a code change | **Remote Desktop** (image builds fail over SSH) | **(server)** `docker compose build`, then the start command above |
-| Add an account or change a password | **SSH from the laptop** (not Remote Desktop: its keyboard mapping can garble passwords) | **(server)** `docker compose run --rm battle-test python -m battle_test.web.users add NAME` (or `passwd NAME`, `disable NAME`, `list`) |
+| Add an account or change a password | **SSH from the laptop** (not Remote Desktop: its keyboard mapping can garble passwords) | **(server)** `docker compose run --rm battle-test python -m battle_test.web.users add NAME --plan PLAN`, which prints a one-time setup link to send them (or `invite NAME`, `plan NAME PLAN`, `usage`, `passwd NAME`, `disable NAME`, `list`) |
 | Evaluation on 14B (~6 min) | SSH | **(server)** `docker compose run --rm -T battle-test python -m battle_test.evaluate --label server-14b` |
 | Read an evaluation summary | SSH | **(server)** `docker exec battle-test cat /data/cases/output/eval/<folder>/summary.md` |
 | Check both stacks are healthy | SSH | **(server)** `docker ps`: `battle-test`, `open-webui`, `caddy`, `cloudflared` |
@@ -763,6 +763,104 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
      lands straight on the new-case form ("Start your first case") instead
      of a "Start one" link. The form is a shared template
      (`_case_form.html`), used by this page and the New case page.
+   - **Setup links and plans: done (2026-10-04).**
+     - **Setup links.** `users add NAME --plan PLAN` no longer asks the
+       admin to type the user's password. It prints a one-time link
+       (`/setup/<token>`) where the user sets their own.
+       - 256-bit random token, only its SHA-256 stored, valid 72 hours,
+         works once. A newer link, `passwd` or `disable` cancels it.
+       - An invited account can't sign in until its password is set.
+       - `users invite NAME` makes a new link for an existing account (a
+         reset). The old password works until the link is used.
+       - `add --password` keeps the typed-password prompt, for your own
+         account.
+       - The link's address comes from `public_url` in `[web]`.
+       - **Limit:** whoever holds an unused link can take the account, so
+         it must be sent privately. Cloudflare Access is still required
+         before real users.
+     - **Plans.** `[plans]` in the config defines Trial (5 cases in
+       total), Solo (30/month), Pro (100), Firm (60) and Unlimited, from
+       `plans/profitability-plan.md`. Each account has one (`users plan
+       NAME PLAN`).
+       - **Decided:** a case counts when started. Failed runs and cases
+         deleted while queued aren't counted. Deleting a finished case
+         doesn't refund it. Months are calendar months, not billing
+         anniversaries.
+       - The limit is checked in the same lock as the insert, so two
+         submissions at once can't both take the last case.
+       - A `usage` table (date, state, mode, rounds, no case content)
+         outlives deleted cases. `users usage [--month]` reports it.
+       - Accounts with no plan, or one removed from the config, get
+         `plans.default` (Trial), so a mistake limits rather than opens.
+         Accounts from before this have no plan: set yours to `unlimited`.
+     - **Firm pooling (2026-10-04).** Accounts with the same `firm` share
+       one allowance (`users firm NAME [FIRM]`, or `add --firm`).
+       - **Decided:** the shared limit is the sum of the enabled seats'
+         plans, so it works for any plan, not just Firm. If any seat is
+         unlimited, the firm is. Usage is everyone's in the firm,
+         including disabled accounts' (their cases were still run).
+       - The period comes from the plan, so keep a firm's seats on the
+         same one. Mixing monthly seats with a Trial seat isn't handled
+         sensibly.
+       - Pooling shares the count only. Cases stay private to each user.
+       - An account that joins a firm brings its usage this period with
+         it, and takes it along when it leaves.
+     - **Queue cap (2026-10-04).** A user may have at most
+       `max_active_cases` (default 3, in `[web]`; 0 = no cap) cases queued
+       or running at once. More are refused with a message, and use none
+       of the allowance. It's per user, not per firm, and counts the
+       running case as well as the waiting ones.
+     - **Plan expiry (2026-10-04).** `users paid NAME DATE` sets the last
+       day an account's plan is paid for. `paid NAME` removes it.
+       - **Decided:** an expired account keeps access to its existing
+         cases (sign in, read, download, delete) and only loses the
+         ability to start new ones, so a late payment doesn't lock a
+         lawyer out of their work. `disable` remains the full lock-out.
+       - The paid-through day itself still counts as paid.
+       - Accounts with no date never expire, so nothing changes for
+         existing accounts.
+       - An expired firm seat stops adding to the pooled allowance, like
+         a disabled one.
+       - The date is set by hand. Nothing moves it on automatically until
+         billing (Stripe) exists, and retention still deletes an expired
+         account's cases after 90 days.
+     - **Admin pages and activity log (2026-10-04).** `/admin`, for
+       accounts with the admin flag. This **changes the earlier decision**
+       that accounts are managed only from the command line: that needs
+       SSH and Docker on the server, which doesn't work for a second
+       admin. The command line still does everything.
+       - **What they do:** list accounts (plan, firm, usage, paid-through,
+         last sign-in, status), add an account, change plan, firm and
+         paid-through date, issue a setup link, disable and enable.
+       - **Limits, decided because an admin sign-in on a public site is
+         worth stealing:**
+         - Every change needs the admin's own password again, so an open
+           session or a stolen cookie can't change anything.
+         - Admins never see case titles, text or results. Case privacy
+           has no admin exception.
+         - Making or removing admins is command-line only, and so are
+           setup links for, and disabling of, admin accounts. One admin
+           sign-in can't take over another or create more.
+         - Non-admins get a 404.
+       - **Activity log:** an `events` table in `users.sqlite`. It
+         records sign-ins, failed sign-ins (with the client address),
+         refused admin password checks, and every account change with
+         who made it (`command line` for the `users` command). Changes
+         are logged in the same transaction as the change. No code
+         deletes from it.
+         - A failed sign-in is logged only for a username that exists,
+           because people type passwords into the username box.
+         - Not logged: case activity beyond the usage record, and
+           sign-outs.
+         - It grows without limit. Fine at this size; it will want a
+           retention rule later.
+       - **Still needed:** Cloudflare Access in front of `/admin` (and
+         the whole site) before real users. The password re-check is the
+         only second barrier until then.
+     - **Not built:** overage, pay-per-case, and Stripe.
+     - **Tested:** 52 new tests (181 in all), plus a Chrome pass on the
+       demo model with a throwaway account: setup link, sign-in, one case,
+       then the form refusing a second on a 1-case trial.
    - **Part 2 is now complete.** Next is part 3: upload with text
      extraction, and `.docx`/PDF export.
    - **New-case options renamed** to say what gets drafted: "Draft the
@@ -1035,9 +1133,9 @@ protections (item 2 above).
 
 ## Decisions made
 
-- **Web UI sign-in:** the app's own accounts, created by an admin from the
-  command line, with no self-signup. Each user sees only their own cases.
-  See step 5, part 2.
+- **Web UI sign-in:** the app's own accounts, with no self-signup. Each user
+  sees only their own cases. Accounts are managed by an admin, from the
+  admin pages (since 2026-10-04) or the command line. See step 5, part 2.
 - **Case retention (default, for now):** 3 months, then automatic deletion.
   Users can delete sooner. See step 5, part 2.
 - **Server deployment (2026-09-25):**
@@ -1184,7 +1282,7 @@ Where things stand:
 
 Before doing anything else:
 1. Run `python -m unittest` (use .venv/Scripts/python) and confirm all
-   tests pass (129 as of 2026-10-03).
+   tests pass (181 as of 2026-10-04).
 2. Check that data/law.sqlite exists. If it doesn't, rebuild it with
    `python -m battle_test.corpus build`.
 3. Check `git status` is clean, and that the latest commit is pushed to

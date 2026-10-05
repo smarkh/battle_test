@@ -6,6 +6,21 @@
   <p class="muted">Signed in as <strong>{{ session.user.username }}</strong>{% if session.user.is_admin %} (admin){% endif %}.</p>
   {% if error %}<div class="errors" role="alert"><p>{{ error }}</p></div>{% endif %}
   {% if message %}<div class="notice" role="status"><p>{{ message }}</p></div>{% endif %}
+  <h2>Plan</h2>
+  {% if allowance.ended %}<div class="errors" role="alert"><p>{{ allowance.used_up }}</p></div>
+  {% elif session.user.paid_through %}<p class="muted">Paid through {{ session.user.paid_through }}.</p>{% endif %}
+  <p><strong>{{ allowance.plan.label }}</strong>:
+    {% if allowance.limit is none %}no limit on cases. {{ allowance.used }} started
+      {{ "this month" if allowance.renews_on else "so far" }}.
+    {% else %}{{ allowance.used }} of {{ allowance.limit }} cases used
+      {{ "this month" if allowance.renews_on else "so far" }}.
+    {% endif %}
+    {% if allowance.renews_on %}The count starts again on {{ allowance.renews_on }}.{% endif %}</p>
+  {% if allowance.pool %}
+  <p>This allowance is shared by the {{ allowance.seats }} seats of your firm
+    (<strong>{{ session.user.firm }}</strong>), and the count covers everyone's cases.</p>
+  {% endif %}
+  <p class="hint">A case counts when you start it. Runs that fail aren't counted.</p>
   <h2>Change password</h2>
   <form method="post" action="/account" class="case-form">
     <input type="hidden" name="csrf" value="{{ session.csrf_token }}">

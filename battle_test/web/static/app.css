@@ -125,8 +125,10 @@ a.cite.ok-unseen::after { content: " ☑"; font-size: 0.75em; }
   padding: 0.05rem 0.6rem; margin: 0.15rem; font-size: 0.85rem; }
 .empty { color: var(--muted); }
 .narrow { max-width: 26rem; margin: 0 auto; }
-input[type="text"], input[type="password"] { width: 100%; font: inherit; padding: 0.5rem; border: 1px solid var(--border);
+input[type="text"], input[type="password"], input[type="date"], select { width: 100%; font: inherit; padding: 0.5rem; border: 1px solid var(--border);
   border-radius: 6px; background: var(--bg); color: var(--text); margin-top: 0.25rem; }
+.narrow-form { max-width: 26rem; }
+.setup-link { overflow-wrap: anywhere; user-select: all; }
 form.inline { display: inline; margin: 0; }
 button.link { background: none; border: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
 

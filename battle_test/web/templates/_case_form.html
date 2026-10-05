@@ -5,6 +5,14 @@
 </div>
 {% endif %}
 
+{% if allowance.left == 0 %}
+<div class="errors" role="alert"><p>{{ allowance.used_up }}</p></div>
+{% elif allowance.left is not none %}
+<p class="muted">{{ allowance.left }} of {{ allowance.limit }} cases left
+  {{ "this month" if allowance.renews_on else "in your plan" }}
+  ({% if allowance.pool %}shared by your firm's {{ allowance.seats }} seats{% else %}{{ allowance.plan.label }}{% endif %}).</p>
+{% endif %}
+
 <form method="post" action="/cases" class="case-form">
   <input type="hidden" name="csrf" value="{{ session.csrf_token }}">
   <fieldset>
@@ -63,6 +71,6 @@
     </div>
   </fieldset>
 
-  <button type="submit" class="button primary">Start the run</button>
+  <button type="submit" class="button primary" {% if allowance.left == 0 %}disabled{% endif %}>Start the run</button>
   <p class="hint">A run takes several minutes and continues in the background. You can close the page and come back.</p>
 </form>

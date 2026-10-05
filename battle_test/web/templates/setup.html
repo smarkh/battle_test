@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Set your password{% endblock %}
+{% block content %}
+<div class="narrow">
+  <h1>Set your password</h1>
+  {% if error %}<div class="errors" role="alert"><p>{{ error }}</p></div>{% endif %}
+  {% if user %}
+  <p class="muted">Your username is <strong>{{ user.username }}</strong>. Choose a password to finish setting up
+    your account. This link works once.</p>
+  <form method="post" class="case-form">
+    {# Lets password managers save the username with the new password. #}
+    <input type="text" name="username" value="{{ user.username }}" autocomplete="username" readonly hidden>
+    <label class="field"><span>New password</span>
+      <small>At least 12 characters, and not containing your username.</small>
+      <input type="password" name="new" autocomplete="new-password" minlength="12" required autofocus></label>
+    <label class="field"><span>Repeat new password</span>
+      <input type="password" name="repeat" autocomplete="new-password" minlength="12" required></label>
+    <button type="submit" class="button primary">Set password</button>
+  </form>
+  {% else %}
+  <p><a href="/login">Sign in</a></p>
+  {% endif %}
+</div>
+{% endblock %}

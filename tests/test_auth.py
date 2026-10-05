@@ -1,3 +1,4 @@
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -118,6 +119,135 @@ class AuthStoreTest(unittest.TestCase):
         self.store.end_session(a)
         self.assertIsNone(self.store.session(a))
         self.assertIsNotNone(self.store.session(b))
+
+    # --- setup links and plans ------------------------------------------------
+
+    def test_invited_account_cannot_sign_in_until_its_password_is_set(self):
+        user = self.store.create_user("dana", None, plan="solo")
+        self.assertTrue(user.needs_setup)
+        self.assertEqual(user.plan, "solo")
+        for attempt in ("", auth.NO_PASSWORD, PW):
+            with self.assertRaisesRegex(AuthError, "Wrong username or password"):
+                self.store.authenticate("dana", attempt)
+
+        token = self.store.create_setup_token("dana")
+        raw = (Path(self.tmp.name) / "users.sqlite").read_bytes()
+        self.assertNotIn(token.encode(), raw)  # only its hash is stored
+        self.assertEqual(self.store.setup_user(token).username, "dana")
+        self.store.finish_setup(token, PW)
+        user = self.store.authenticate("dana", PW)
+        self.assertFalse(user.needs_setup)
+
+    def test_setup_link_works_once(self):
+        self.store.create_user("dana", None)
+        token = self.store.create_setup_token("dana")
+        self.store.finish_setup(token, PW)
+        self.assertIsNone(self.store.setup_user(token))
+        with self.assertRaisesRegex(AuthError, "expired or was already used"):
+            self.store.finish_setup(token, PW2)
+        self.store.authenticate("dana", PW)  # the second attempt changed nothing
+
+    def test_setup_link_expires_and_is_replaced_by_a_newer_one(self):
+        self.store.create_user("dana", None)
+        first = self.store.create_setup_token("dana")
+        second = self.store.create_setup_token("dana")
+        self.assertIsNone(self.store.setup_user(first))
+        self.assertIsNotNone(self.store.setup_user(second))
+        self.assertIsNone(self.store.setup_user("not-a-token"))
+        self.clock.t += auth.SETUP_LINK_LIFETIME.total_seconds() + 1
+        self.assertIsNone(self.store.setup_user(second))
+        with self.assertRaises(AuthError):
+            self.store.finish_setup(second, PW)
+
+    def test_setup_link_keeps_the_password_rules(self):
+        self.store.create_user("dana", None)
+        token = self.store.create_setup_token("dana")
+        with self.assertRaisesRegex(AuthError, "at least 12"):
+            self.store.finish_setup(token, "short")
+        self.assertIsNotNone(self.store.setup_user(token))  # a refused password doesn't use the link up
+
+    def test_setup_link_for_an_existing_account(self):
+        # A reset: the old password works until the link is used, and using
+        # it signs out every session.
+        user = self.store.create_user("dana", PW)
+        session = self.store.create_session(user)
+        token = self.store.create_setup_token("dana")
+        self.store.authenticate("dana", PW)
+        self.assertIsNotNone(self.store.session(session))
+        self.store.finish_setup(token, PW2)
+        self.assertIsNone(self.store.session(session))
+        with self.assertRaises(AuthError):
+            self.store.authenticate("dana", PW)
+        self.store.authenticate("dana", PW2)
+
+    def test_disabling_or_a_new_password_cancels_the_setup_link(self):
+        self.store.create_user("dana", None)
+        token = self.store.create_setup_token("dana")
+        self.store.set_password("dana", PW)
+        self.assertIsNone(self.store.setup_user(token))
+
+        token = self.store.create_setup_token("dana")
+        self.store.set_disabled("dana", True)
+        self.assertIsNone(self.store.setup_user(token))
+        with self.assertRaisesRegex(AuthError, "disabled"):
+            self.store.create_setup_token("dana")
+        with self.assertRaisesRegex(AuthError, "No user"):
+            self.store.create_setup_token("nobody")
+
+    def test_set_plan(self):
+        self.store.create_user("dana", PW)
+        self.assertEqual(self.store.get_user("dana").plan, "")
+        self.store.set_plan("dana", "pro")
+        self.assertEqual(self.store.get_user("dana").plan, "pro")
+        self.assertEqual(self.store.session(self.store.create_session(self.store.get_user("dana"))).user.plan, "pro")
+
+    def test_firms(self):
+        self.store.create_user("dana", PW, firm="Whitfield-Law")
+        self.store.create_user("erin", PW)
+        self.store.create_user("solo", PW)
+        self.store.set_firm("erin", " whitfield-law ")
+        self.store.set_disabled("erin", True)
+        members = self.store.firm_members("WHITFIELD-LAW")
+        self.assertEqual([(m.username, m.firm, m.disabled) for m in members],
+                         [("dana", "whitfield-law", False), ("erin", "whitfield-law", True)])
+        self.assertEqual(self.store.firm_members(""), [])  # accounts with no firm aren't one firm
+        self.store.set_firm("erin", "")
+        self.assertEqual(len(self.store.firm_members("whitfield-law")), 1)
+        with self.assertRaisesRegex(AuthError, "Firm names"):
+            self.store.set_firm("dana", "two words")
+
+    def test_paid_through(self):
+        self.store.create_user("dana", PW)
+        user = self.store.get_user("dana")
+        self.assertEqual(user.paid_through, "")
+        self.assertFalse(user.lapsed("2099-01-01"))  # no date: never ends
+        self.store.set_paid_through("dana", "2026-10-31")
+        user = self.store.authenticate("dana", PW)   # an unpaid account can still sign in
+        self.assertFalse(user.lapsed("2026-10-31"))  # the last paid day is still paid
+        self.assertTrue(user.lapsed("2026-11-01"))
+        self.assertFalse(user.is_seat("2026-11-01"))
+        for bad in ("31/10/2026", "2026-02-30", "soon"):
+            with self.assertRaisesRegex(AuthError, "date must look like"):
+                self.store.set_paid_through("dana", bad)
+        self.store.set_paid_through("dana", "")
+        self.assertEqual(self.store.get_user("dana").paid_through, "")
+
+    def test_database_from_before_plans_is_upgraded(self):
+        path = Path(self.tmp.name) / "old.sqlite"
+        old = sqlite3.connect(path)
+        old.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE, "
+                    "password_hash TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, "
+                    "disabled INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)")
+        old.execute("INSERT INTO users (username, password_hash, created_at) VALUES ('dana', ?, '2026-09-25T10:00:00')",
+                    (auth.hash_password(PW),))
+        old.commit()
+        old.close()
+        store = AuthStore(path)
+        try:
+            user = store.authenticate("dana", PW)
+        finally:
+            store.close()
+        self.assertEqual((user.plan, user.firm, user.paid_through, user.needs_setup), ("", "", "", False))
 
 
 if __name__ == "__main__":

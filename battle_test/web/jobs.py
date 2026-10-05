@@ -19,7 +19,7 @@ import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterable
 
 from battle_test.pipeline import CaseRun
 
@@ -39,7 +39,27 @@ CREATE TABLE IF NOT EXISTS cases (
     finished_at TEXT,
     user_id INTEGER               -- owner; only they can see the case
 );
+-- One row per case started, for plan allowances and billing. It outlives the
+-- case (deleted by its owner, or by retention) and holds nothing from it.
+CREATE TABLE IF NOT EXISTS usage (
+    case_id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    state_code TEXT NOT NULL,
+    input_mode TEXT NOT NULL,
+    rounds INTEGER NOT NULL,
+    counted INTEGER NOT NULL DEFAULT 1   -- 0 once the run fails, or is deleted before it starts
+);
+CREATE INDEX IF NOT EXISTS usage_by_user ON usage (user_id, created_at);
 """
+
+
+class QueueFull(Exception):
+    """The user already has as many cases waiting or running as they may."""
+
+
+class QuotaExceeded(Exception):
+    """The user has already started as many cases as their plan allows."""
 
 
 @dataclass(frozen=True)
@@ -72,18 +92,73 @@ class JobStore:
         return self.root / job_id
 
     def create(self, user_id: int, state_code: str, input_mode: str, text: str, rounds: int,
-               title: str) -> Job:
+               title: str, *, limit: int | None = None, since: str = "", pool: Iterable[int] = (),
+               max_active: int = 0) -> Job:
+        """With a limit, raises QuotaExceeded if the user, together with the
+        users in `pool` (their firm), already has that many counted cases
+        since `since` (see used). With max_active, raises QueueFull if the
+        user already has that many cases queued or running."""
         job_id = uuid.uuid4().hex
-        self._dir(job_id).mkdir()
-        (self._dir(job_id) / "input.md").write_text(text, encoding="utf-8")
-        with self._lock, self._db:
-            self._db.execute(
-                "INSERT INTO cases (id, created_at, state_code, input_mode, rounds, title, status, user_id) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (job_id, datetime.now().isoformat(timespec="seconds"), state_code, input_mode,
-                 rounds, title, QUEUED, user_id),
-            )
+        now = datetime.now().isoformat(timespec="seconds")
+        # One lock around the check and the insert, so two submissions at
+        # once can't both take the last case of an allowance.
+        with self._lock:
+            if max_active > 0 and self._active(user_id) >= max_active:
+                raise QueueFull()
+            if limit is not None and self._used({user_id, *pool}, since) >= limit:
+                raise QuotaExceeded()
+            self._dir(job_id).mkdir()
+            (self._dir(job_id) / "input.md").write_text(text, encoding="utf-8")
+            with self._db:
+                self._db.execute(
+                    "INSERT INTO cases (id, created_at, state_code, input_mode, rounds, title, status, user_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (job_id, now, state_code, input_mode, rounds, title, QUEUED, user_id),
+                )
+                self._db.execute(
+                    "INSERT INTO usage (case_id, user_id, created_at, state_code, input_mode, rounds) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (job_id, user_id, now, state_code, input_mode, rounds),
+                )
         return self.get(job_id)
+
+    def _active(self, user_id: int) -> int:
+        return self._db.execute("SELECT COUNT(*) FROM cases WHERE user_id = ? AND status IN (?, ?)",
+                                (user_id, QUEUED, RUNNING)).fetchone()[0]
+
+    def used(self, user_ids: Iterable[int], since: str = "") -> int:
+        """Cases these users (one, or a firm's) have started at or after
+        `since` (an ISO time; "" for ever) that count against their
+        allowance: queued, running and finished ones, including any deleted
+        since."""
+        with self._lock:
+            return self._used(set(user_ids), since)
+
+    def _used(self, user_ids: set[int], since: str) -> int:
+        return self._db.execute(
+            f"SELECT COUNT(*) FROM usage WHERE user_id IN ({', '.join('?' * len(user_ids))}) "
+            "AND counted = 1 AND created_at >= ?", (*user_ids, since)
+        ).fetchone()[0]
+
+    def usage_rows(self, user_id: int, limit: int = 100) -> list[tuple[str, str, str, int, bool]]:
+        """A user's cases as the usage record has them, newest first:
+        (started, state, input mode, rounds, counted). No titles or text."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT created_at, state_code, input_mode, rounds, counted FROM usage "
+                "WHERE user_id = ? ORDER BY created_at DESC LIMIT ?", (user_id, limit)
+            ).fetchall()
+        return [(*r[:4], bool(r[4])) for r in rows]
+
+    def usage_by_user(self, since: str = "", until: str = "9999") -> dict[int, tuple[int, int]]:
+        """Per user id: (cases counted, cases not counted) started from
+        `since` up to but not including `until`."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT user_id, SUM(counted), SUM(1 - counted) FROM usage "
+                "WHERE created_at >= ? AND created_at < ? GROUP BY user_id", (since, until)
+            ).fetchall()
+        return {user_id: (counted, uncounted) for user_id, counted, uncounted in rows}
 
     def get(self, job_id: str) -> Job | None:
         with self._lock:
@@ -111,6 +186,8 @@ class JobStore:
             values.append(datetime.now().isoformat(timespec="seconds"))
         with self._lock, self._db:
             self._db.execute(f"UPDATE cases SET {', '.join(sets)} WHERE id = ?", (*values, job_id))
+            if status == FAILED:  # a run that failed doesn't use up the allowance
+                self._db.execute("UPDATE usage SET counted = 0 WHERE case_id = ?", (job_id,))
 
     def queue_position(self, job: Job) -> int:
         """1 = next to run. Counts queued jobs submitted no later than this one."""
@@ -124,6 +201,10 @@ class JobStore:
     def delete(self, job_id: str) -> None:
         """Remove a case's row and every file it has. Irreversible."""
         with self._lock, self._db:
+            # Deleted while still waiting: it never ran, so it isn't counted.
+            self._db.execute(
+                "UPDATE usage SET counted = 0 WHERE case_id = ? "
+                "AND (SELECT status FROM cases WHERE id = ?) = ?", (job_id, job_id, QUEUED))
             self._db.execute("DELETE FROM cases WHERE id = ?", (job_id,))
         shutil.rmtree(self._dir(job_id), ignore_errors=True)
 

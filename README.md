@@ -80,8 +80,9 @@ Each output file contains:
 | `battle_test/ollama_client.py` | Minimal Ollama client (streaming, JSON mode) |
 | `battle_test/config.py` | Loads `config.toml` |
 | `battle_test/web/app.py` | Web UI routes: case form, live progress, results, download |
-| `battle_test/web/jobs.py` | Case storage, the one-at-a-time job queue, live progress events |
-| `battle_test/web/auth.py` | Accounts, password hashing, sessions, login lockout |
+| `battle_test/web/jobs.py` | Case storage, the usage record and plan limits, the one-at-a-time job queue, live progress events |
+| `battle_test/web/auth.py` | Accounts, password hashing, one-time setup links, sessions, login lockout |
+| `battle_test/web/admin.py` | Admin pages: accounts, plans, setup links, the activity log |
 | `battle_test/web/users.py` | Admin command for accounts (`python -m battle_test.web.users`) |
 | `battle_test/web/render.py` | Turning a finished run into HTML (links, highlights, summaries) |
 | `battle_test/web/demo.py` | The demo model for working on the UI without a GPU |
@@ -99,7 +100,7 @@ Laptop and server accounts are separate. You'll be asked for the password at
 a hidden prompt, so run it yourself in a terminal:
 
 ```
-python -m battle_test.web.users add NAME --admin
+python -m battle_test.web.users add NAME --admin --password --plan unlimited
 ```
 
 Then start the server and open http://127.0.0.1:8000:
@@ -109,11 +110,64 @@ python -m battle_test.web                 # real model via Ollama
 python -m battle_test.web --demo-model    # canned drafts, no GPU needed
 ```
 
-- **Sign in** with that account. There's no self-signup: an admin adds
-  people with `python -m battle_test.web.users add NAME`, and can also
-  `passwd`, `disable`, `enable` or `list` accounts. Users can change their
-  own password under their name in the header. Each user sees only their
-  own cases.
+- **Sign in** with that account. There's no self-signup, and each user sees
+  only their own cases. Users can change their own password under their
+  name in the header.
+- **Adding a user:** `python -m battle_test.web.users add NAME --plan solo`
+  creates the account and prints a **one-time setup link**. Send it to the
+  user privately. They open it and choose their own password, so nobody
+  else ever knows it.
+  - The link works once and expires after 72 hours. Only a hash of it is
+    stored.
+  - `invite NAME` prints a new link (a forgotten password, or an expired
+    link), and cancels the earlier one. So does `passwd` or `disable`.
+  - Other commands: `passwd`, `disable`, `enable`, `list`.
+- **Admin pages:** an admin sees an "Admin" link in the header (`/admin`).
+  Everything below can be done there or with the `users` command.
+  - **Accounts:** each account's plan, firm, cases used, paid-through date,
+    last sign-in and status. Add an account (you get its one-time setup
+    link, shown once), change its plan, firm or paid-through date, issue a
+    new setup link, or disable and enable it.
+  - **Activity log** (`/admin/activity`, and per account): sign-ins, failed
+    sign-ins with the address they came from, and every account change with
+    who made it, from the pages or the command line. Entries can't be
+    edited or removed.
+  - **Limits, on purpose:**
+    - Every change asks for the admin's own password again.
+    - Admins never see a case's title, text or results, only when cases
+      were started, the state, mode and rounds.
+    - Making or removing an admin, and setup links for or disabling of an
+      admin account, are command-line only (`add NAME --admin --password`).
+    - Anyone who isn't an admin gets a 404.
+- **Plans and usage:** each account is on a plan from `[plans]` in the
+  config (Trial 5 cases in total; Solo 30, Pro 100, Firm 60 a month;
+  Unlimited). `plan NAME PLAN` changes it, effective at once.
+  - A case counts when it's started. Monthly allowances renew on the 1st.
+  - A run that fails, or a case deleted before it ran, isn't counted.
+    Deleting a finished case doesn't give the use back.
+  - At the limit, the new-case form says so and refuses more. The account
+    page shows the plan and what's been used.
+  - `usage [--month YYYY-MM]` reports cases per account. The usage record
+    keeps only the date, state, mode and rounds of each case, and outlives
+    the case itself.
+  - **Firms:** accounts in the same firm share one allowance, the sum of
+    their plans (three Firm seats share 180 a month), used by whichever of
+    them needs it. `add NAME --plan firm --firm FIRM` or `firm NAME FIRM`
+    joins one, and `firm NAME` leaves it. Cases stay private to each user.
+    A disabled account stops adding to the allowance, but what it already
+    used still counts. `usage` adds a line per firm.
+  - **Non-payment:** `paid NAME 2026-11-30` records the last day a plan is
+    paid for, and `paid NAME` removes the date (no end). After that day the
+    user can still sign in, read, download and delete their cases, but
+    can't start new ones until you move the date on. An unpaid firm seat
+    stops adding to the firm's allowance. `list` and `usage` mark expired
+    accounts. To shut someone out completely, use `disable`.
+  - **Queue cap:** a user may have at most 3 cases waiting or running at
+    once (`max_active_cases` in `[web]`, 0 for no cap), so one person can't
+    fill the one-at-a-time queue. A refused case uses none of the allowance.
+  - An account with no plan gets `plans.default` (Trial). **Accounts made
+    before plans existed have none,** so give your own one:
+    `plan NAME unlimited`.
 - **New case** (shown straight away if you have no cases yet): pick the
   state, choose what to draft, and choose 1 or 2 rounds:
   - **"Draft the complaint and the motion"**: fill in the case information.

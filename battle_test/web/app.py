@@ -20,15 +20,16 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from battle_test.config import DEFAULT_CONFIG_PATH, load_config, load_corpus_config, load_web_config
+from battle_test.config import (DEFAULT_CONFIG_PATH, Plan, Plans, load_config, load_corpus_config, load_plans,
+                                load_web_config)
 from battle_test.law_index import LawIndex
 from battle_test.ollama_client import OllamaClient
 from battle_test.pipeline import ChatClient, run_case
 from battle_test.prompts import SUPPORTED_STATES
 from battle_test.report import render_markdown
-from battle_test.web import render
-from battle_test.web.auth import AuthError, AuthStore, Session
-from battle_test.web.jobs import DONE, FAILED, QUEUED, RUNNING, Job, JobStore, Worker
+from battle_test.web import admin, render
+from battle_test.web.auth import SETUP_LINK_INVALID, AuthError, AuthStore, Session, User
+from battle_test.web.jobs import DONE, FAILED, QUEUED, RUNNING, Job, JobStore, QueueFull, QuotaExceeded, Worker
 
 HERE = Path(__file__).resolve().parent
 MAX_INPUT_CHARS = 60_000  # ~15k tokens: a long complaint, still inside the models' context
@@ -101,6 +102,39 @@ class LoginRequired(Exception):
     pass
 
 
+@dataclasses.dataclass(frozen=True)
+class Allowance:
+    """Where a user stands against their plan's case allowance."""
+    plan: Plan
+    limit: int | None  # None = no limit. For a firm, its seats' allowances added up.
+    used: int          # by this user, or by everyone in their firm
+    since: str         # cases started from then count ("" = ever)
+    renews_on: str     # "" if it never renews
+    pool: tuple[int, ...] = ()  # the firm's user ids, when the allowance is shared
+    seats: int = 0              # the firm's enabled, paid-up accounts
+    ended: str = ""             # the last day the plan was paid for, once that has passed
+
+    @property
+    def left(self) -> int | None:
+        """Cases they can still start, or None for no limit."""
+        if self.ended:
+            return 0
+        return None if self.limit is None else max(0, self.limit - self.used)
+
+    @property
+    def used_up(self) -> str:
+        """What to tell a user who has none left."""
+        if self.ended:
+            return (f"Your {self.plan.label} plan ended on {self.ended}, so you can't start new cases. Your "
+                    "existing cases are still here. Ask your admin to renew it.")
+        who = "Your firm has" if self.pool else "You've"
+        whose = "its shared" if self.pool else f"your {self.plan.label}"
+        if self.renews_on:
+            return (f"{who} used all {self.limit} cases in {whose} plan this month. "
+                    f"You can start more from {self.renews_on}, or ask your admin about a larger plan.")
+        return f"{who} used all {self.limit} cases in {whose} plan. Ask your admin about a plan with more."
+
+
 async def progress_events(worker: Worker, store: JobStore, job_id: str, poll_seconds: float = 0.5):
     """Server-sent events for a case: stage changes and draft text as they
     happen, queue position while waiting, and a heartbeat comment whenever
@@ -136,15 +170,16 @@ async def progress_events(worker: Worker, store: JobStore, job_id: str, poll_sec
 
 def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | None = None,
                model_label: str | None = None, data_dir: Path | None = None,
-               law_db: Path | None = None) -> FastAPI:
-    """`client`, `data_dir` and `law_db` override the config (for the demo
-    model and for tests). `model_label` replaces the model names recorded on
+               law_db: Path | None = None, plans: Plans | None = None) -> FastAPI:
+    """`client`, `data_dir`, `law_db` and `plans` override the config (for the
+    demo model and for tests). `model_label` replaces the model names recorded on
     each run, so demo output isn't labelled as a real model's."""
     cfg = load_config(config_path)
     if model_label:
         cfg = dataclasses.replace(cfg, plaintiff_model=model_label, defendant_model=model_label)
     corpus = load_corpus_config(config_path)
     web = load_web_config(config_path)
+    plans = plans or load_plans(config_path)
     client = client or OllamaClient.from_config(cfg)
     root = data_dir or web.data_dir
     store = JobStore(root)
@@ -240,7 +275,26 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
         response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", secure=web.secure_cookies,
                             max_age=7 * 24 * 3600, path="/")
 
+    def allowance_for(user: User) -> Allowance:
+        now = datetime.now()
+        plan = plans.get(user.plan)
+        since = plan.period_start(now)
+        today = now.strftime("%Y-%m-%d")
+        ended = user.paid_through if user.lapsed(today) else ""
+        if not user.firm:
+            return Allowance(plan, plan.cases, store.used([user.id], since), since, plan.renews_on(now),
+                             ended=ended)
+        # A firm's seats share one allowance. Disabled and unpaid accounts
+        # aren't seats, but what they used this period still counts.
+        members = auth.firm_members(user.firm)
+        seats = [m for m in members if m.is_seat(today)]
+        pool = tuple(m.id for m in members)
+        return Allowance(plan, plans.pooled_cases([m.plan for m in seats]), store.used(pool, since), since,
+                         plan.renews_on(now), pool, len(seats), ended)
+
     def page(request: Request, name: str, session: Session | None, **context) -> HTMLResponse:
+        if session:
+            context["allowance"] = allowance_for(session.user)
         return templates.TemplateResponse(request, name, {"session": session, **context})
 
     def own_job(job_id: str, session: Session) -> Job:
@@ -262,7 +316,7 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
         if auth.session(request.cookies.get(SESSION_COOKIE)):
             return RedirectResponse(safe_next(next), status_code=303)
         return page(request, "login.html", None, next=safe_next(next), error="", username="",
-                    no_accounts=not auth.list_users())
+                    no_accounts=not auth.list_users(), password_set=request.query_params.get("set") == "1")
 
     @app.post("/login")
     async def login(request: Request):
@@ -270,15 +324,53 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
         form = await request.form()
         username, password = str(form.get("username", "")), str(form.get("password", ""))
         target = safe_next(str(form.get("next", "/")))
+        # For the activity log. Behind the tunnel, uvicorn takes it from the
+        # forwarded headers (see __main__.py).
+        origin = f"from {request.client.host}" if request.client else ""
         try:
             user = auth.authenticate(username, password)
         except AuthError as e:
+            known = auth.get_user(username)
+            if known:  # never a mistyped name: people type passwords into that box
+                auth.log("sign-in failed", known.username, detail=origin)
             response = page(request, "login.html", None, next=target, error=str(e), username=username,
                             no_accounts=not auth.list_users())
             response.status_code = 401
             return response
+        auth.log("signed in", user.username, by=user.username, detail=origin)
         response = RedirectResponse(target, status_code=303)
         set_session_cookie(response, auth.create_session(user))
+        return response
+
+    # A new user's one-time link (python -m battle_test.web.users add / invite).
+    # The token in the address is the only credential, so these need no session.
+
+    def setup_page(request: Request, token: str, error: str = "") -> HTMLResponse:
+        user = auth.setup_user(token)
+        response = page(request, "setup.html", None, user=user, error=error if user else SETUP_LINK_INVALID)
+        response.status_code = 404 if user is None else 400 if error else 200
+        return response
+
+    @app.get("/setup/{token}", response_class=HTMLResponse)
+    def setup(request: Request, token: str):
+        return setup_page(request, token)
+
+    @app.post("/setup/{token}")
+    async def finish_setup(request: Request, token: str):
+        same_origin(request)
+        form = await request.form()
+        new = str(form.get("new", ""))
+        if new != str(form.get("repeat", "")):
+            return setup_page(request, token, "The passwords didn't match.")
+        try:
+            auth.finish_setup(token, new)
+        except AuthError as e:
+            return setup_page(request, token, str(e))
+        # Sign out whoever this browser was signed in as, so the sign-in page
+        # is shown rather than their case list.
+        auth.end_session(request.cookies.get(SESSION_COOKIE))
+        response = RedirectResponse("/login?set=1", status_code=303)
+        response.delete_cookie(SESSION_COOKIE, path="/")
         return response
 
     @app.post("/logout")
@@ -307,7 +399,7 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
             error = "The new passwords didn't match."
         if not error:
             try:
-                auth.set_password(session.user.username, form.get("new", ""))
+                auth.set_password(session.user.username, form.get("new", ""), by=session.user.username)
             except AuthError as e:
                 error = str(e)
         if error:
@@ -363,7 +455,27 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
         if errors:
             return page(request, "new.html", session, errors=errors, form=form)
 
-        job = store.create(session.user.id, state, mode, text, int(rounds), title.strip() or "Untitled case")
+        allowed = allowance_for(session.user)
+        if allowed.ended:
+            # As for a used-up allowance, the form itself says why.
+            response = page(request, "new.html", session, errors=[], form=form)
+            response.status_code = 403
+            return response
+        try:
+            job = store.create(session.user.id, state, mode, text, int(rounds), title.strip() or "Untitled case",
+                               limit=allowed.limit, since=allowed.since, pool=allowed.pool,
+                               max_active=web.max_active_cases)
+        except QueueFull:
+            response = page(request, "new.html", session, form=form, errors=[
+                f"You already have {web.max_active_cases} cases waiting or running, which is the most allowed at "
+                "once. Start this one when one of them has finished."])
+            response.status_code = 429
+            return response
+        except QuotaExceeded:
+            # The form itself says the allowance is used up, and keeps what was typed.
+            response = page(request, "new.html", session, errors=[], form=form)
+            response.status_code = 403
+            return response
         worker.submit(job.id)
         return RedirectResponse(f"/cases/{job.id}", status_code=303)
 
@@ -416,4 +528,6 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
         return FileResponse(path, media_type="text/markdown",
                             filename=f"battle-test-{job.state_code.lower()}-{job.created_at[:10]}.md")
 
+    admin.add_routes(app, auth=auth, store=store, plans=plans, web=web, current=current,
+                     checked_form=checked_form, page=page, allowance_for=allowance_for)
     return app

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}{{ user.username }}{% endblock %}
+{% block content %}
+<p><a href="/admin">← Accounts</a></p>
+<h1>{{ user.username }}{% if user.is_admin %} <span class="muted">(admin)</span>{% endif %}</h1>
+{% if error %}<div class="errors" role="alert"><p>{{ error }}</p></div>{% endif %}
+{% if message %}<div class="notice" role="status"><p>{{ message }}</p></div>{% endif %}
+{% if link %}
+<div class="disclaimer">
+  <p><strong>Setup link</strong> (works once, for {{ link_hours }} hours). It's shown only now:</p>
+  <p><code class="setup-link">{{ link }}</code></p>
+  <p class="hint">Send it to them privately. Until it's used, anyone who has it can set this account's password.
+    Any earlier link for this account no longer works.</p>
+</div>
+{% endif %}
+
+<p>
+  {% if user.disabled %}<span class="status failed">disabled</span>
+  {% elif lapsed %}<span class="status failed">expired {{ user.paid_through }}</span>
+  {% elif user.needs_setup %}<span class="status">no password yet</span>
+  {% else %}<span class="status done">active</span>{% endif %}
+  <span class="muted">Created {{ user.created_at[:10] }}.</span>
+  <strong>{{ their.plan.label }}</strong>:
+  {{ their.used }} of {{ "no limit" if their.limit is none else their.limit }} cases used
+  {{ "this month" if their.renews_on else "in total" }}{% if their.pool %}, shared by the {{ their.seats }} seats of
+  <strong>{{ user.firm }}</strong>{% endif %}.
+</p>
+
+<h2>Plan</h2>
+<form method="post" action="/admin/users/{{ user.username }}/edit" class="case-form narrow-form">
+  <input type="hidden" name="csrf" value="{{ session.csrf_token }}">
+  <fieldset>
+    <label class="field"><span>Plan</span>
+      <select name="plan">
+        {% for name, plan in plans.by_name.items() %}
+        <option value="{{ name }}" {% if their.plan.name == name %}selected{% endif %}>{{ plan.label }}</option>
+        {% endfor %}
+      </select></label>
+    <label class="field"><span>Firm</span>
+      <small>Accounts in the same firm share their case allowances. Empty for none.</small>
+      <input type="text" name="firm" value="{{ user.firm }}" autocomplete="off"></label>
+    <label class="field"><span>Paid through</span>
+      <small>After this day they can't start new cases. Empty for no end.</small>
+      <input type="date" name="paid_through" value="{{ user.paid_through }}"></label>
+    <label class="field"><span>Your password</span>
+      <input type="password" name="admin_password" autocomplete="current-password" required></label>
+    <button type="submit" class="button primary">Save</button>
+  </fieldset>
+</form>
+
+<h2>Access</h2>
+{% if locked %}
+<p class="muted">Setup links for admin accounts, and disabling them, are done from the command line.</p>
+{% else %}
+<form method="post" class="case-form narrow-form">
+  <input type="hidden" name="csrf" value="{{ session.csrf_token }}">
+  <fieldset>
+    <label class="field"><span>Your password</span>
+      <input type="password" name="admin_password" autocomplete="current-password" required></label>
+    <div class="actions">
+      {% if not user.disabled %}
+      <button type="submit" formaction="/admin/users/{{ user.username }}/invite" class="button">New setup link</button>
+      <button type="submit" formaction="/admin/users/{{ user.username }}/disable" class="button danger-outline">Disable</button>
+      {% else %}
+      <button type="submit" formaction="/admin/users/{{ user.username }}/enable" class="button">Enable</button>
+      {% endif %}
+    </div>
+    <p class="hint">A setup link lets them choose a new password (for a new account, or a forgotten password).
+      Disabling blocks sign-in and signs them out everywhere. Their cases are kept.</p>
+  </fieldset>
+</form>
+{% endif %}
+
+<h2>Cases started</h2>
+<p class="muted">The most recent {{ cases|length }}. Titles and contents aren't shown to admins.</p>
+{% if cases %}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Started</th><th>State</th><th>Drafted</th><th>Rounds</th><th>Counted</th></tr></thead>
+  <tbody>
+  {% for started, state, mode, rounds, counted in cases %}
+    <tr><td>{{ started.replace("T", " ")[:16] }}</td><td>{{ states.get(state, state) }}</td>
+      <td>{{ modes.get(mode, mode) }}</td><td>{{ rounds }}</td>
+      <td>{{ "yes" if counted else "no (failed, or deleted before it ran)" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}<p class="empty">None yet.</p>{% endif %}
+
+<h2>Activity</h2>
+{% include "_events.html" %}
+{% endblock %}

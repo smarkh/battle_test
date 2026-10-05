@@ -52,3 +52,38 @@ behind_proxy = false
 # Finished and failed cases (inputs and results) are deleted automatically
 # this many days after they were created. 0 keeps them until deleted by hand.
 retention_days = 90
+# How many cases one user may have waiting or running at once. Runs go one
+# at a time, so this stops one person filling the queue. 0 = no cap.
+max_active_cases = 3
+# Where users reach the site, for the one-time setup links the admin command
+# prints. Left out here: the laptop uses http://host:port.
+
+[plans]
+# The service packages accounts are sold (see plans/profitability-plan.md),
+# as the number of cases an account may start. Set an account's plan with
+# `python -m battle_test.web.users plan NAME PLAN`. Runs that fail aren't
+# counted. An account with no plan, or one removed from here, gets `default`.
+default = "trial"
+
+[plans.trial]
+label = "Trial"
+cases = 5
+period = "total"    # never renews
+
+[plans.solo]
+label = "Solo"
+cases = 30
+period = "month"    # renews on the 1st
+
+[plans.pro]
+label = "Pro"
+cases = 100
+period = "month"
+
+[plans.firm]
+label = "Firm"
+cases = 60          # per seat. Seats in the same firm (users firm NAME FIRM) share the total.
+period = "month"
+
+[plans.unlimited]
+label = "Unlimited"  # no "cases": no limit. For admins and internal testing.

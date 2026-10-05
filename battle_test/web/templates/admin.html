@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Accounts{% endblock %}
+{% block content %}
+<div class="result-head">
+  <h1>Accounts</h1>
+  <a class="button" href="/admin/activity">Activity log</a>
+</div>
+{% if error %}<div class="errors" role="alert"><p>{{ error }}</p></div>{% endif %}
+<div class="table-wrap">
+<table class="cases">
+  <thead><tr><th>Account</th><th>Plan</th><th>Firm</th><th>Cases used</th><th>Paid through</th><th>Last signed in</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+    <tr>
+      <td><a href="/admin/users/{{ row.user.username }}">{{ row.user.username }}</a>{% if row.user.is_admin %} <span class="muted">(admin)</span>{% endif %}</td>
+      <td>{{ row.allowance.plan.label }}</td>
+      <td>{{ row.user.firm or "–" }}</td>
+      <td>{{ row.allowance.used }} of {{ "no limit" if row.allowance.limit is none else row.allowance.limit }}
+        <span class="muted">{{ "this month" if row.allowance.renews_on else "in total" }}{% if row.allowance.pool %}, firm{% endif %}</span></td>
+      <td>{{ row.user.paid_through or "no end" }}</td>
+      <td class="muted">{{ row.last_seen.replace("T", " ")[:16] or "never" }}</td>
+      <td>{% if row.user.disabled %}<span class="status failed">disabled</span>
+        {% elif row.lapsed %}<span class="status failed">expired</span>
+        {% elif row.user.needs_setup %}<span class="status">no password yet</span>
+        {% else %}<span class="status done">active</span>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2>Add an account</h2>
+<form method="post" action="/admin/users" class="case-form narrow-form">
+  <input type="hidden" name="csrf" value="{{ session.csrf_token }}">
+  <fieldset>
+    <label class="field"><span>Username</span>
+      <small>Letters, digits, '.', '_' and '-'.</small>
+      <input type="text" name="username" value="{{ form.get('username', '') }}" autocomplete="off" required></label>
+    <label class="field"><span>Plan</span>
+      <select name="plan">
+        {% for name, plan in plans.by_name.items() %}
+        <option value="{{ name }}" {% if form.get("plan", plans.default) == name %}selected{% endif %}>{{ plan.label }}</option>
+        {% endfor %}
+      </select></label>
+    <label class="field"><span>Firm</span>
+      <small>Optional. Accounts in the same firm share their case allowances.</small>
+      <input type="text" name="firm" value="{{ form.get('firm', '') }}" autocomplete="off"></label>
+    <label class="field"><span>Paid through</span>
+      <small>Optional. After this day they can't start new cases.</small>
+      <input type="date" name="paid_through" value="{{ form.get('paid_through', '') }}"></label>
+    <label class="field"><span>Your password</span>
+      <small>To confirm it's you.</small>
+      <input type="password" name="admin_password" autocomplete="current-password" required></label>
+    <button type="submit" class="button primary">Add account</button>
+    <p class="hint">You'll get a one-time setup link to send them. They choose their own password.</p>
+  </fieldset>
+</form>
+{% endblock %}

@@ -8,7 +8,7 @@ try:
     import pyarrow.parquet as pq
     from fastapi.testclient import TestClient
 
-    from battle_test.config import CorpusConfig
+    from battle_test.config import CorpusConfig, Plan, Plans
     from battle_test.corpus import build_index
     from battle_test.web.app import case_title, create_app, facts_text, safe_next
     from battle_test.web.demo import DemoClient
@@ -43,8 +43,11 @@ class WebAppTest(unittest.TestCase):
         ]), root / "us_ut_court_rules.parquet")
         cfg = CorpusConfig("vTEST", "http://unused", root, ("ut",), ("court_rules",))
         build_index(cfg, {"snapshot_date": "2026-08-14"}, [root / "us_ut_court_rules.parquet"])
+        plans = Plans({"unlimited": Plan("unlimited", "Unlimited", None, "month"),
+                       "two": Plan("two", "Two a month", 2, "month"),
+                       "trial": Plan("trial", "Trial", 1, "total")}, default="unlimited")
         self.app = create_app(client=DemoClient(delay_per_word=0), model_label="demo",
-                              data_dir=root / "cases", law_db=cfg.db_path)
+                              data_dir=root / "cases", law_db=cfg.db_path, plans=plans)
         self.app.state.auth.create_user("dana", PW)
         self.app.state.auth.create_user("other", PW)
         self.client = TestClient(self.app)
@@ -153,6 +156,388 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("default-src 'self'", headers["content-security-policy"])
         self.assertEqual(headers["x-frame-options"], "DENY")
         self.assertEqual(headers["cache-control"], "no-store")
+
+    # --- setup links ----------------------------------------------------------
+
+    def test_setup_link_sets_the_password_once(self):
+        auth = self.app.state.auth
+        auth.create_user("newbie", None, plan="solo")
+        token = auth.create_setup_token("newbie")
+        anon = TestClient(self.app)
+        self.assertEqual(self.login("newbie", PW, client=anon).status_code, 401)  # no password yet
+
+        page = anon.get(f"/setup/{token}")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Your username is <strong>newbie</strong>", page.text)
+        self.assertEqual(page.headers["cache-control"], "no-store")
+        self.assertNotIn("Sign out", page.text)
+
+        mismatch = anon.post(f"/setup/{token}", data={"new": NEW_PW, "repeat": PW})
+        self.assertEqual(mismatch.status_code, 400)
+        self.assertIn("didn't match", mismatch.text.replace("&#39;", "'"))
+        short = anon.post(f"/setup/{token}", data={"new": "short", "repeat": "short"})
+        self.assertEqual(short.status_code, 400)
+        self.assertIn("at least 12", short.text)
+        cross = anon.post(f"/setup/{token}", data={"new": NEW_PW, "repeat": NEW_PW},
+                          headers={"origin": "https://evil.example"})
+        self.assertEqual(cross.status_code, 403)
+
+        done = anon.post(f"/setup/{token}", data={"new": NEW_PW, "repeat": NEW_PW}, follow_redirects=False)
+        self.assertEqual(done.headers["location"], "/login?set=1")
+        self.assertIn("Password set.", anon.get("/login?set=1").text)
+        self.assertEqual(self.login("newbie", NEW_PW, client=anon).status_code, 303)
+
+        # The link is now dead, for viewing and for posting.
+        again = TestClient(self.app)
+        self.assertEqual(again.get(f"/setup/{token}").status_code, 404)
+        reused = again.post(f"/setup/{token}", data={"new": PW, "repeat": PW})
+        self.assertEqual(reused.status_code, 404)
+        self.assertIn("expired or was already used", reused.text)
+        self.assertEqual(self.login("newbie", PW, client=again).status_code, 401)
+
+    def test_unknown_setup_link_reveals_nothing(self):
+        response = TestClient(self.app).get("/setup/not-a-real-token")
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("expired or was already used", response.text)
+        self.assertNotIn("<form", response.text)
+
+    def test_setup_link_signs_this_browser_out_of_another_account(self):
+        token = self.app.state.auth.create_setup_token("other")
+        self.client.post(f"/setup/{token}", data={"new": NEW_PW, "repeat": NEW_PW}, follow_redirects=False)
+        self.assertEqual(self.client.get("/", follow_redirects=False).status_code, 303)  # dana was signed out here
+
+    # --- admin pages -----------------------------------------------------------
+
+    def admin_client(self):
+        self.app.state.auth.create_user("boss", PW, is_admin=True)
+        boss = TestClient(self.app)
+        self.login("boss", client=boss)
+        return boss
+
+    def admin_post(self, boss, path, password=PW, **data):
+        return boss.post(path, data={"csrf": self.csrf(boss), "admin_password": password, **data})
+
+    def events(self, subject=None):
+        return [(e.kind, e.subject, e.actor, e.detail) for e in self.app.state.auth.events(subject)]
+
+    def test_admin_pages_are_for_admins_only(self):
+        boss = self.admin_client()
+        paths = ("/admin", "/admin/activity", "/admin/users/dana")
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertEqual(boss.get(path).status_code, 200)
+                self.assertEqual(self.client.get(path).status_code, 404)  # dana isn't an admin
+                anon = TestClient(self.app).get(path, follow_redirects=False)
+                self.assertEqual(anon.status_code, 303)
+        for path in ("/admin/users", "/admin/users/other/edit", "/admin/users/other/invite",
+                     "/admin/users/other/disable", "/admin/users/other/enable"):
+            with self.subTest(path=path):
+                response = self.client.post(path, data={"csrf": self.csrf(), "admin_password": PW,
+                                                        "username": "sneaky", "plan": "unlimited"})
+                self.assertEqual(response.status_code, 404)
+        self.assertIsNone(self.app.state.auth.get_user("sneaky"))
+        self.assertFalse(self.app.state.auth.get_user("other").disabled)
+        self.assertIn('<a href="/admin">Admin</a>', boss.get("/").text)
+        self.assertNotIn("/admin", self.client.get("/").text)
+        self.assertEqual(boss.get("/admin/users/nobody").status_code, 404)
+
+    def test_admin_adds_an_account_and_gets_its_setup_link(self):
+        boss = self.admin_client()
+        response = self.admin_post(boss, "/admin/users", username="Newbie", plan="two", firm="Acme",
+                                   paid_through="2099-12-31")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Created newbie.", response.text)
+        token = re.search(r'<code class="setup-link">http://127\.0\.0\.1:8000/setup/([^<]+)</code>',
+                          response.text).group(1)
+        user = self.app.state.auth.setup_user(token)
+        self.assertEqual((user.username, user.plan, user.firm, user.paid_through, user.needs_setup, user.is_admin),
+                         ("newbie", "two", "acme", "2099-12-31", True, False))
+        # The link is shown once: it isn't on the page when it's opened again.
+        self.assertNotIn("setup-link", boss.get("/admin/users/newbie").text)
+        self.assertIn("no password yet", boss.get("/admin").text)
+        self.assertEqual([e[:3] for e in self.events("newbie")],
+                         [("setup link issued", "newbie", "boss"), ("paid-through changed", "newbie", "boss"),
+                          ("account created", "newbie", "boss")])
+
+        duplicate = self.admin_post(boss, "/admin/users", username="newbie", plan="two")
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertIn("already exists", duplicate.text)
+        bad_plan = self.admin_post(boss, "/admin/users", username="erin", plan="platinum")
+        self.assertEqual(bad_plan.status_code, 400)
+        self.assertIsNone(self.app.state.auth.get_user("erin"))
+
+    def test_admin_changes_need_the_admins_password_and_csrf(self):
+        boss = self.admin_client()
+        for path, data in (("/admin/users", {"username": "erin", "plan": "two"}),
+                           ("/admin/users/other/edit", {"plan": "two", "firm": "", "paid_through": ""}),
+                           ("/admin/users/other/invite", {}), ("/admin/users/other/disable", {})):
+            with self.subTest(path=path):
+                refused = self.admin_post(boss, path, password="not the password", **data)
+                self.assertEqual(refused.status_code, 403)
+                self.assertIn("Your password is wrong, so nothing was changed.", refused.text)
+                self.assertNotIn("setup-link", refused.text)
+                no_csrf = boss.post(path, data={"csrf": "wrong", "admin_password": PW, **data})
+                self.assertEqual(no_csrf.status_code, 403)
+        other = self.app.state.auth.get_user("other")
+        self.assertEqual((other.plan, other.disabled), ("", False))
+        self.assertIsNone(self.app.state.auth.get_user("erin"))
+        self.assertEqual([e[0] for e in self.events("other")], ["account created"])  # from setUp only
+        self.assertEqual({e[0] for e in self.events("boss")},
+                         {"signed in", "admin password refused", "account created"})
+
+    def test_admin_edits_plan_firm_and_paid_through(self):
+        boss = self.admin_client()
+        response = self.admin_post(boss, "/admin/users/dana/edit", plan="two", firm="Acme", paid_through="2026-01-31")
+        self.assertIn("Saved.", response.text)
+        dana = self.app.state.auth.get_user("dana")
+        self.assertEqual((dana.plan, dana.firm, dana.paid_through), ("two", "acme", "2026-01-31"))
+        self.assertIn("expired 2026-01-31", response.text)
+        self.assertIn("ended on 2026-01-31", self.client.get("/cases/new").text)  # it applies at once
+
+        # Saving again with one change logs just that change.
+        before = len(self.events("dana"))
+        self.admin_post(boss, "/admin/users/dana/edit", plan="two", firm="acme", paid_through="")
+        self.assertEqual(self.events("dana")[0], ("paid-through changed", "dana", "boss", "2026-01-31 to no end"))
+        self.assertEqual(len(self.events("dana")), before + 1)
+
+        bad = self.admin_post(boss, "/admin/users/dana/edit", plan="two", firm="two words", paid_through="")
+        self.assertEqual(bad.status_code, 400)
+        self.assertIn("Firm names", bad.text)
+
+    def test_admin_disables_enables_and_issues_setup_links(self):
+        boss = self.admin_client()
+        response = self.admin_post(boss, "/admin/users/dana/invite")
+        token = re.search(r"/setup/([^<]+)</code>", response.text).group(1)
+        self.assertEqual(self.app.state.auth.setup_user(token).username, "dana")
+
+        response = self.admin_post(boss, "/admin/users/dana/disable")
+        self.assertIn("Disabled, and signed out everywhere.", response.text)
+        self.assertEqual(self.client.get("/", follow_redirects=False).status_code, 303)  # dana is signed out
+        self.assertIsNone(self.app.state.auth.setup_user(token))
+        self.assertEqual(self.admin_post(boss, "/admin/users/dana/invite").status_code, 400)
+        self.admin_post(boss, "/admin/users/dana/enable")
+        self.assertEqual(self.login("dana").status_code, 303)
+        self.assertEqual([e[0] for e in self.events("dana")][:4],
+                         ["signed in", "enabled", "disabled", "setup link issued"])
+
+    def test_admin_accounts_are_managed_from_the_command_line(self):
+        boss = self.admin_client()
+        self.app.state.auth.create_user("chief", PW, is_admin=True)
+        for action in ("invite", "disable", "enable"):
+            with self.subTest(action=action):
+                refused = self.admin_post(boss, f"/admin/users/chief/{action}")
+                self.assertEqual(refused.status_code, 403)
+                self.assertIn("done from the command line for admin accounts", refused.text)
+                self.assertNotIn("setup-link", refused.text)
+        self.assertFalse(self.app.state.auth.get_user("chief").disabled)
+        # Nothing in the portal makes an admin.
+        self.admin_post(boss, "/admin/users", username="erin", plan="two", is_admin="1", admin="1")
+        self.assertFalse(self.app.state.auth.get_user("erin").is_admin)
+
+    def test_admin_sees_usage_but_no_case_titles_or_text(self):
+        case_url = self.finished_case()
+        boss = self.admin_client()
+        page = boss.get("/admin/users/dana").text
+        self.assertIn("Complaint and motion drafted", page)
+        self.assertRegex(page, r"1 of no limit cases used")
+        for private in ("Whitfield", "Summit Peak", "roofer"):
+            self.assertNotIn(private, page)
+            self.assertNotIn(private, boss.get("/admin").text)
+            self.assertNotIn(private, boss.get("/admin/activity").text)
+        for path in (case_url, f"{case_url}/download.md", f"{case_url}/events"):
+            self.assertEqual(boss.get(path).status_code, 404)  # an admin is no exception to case privacy
+
+    def test_activity_log_records_sign_ins_without_mistyped_names(self):
+        anon = TestClient(self.app)
+        self.login("dana", "not the password", client=anon)
+        self.login("my-actual-passphrase-typed-in-the-wrong-box", "x", client=anon)
+        self.client.post("/account", data={"csrf": self.csrf(), "current": PW, "new": NEW_PW, "repeat": NEW_PW})
+        self.assertEqual([e[:3] for e in self.events()][:3],
+                         [("password changed", "dana", "dana"), ("sign-in failed", "dana", ""),
+                          ("signed in", "dana", "dana")])
+        self.assertIn("from testclient", self.events()[1][3])
+        raw = (Path(self.tmp.name) / "cases" / "users.sqlite").read_bytes()
+        self.assertNotIn(b"my-actual-passphrase", raw)
+        boss = self.admin_client()
+        log = boss.get("/admin/activity").text
+        self.assertIn("sign-in failed", log)
+        self.assertIn("password changed", log)
+        self.assertRegex(boss.get("/admin").text, r"(?s)dana</a>.*?\d{4}-\d{2}-\d{2} \d{2}:\d{2}")
+
+    # --- plans ------------------------------------------------------------------
+
+    def use_plan(self, username, plan):
+        self.app.state.auth.set_plan(username, plan)
+
+    def test_case_allowance_is_shown_and_enforced(self):
+        self.use_plan("dana", "two")
+        self.assertRegex(self.client.get("/cases/new").text, r"2 of 2 cases left\s+this month\s+\(Two a month\)\.")
+        self.finished_case()
+        self.finished_case()
+        account = self.client.get("/account").text
+        self.assertIn("<strong>Two a month</strong>", account)
+        self.assertRegex(account, r"2 of 2 cases used\s+this month")
+        self.assertRegex(account, r"starts again on \d{4}-\d{2}-01")
+
+        new = self.client.get("/cases/new").text
+        self.assertIn("used all 2 cases in your Two a month plan this month", new)
+        self.assertRegex(new, r'<button type="submit" class="button primary" disabled>')
+
+        refused = self.submit(plaintiff="Kept Name")
+        self.assertEqual(refused.status_code, 403)
+        self.assertIn("used all 2 cases", refused.text)
+        self.assertIn("Kept Name", refused.text)
+        self.assertEqual(len(self.app.state.store.list()), 2)
+
+        # Deleting a finished case doesn't give the use back.
+        case_url = f"/cases/{self.app.state.store.list()[0].id}"
+        self.client.post(f"{case_url}/delete", data={"csrf": self.csrf()})
+        self.assertEqual(self.submit().status_code, 403)
+
+        # Someone else is unaffected, and a bigger plan lifts the limit at once.
+        other = TestClient(self.app)
+        self.login("other", client=other)
+        self.assertEqual(self.submit(client=other).status_code, 303)
+        self.use_plan("dana", "unlimited")
+        self.assertEqual(self.submit().status_code, 303)
+        self.assertTrue(self.app.state.worker.wait_idle())
+        self.assertNotIn("cases left", self.client.get("/cases/new").text)
+        self.assertIn("no limit on cases", self.client.get("/account").text)
+
+    def test_trial_allowance_never_renews(self):
+        self.use_plan("dana", "trial")
+        job = self.app.state.store.create(self.app.state.auth.get_user("dana").id, "UT", "facts", "x", 1, "t")
+        self.app.state.store.update(job.id, status="done")
+        with self.app.state.store._db:  # started long ago: still counts against a total
+            self.app.state.store._db.execute("UPDATE usage SET created_at = '2025-01-01T00:00:00'")
+        new = self.client.get("/cases/new").text
+        self.assertIn("used all 1 cases in your Trial plan.", new)
+        self.assertEqual(self.submit().status_code, 403)
+
+    def test_failed_run_does_not_use_up_the_allowance(self):
+        self.use_plan("dana", "trial")
+        self.app.state.worker.runner = lambda *args: 1 / 0
+        self.finished_case()
+        self.assertEqual(self.app.state.store.list()[0].status, "failed")
+        self.assertRegex(self.client.get("/cases/new").text, r"1 of 1 cases left\s+in your plan\s+\(Trial\)\.")
+
+    def test_cap_on_cases_waiting_or_running(self):
+        store, dana = self.app.state.store, self.app.state.auth.get_user("dana").id
+        waiting = [store.create(dana, "UT", "facts", "x", 1, "t") for _ in range(3)]  # never run: not submitted
+        refused = self.submit(plaintiff="Kept Name")
+        self.assertEqual(refused.status_code, 429)
+        self.assertIn("You already have 3 cases waiting or running", refused.text)
+        self.assertIn("Kept Name", refused.text)
+        self.assertEqual(len(store.list(dana)), 3)
+
+        other = TestClient(self.app)
+        self.login("other", client=other)
+        self.assertEqual(self.submit(client=other).status_code, 303)  # someone else isn't held up
+        store.update(waiting[0].id, status="done")
+        self.assertEqual(self.submit().status_code, 303)
+        for job in waiting[1:]:
+            store.update(job.id, status="failed")  # let the worker skip them
+        self.assertTrue(self.app.state.worker.wait_idle())
+
+    def test_unpaid_plan_blocks_new_cases_but_not_existing_ones(self):
+        auth = self.app.state.auth
+        case_url = self.finished_case()
+        auth.set_paid_through("dana", "2099-12-31")
+        self.assertIn("Paid through 2099-12-31.", self.client.get("/account").text)
+        self.assertEqual(self.submit().status_code, 303)
+        self.assertTrue(self.app.state.worker.wait_idle())
+
+        auth.set_paid_through("dana", "2026-01-31")
+        self.assertEqual(self.client.get("/").status_code, 200)  # still signed in
+        new = self.client.get("/cases/new").text
+        self.assertIn("Your Unlimited plan ended on 2026-01-31", new)
+        self.assertRegex(new, r'<button type="submit" class="button primary" disabled>')
+        self.assertIn("ended on 2026-01-31", self.client.get("/account").text)
+        refused = self.submit(plaintiff="Kept Name")
+        self.assertEqual(refused.status_code, 403)
+        self.assertIn("Kept Name", refused.text)
+        self.assertEqual(len(self.app.state.store.list()), 2)
+
+        # What they already have stays reachable, and deletable.
+        self.assertIn("Citation check", self.client.get(case_url).text)
+        self.assertEqual(self.client.get(f"{case_url}/download.md").status_code, 200)
+        deleted = self.client.post(f"{case_url}/delete", data={"csrf": self.csrf()}, follow_redirects=False)
+        self.assertEqual(deleted.status_code, 303)
+
+        auth.set_paid_through("dana", "")  # renewed with no end date
+        self.assertEqual(self.submit().status_code, 303)
+        self.assertTrue(self.app.state.worker.wait_idle())
+
+    def test_unpaid_firm_seat_stops_adding_to_the_shared_allowance(self):
+        auth = self.app.state.auth
+        for name in ("dana", "other"):
+            self.use_plan(name, "two")
+            auth.set_firm(name, "acme")
+        auth.set_paid_through("other", "2026-01-31")
+        self.assertRegex(self.client.get("/cases/new").text,
+                         r"2 of 2 cases left\s+this month\s+\(shared by your firm's 1 seats\)")
+        other = TestClient(self.app)
+        self.login("other", client=other)
+        self.assertEqual(self.submit(client=other).status_code, 403)
+        self.assertEqual(self.submit().status_code, 303)  # the paid-up seat carries on
+        self.assertTrue(self.app.state.worker.wait_idle())
+
+    def test_firm_seats_share_one_allowance(self):
+        auth = self.app.state.auth
+        for name in ("dana", "other"):
+            self.use_plan(name, "two")
+            auth.set_firm(name, "Whitfield-Law")
+        other = TestClient(self.app)
+        self.login("other", client=other)
+        self.assertRegex(self.client.get("/cases/new").text,
+                         r"4 of 4 cases left\s+this month\s+\(shared by your firm's 2 seats\)\.")
+
+        # One seat may use more than its own share...
+        for _ in range(3):
+            self.finished_case()
+        self.assertRegex(other.get("/cases/new").text, r"1 of 4 cases left")
+        account = other.get("/account").text
+        self.assertRegex(account, r"3 of 4 cases used\s+this month")
+        self.assertIn("shared by the 2 seats of your firm", account)
+        self.assertIn("<strong>whitfield-law</strong>", account)
+        # ...but the firm's total is the limit, for every seat.
+        self.assertEqual(self.submit(client=other).status_code, 303)
+        self.assertTrue(self.app.state.worker.wait_idle())
+        for client in (self.client, other):
+            refused = self.submit(client=client)
+            self.assertEqual(refused.status_code, 403)
+            self.assertIn("Your firm has used all 4 cases in its shared plan this month", refused.text)
+
+        # Sharing an allowance doesn't share cases.
+        self.assertEqual(len(self.app.state.store.list(auth.get_user("other").id)), 1)
+        case_url = f"/cases/{self.app.state.store.list(auth.get_user('dana').id)[0].id}"
+        self.assertEqual(other.get(case_url).status_code, 404)
+
+        # A disabled account stops being a seat, but what it used still counts.
+        auth.set_disabled("other", True)
+        self.assertIn("Your firm has used all 2 cases", self.client.get("/cases/new").text)
+        auth.set_disabled("other", False)
+
+        # Leaving the firm: each account is back on its own plan and its own count.
+        auth.set_firm("other", "")
+        self.assertRegex(self.client.get("/account").text, r"3 of 2 cases used")
+        self.login("other", client=other)
+        self.assertRegex(other.get("/cases/new").text, r"1 of 2 cases left\s+this month\s+\(Two a month\)")
+
+    def test_firm_with_an_unlimited_seat_has_no_limit(self):
+        self.use_plan("dana", "trial")
+        for name in ("dana", "other"):
+            self.app.state.auth.set_firm(name, "acme")
+        self.assertIn("no limit on cases", self.client.get("/account").text)
+        self.finished_case()
+        self.assertEqual(self.submit().status_code, 303)
+        self.assertTrue(self.app.state.worker.wait_idle())
+
+    def test_account_with_no_plan_gets_the_default(self):
+        self.assertEqual(self.app.state.auth.get_user("dana").plan, "")
+        self.assertIn("no limit on cases", self.client.get("/account").text)
+        self.use_plan("dana", "a plan since removed from the config")
+        self.assertIn("no limit on cases", self.client.get("/account").text)
 
     # --- cases ----------------------------------------------------------------
 
