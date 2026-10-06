@@ -22,6 +22,16 @@ document.querySelectorAll(".tab").forEach((tab) => {
   });
 });
 
+// Menus (the download formats): close on a click elsewhere, a choice, or Escape.
+document.addEventListener("click", (e) => {
+  document.querySelectorAll("details.menu[open]").forEach((menu) => {
+    if (!menu.contains(e.target) || e.target.closest("a")) menu.open = false;
+  });
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") document.querySelectorAll("details.menu[open]").forEach((menu) => (menu.open = false));
+});
+
 // Progress: stream stages and draft text; reload into the results when done.
 const progress = document.getElementById("progress");
 if (progress) {

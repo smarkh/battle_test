@@ -88,6 +88,7 @@ Each output file contains:
 | `battle_test/web/auth.py` | Accounts, password hashing, one-time setup links, sessions, login lockout |
 | `battle_test/web/admin.py` | Admin pages: accounts, plans, setup links, the activity log |
 | `battle_test/web/users.py` | Admin command for accounts (`python -m battle_test.web.users`) |
+| `battle_test/web/export.py` | Building the Word and PDF downloads from a finished run |
 | `battle_test/web/render.py` | Turning a finished run into HTML (links, highlights, summaries) |
 | `battle_test/web/demo.py` | The demo model for working on the UI without a GPU |
 | `battle_test/web/templates/`, `static/` | Pages, CSS, and the small progress/tabs script |
@@ -186,7 +187,10 @@ python -m battle_test.web --demo-model    # canned drafts, no GPU needed
   - ✅ citations link to their official source.
   - ❌/⚠ marks and `[CITATION NEEDED]` placeholders are highlighted.
   - Below the documents: the authorities appendix and the research queries.
-  - A Markdown download.
+  - A **Download** menu: Word (`.docx`), PDF, or Markdown. Each holds the
+    whole set: the disclaimer, the citation check, every document, and
+    the authorities. The PDF uses plain fonts, so its warning marks read
+    `[! NOT FOUND …]` and unusual characters lose their accents.
 - **Switching cases:** every case page (progress, results, or a failed
   run) and the new-case form list your cases down the left, newest first, with each one's
   status. The one you're on is highlighted.

@@ -383,6 +383,18 @@ server.**
     Desktop or the laptop build.
   - Check the result before restarting: `docker images battle-test` should
     show an image a few minutes old.
+- **Revised again 2026-10-05: a code-only rebuild failed over SSH.**
+  `docker compose build` for the case-list update (commit `8d23708`,
+  code and templates only) stopped at "load metadata for
+  docker.io/library/python:3.12-slim" with the credentials error.
+  - The build asks the registry about the base image even when nothing
+    needs downloading, and that lookup is what SSH can't do. Why it got
+    through on 2026-10-04 is unknown.
+  - **So: don't count on an SSH build.** Build on the laptop and copy
+    the image (`docker save` → `scp` → `docker load`), which worked
+    again this time: 105 MB, and the same image ID on both machines.
+  - Untried: Docker's older builder (`DOCKER_BUILDKIT=0`), which uses
+    the local base image without asking the registry.
 - Other Windows-over-SSH notes:
   - The server's shell is Windows PowerShell 5.1, so there's no `&&`.
   - Send scripts with `powershell -EncodedCommand` so quoting survives.
@@ -644,6 +656,9 @@ how to run it". That replaces the separate `deploy.md` planned here.
   - **Last done 2026-10-04:** setup links, plans, firm pooling, the queue
     cap, plan expiry and the admin pages (commit `ef1475d`), all over SSH.
     The accounts database upgraded itself on first start.
+  - **Last done 2026-10-05:** the case list on case pages and the
+    new-case form (commit `8d23708`). The SSH build failed, so the image
+    was built on the laptop and copied. No database change.
   - Running jobs are interrupted by a restart, and the app marks them
     failed with a message, so update between runs.
   - (`&&` doesn't work in the server's PowerShell 5.1, so run the steps

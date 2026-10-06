@@ -1,3 +1,4 @@
+import io
 import re
 import tempfile
 import unittest
@@ -12,6 +13,7 @@ try:
     from battle_test.corpus import build_index
     from battle_test.web.app import case_title, create_app, facts_text, safe_next
     from battle_test.web.demo import DemoClient
+    from battle_test.web import export
     from battle_test.web.render import document_html
 except ImportError:  # web and corpus-build dependencies are optional
     TestClient = None
@@ -608,10 +610,48 @@ class WebAppTest(unittest.TestCase):
         case_url = self.finished_case()
         other = TestClient(self.app)
         self.login("other", client=other)
-        for path in (case_url, f"{case_url}/events", f"{case_url}/download.md"):
+        for path in (case_url, f"{case_url}/events", f"{case_url}/download.md", f"{case_url}/download.docx",
+                     f"{case_url}/download.pdf"):
             with self.subTest(path=path):
                 self.assertEqual(other.get(path).status_code, 404)
         self.assertIn("Start your first case", other.get("/").text)
+
+    def test_download_as_word_and_pdf(self):
+        case_url = self.finished_case()
+        page = self.client.get(case_url).text
+        for fmt in ("docx", "pdf", "md"):
+            self.assertIn(f'href="{case_url}/download.{fmt}"', page)
+
+        word = self.client.get(f"{case_url}/download.docx")
+        self.assertEqual(word.status_code, 200)
+        self.assertEqual(word.headers["content-type"], export.FORMATS["docx"])
+        self.assertRegex(word.headers["content-disposition"], r'attachment; filename="battle-test-ut-[\d-]+\.docx"')
+        import docx
+        text = "\n".join(p.text for p in docx.Document(io.BytesIO(word.content)).paragraphs)
+        for expected in ("Battle test: Dana Whitfield v. Summit Peak Roofing LLC", "not legal advice", "Complaint",
+                         "Opposition to Motion for Summary Judgment", "Utah Code § 99-99-999",
+                         "[⚠ NOT FOUND: no such section in the law index]", "[CITATION NEEDED:",
+                         "Authorities quoted to the models", "https://le.utah.gov/"):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, text)
+
+        pdf = self.client.get(f"{case_url}/download.pdf")
+        self.assertEqual(pdf.status_code, 200)
+        self.assertEqual(pdf.headers["content-type"], "application/pdf")
+        self.assertTrue(pdf.content.startswith(b"%PDF-"))
+        # Cover and citation check, one page per document at least, and the appendix.
+        self.assertGreaterEqual(len(re.findall(rb"/Type\s*/Page\b", pdf.content)), 5)
+
+        self.assertEqual(self.client.get(f"{case_url}/download.exe").status_code, 404)
+        # Nothing extra is stored with the case.
+        folder = self.app.state.store.root / case_url.rsplit("/", 1)[1]
+        self.assertEqual(sorted(f.name for f in folder.iterdir()), ["input.md", "result.json", "result.md"])
+
+    def test_no_word_or_pdf_before_a_case_has_finished(self):
+        case_url = self.finished_case()
+        self.app.state.store.update(case_url.rsplit("/", 1)[1], status="failed", error="boom")
+        for fmt in ("md", "docx", "pdf"):
+            self.assertEqual(self.client.get(f"{case_url}/download.{fmt}").status_code, 404)
 
     def test_case_page_lists_own_cases_newest_first(self):
         first = self.finished_case(plaintiff="Avery First")
@@ -727,3 +767,37 @@ class RenderTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipIf(TestClient is None, "web dependencies not installed")
+class ExportTest(unittest.TestCase):
+    RESULT = {
+        "state": "Utah", "rounds": 1, "plaintiff_model": "m", "defendant_model": "m", "law_meta": {},
+        "research": {"plaintiff": ["venue"]},
+        "documents": [{
+            "title": "Complaint", "role": "plaintiff", "generated": True, "unchecked": [], "authorities": [],
+            "checks": [{"text": "Utah Code § 1-1-1", "status": "not_found", "section": None}],
+            "text": "**CAPTION**\nLine two <b>&amp;</b>\n\nSee Utah Code § 1-1-1 [⚠ NOT FOUND: x] and "
+                    "[FACT NEEDED: the date]. Nguyễn → 日本",
+        }],
+    }
+
+    def test_spans_split_marks_placeholders_and_bold(self):
+        self.assertEqual(
+            export.spans("a **b** [⚠ NOT FOUND: x] c [CITATION NEEDED: y]"),
+            [("a ", ""), ("b", "bold"), (" ", ""), ("[⚠ NOT FOUND: x]", "flag"), (" c ", ""),
+             ("[CITATION NEEDED: y]", "placeholder")])
+
+    def test_pdf_text_keeps_legal_symbols_and_degrades_the_rest(self):
+        self.assertEqual(export.pdf_text("§ 78B-2-309 — “quoted”…"), "§ 78B-2-309 — “quoted”…")
+        self.assertEqual(export.pdf_text("[⚠ NOT FOUND] Nguyễn → 日"), "[! NOT FOUND] Nguyen -> ?")
+
+    def test_drafts_keep_their_paragraphs_and_are_never_markup(self):
+        blocks = export.blocks(self.RESULT, "A v. B", "2026-10-05 20:00")
+        paras = [b.text for b in blocks if b.kind == "para"]
+        self.assertIn("**CAPTION**\nLine two <b>&amp;</b>", paras)
+        # Both formats build from awkward text without error, and the PDF
+        # treats tags in a draft as text.
+        self.assertIn("&lt;b&gt;&amp;amp;&lt;/b&gt;", export._markup("Line two <b>&amp;</b>"))
+        self.assertTrue(export.to_pdf(self.RESULT, "A v. B <i>", "now").startswith(b"%PDF-"))
+        self.assertTrue(export.to_docx(self.RESULT, "A v. B <i>", "now").startswith(b"PK"))

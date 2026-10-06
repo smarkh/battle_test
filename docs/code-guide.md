@@ -72,6 +72,7 @@ canned drafts.
 | `admin.py` | The `/admin` routes: accounts, plans, setup links, disable and enable, the activity log. |
 | `users.py` | `python -m battle_test.web.users`: the command-line account tool (`add`, `invite`, `passwd`, `plan`, `firm`, `paid`, `disable`, `enable`, `list`, `usage`). |
 | `render.py` | Turns a saved result into HTML: links ✅ citations to their source, highlights problems and placeholders. |
+| `export.py` | Builds the Word and PDF downloads. Both come from one list of blocks (`blocks()`), and are built in memory when asked for, so nothing extra is stored with a case. Needs `python-docx` and `reportlab`. |
 | `demo.py` | `DemoClient`: canned drafts for working on the UI without a GPU. Research, selection and checking still run for real. |
 | `templates/` | Jinja pages. `base.html` is the layout. `_case_form.html`, `_case_nav.html` (the case list down the left of a case page and the new-case form) and `_events.html` are shared fragments. |
 | `static/app.css`, `static/app.js` | The stylesheet, and the one script: the form mode switch, document tabs, and live progress. |
@@ -124,3 +125,4 @@ fake model clients and small temporary databases.
 | A page's layout or wording | `web/templates/`, `web/static/` |
 | Plans and allowances | `[plans]` in both configs |
 | The Markdown output | `report.py` |
+| The Word or PDF download | `web/export.py` |

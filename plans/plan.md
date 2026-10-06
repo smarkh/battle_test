@@ -15,13 +15,15 @@ guardrails-style network isolation and data handling).
   - Step 5 parts 1–2: a local web UI with accounts, case deletion, and
     3-month retention.
 
-  182 unit tests pass.
+  187 unit tests pass.
 - **On the smark_iq server (2026-09-28):**
   - Deployed in Docker, fully independent of smark_iq, and **live at
     `https://battle.smarkiq.us`** through its own Cloudflare Tunnel.
   - 14B runs a case in ~90 s, and the three-case evaluation in ~6 min.
   - For now, test accounts and fictional cases only. **Cloudflare Access is
     required before real users.**
+  - **Updated 2026-10-05** (commit `8d23708`): the case list on case
+    pages and the new-case form is live.
   - **Updated 2026-10-04** (commit `ef1475d`): setup links, plans and
     usage limits, firm pooling, the queue cap, plan expiry, and the admin
     pages with the activity log are live. Built and restarted over SSH.
@@ -32,7 +34,8 @@ guardrails-style network isolation and data handling).
 - **Next up:**
   - 3b: semantic search (probably on the server), better selection, then
     re-evaluate on 14B / ~30B.
-  - Web UI part 3: upload with text extraction, and `.docx`/PDF export.
+  - Web UI part 3: upload with text extraction. (`.docx`/PDF export was
+    built 2026-10-05.)
   - Server deployment (web UI part 4): **done, and live** (see
     `plans/server-migration-plan.md`). Still open:
     - your signed-in checks (cookie flags, live progress through
@@ -873,6 +876,39 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
        then the form refusing a second on a 1-case trial.
    - **Part 2 is now complete.** Next is part 3: upload with text
      extraction, and `.docx`/PDF export.
+   - **Part 3, Word and PDF downloads: built (2026-10-05).** The results
+     page has a Download menu: Word (`.docx`), PDF, or Markdown.
+     - **Decided:** both formats, not one. Word is what lawyers edit in,
+       and PDF is what they send. This settles the "export formats"
+       open question.
+     - **Contents:** the same as the Markdown file: disclaimer, law date,
+       citation-check table, each document on its own page, and the
+       authorities with their source links. ⚠ marks are bold red and
+       placeholders are highlighted. Every page footer says it's a draft
+       for attorney review.
+     - **Built on demand,** in memory, from the saved result
+       (`web/export.py`). Nothing extra is stored with a case, so
+       deletion and retention are unchanged, and the container's
+       read-only filesystem isn't a problem.
+     - **Libraries:** `python-docx` and `reportlab`, both added to
+       `requirements.txt`. The server image therefore has to be rebuilt
+       with a download: build on the laptop and copy it.
+     - **Limits:**
+       - The PDF uses the standard Times fonts, which cover Western
+         European text only. ⚠ becomes `!`, the ✅/❌ symbols are dropped
+         in favour of their wording, accented letters outside that set
+         lose their accents, and other scripts become `?`. Word has no
+         such limit. Bundling a font would fix it.
+       - Neither is court-formatted: no line numbers, caption tables or
+         local-rule margins.
+       - In-text citations aren't links, unlike the web page. The
+         appendix has the links.
+       - The command line still writes Markdown only.
+     - **Tested:** 5 new tests (187 in all). A sample PDF was rendered
+       and read page by page, and the Word file was reopened in code.
+       The menu was checked in Chrome on the demo model. **Not done:**
+       opening the Word file in Word itself, and clicking each menu item
+       in the browser (the routes are covered by the tests).
    - **Case list on case pages (2026-10-05).** The progress, results and
      failure pages, and the new-case form, list the user's cases down the left, newest first,
      with state, start time and status, and the open case highlighted.
@@ -1271,7 +1307,8 @@ protections (item 2 above).
 - **UI: sharing a case.** Can a user share a case with another account
   (e.g. a client with their lawyer), or is every case private to its
   creator?
-- **UI: export formats.** `.docx` (editable, what lawyers usually work in),
+- **UI: export formats.** Decided 2026-10-05: both, plus Markdown (see
+  step 5, part 3). The question was: `.docx` (editable, what lawyers usually work in),
   PDF, or both?
 - **UI: data retention.** Decided for now (2026-09-25): 3 months, then
   automatic deletion, and users can delete sooner. Worth confirming with the

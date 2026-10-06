@@ -8,7 +8,15 @@
       plaintiff model <code>{{ result.plaintiff_model }}</code> · defendant model <code>{{ result.defendant_model }}</code></p>
   </div>
   <div class="actions">
-    <a class="button" href="/cases/{{ job.id }}/download.md">Download (.md)</a>
+    {# A <details> menu: it opens and closes without any script. #}
+    <details class="menu">
+      <summary class="button">Download</summary>
+      <ul>
+        <li><a href="/cases/{{ job.id }}/download.docx">Word (.docx)</a></li>
+        <li><a href="/cases/{{ job.id }}/download.pdf">PDF (.pdf)</a></li>
+        <li><a href="/cases/{{ job.id }}/download.md">Markdown (.md)</a></li>
+      </ul>
+    </details>
     <a class="button danger-outline" href="/cases/{{ job.id }}/delete">Delete case</a>
   </div>
 </div>

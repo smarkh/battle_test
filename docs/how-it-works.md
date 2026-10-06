@@ -31,7 +31,8 @@ them:
 2. The case joins a queue. A progress page shows each stage and streams
    the draft text as it's written.
 3. The results page shows the documents in tabs, a citation-check table,
-   the authorities quoted to the models, and a Markdown download.
+   the authorities quoted to the models, and a download menu (Word, PDF
+   or Markdown).
 4. Every case page, and the new-case form, lists the user's cases down
    the left, newest first, so they can switch from one case to another.
 

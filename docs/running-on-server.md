@@ -143,7 +143,9 @@ account. Press **Ctrl+C** in the tunnel window to disconnect.
    ```powershell
    docker cp battle-test:/data/cases/users.sqlite $HOME\users-backup.sqlite
    ```
-4. **(server)** Build, then check the image is a few minutes old:
+4. **(server)** Build, then check the image is a few minutes old. This
+   often fails over SSH, even for a code-only change. If it does, see
+   below:
    ```powershell
    docker compose build
    docker images battle-test
@@ -155,9 +157,9 @@ account. Press **Ctrl+C** in the tunnel window to disconnect.
 6. Check it's healthy (above).
 
 **If the build fails with a credentials error** ("A specified logon
-session does not exist"): the build needs to download something, and
-Docker downloads don't work over SSH on this server. That happens when
-`requirements.txt` or the base image changes. Use either of these:
+session does not exist"): the build has to contact the image
+registry, which doesn't work over SSH on this server. It happened on
+2026-10-05 for a code-only change. Use either of these:
 
 - **Remote Desktop:** sign in with Chrome Remote Desktop and run `docker
   compose build` there.

@@ -27,7 +27,7 @@ from battle_test.ollama_client import OllamaClient
 from battle_test.pipeline import ChatClient, run_case
 from battle_test.prompts import SUPPORTED_STATES
 from battle_test.report import render_markdown
-from battle_test.web import admin, render
+from battle_test.web import admin, export, render
 from battle_test.web.auth import SETUP_LINK_INVALID, AuthError, AuthStore, Session, User
 from battle_test.web.jobs import DONE, FAILED, QUEUED, RUNNING, Job, JobStore, QueueFull, QuotaExceeded, Worker
 
@@ -523,14 +523,21 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
         worker.forget(job_id)
         return RedirectResponse("/?deleted=1", status_code=303)
 
-    @app.get("/cases/{job_id}/download.md")
-    def download(request: Request, job_id: str):
+    @app.get("/cases/{job_id}/download.{fmt}")
+    def download(request: Request, job_id: str, fmt: str):
         job = own_job(job_id, current(request))
         path = store.result_markdown_path(job_id)
-        if job.status != DONE or not path.exists():
+        if job.status != DONE or not path.exists() or fmt not in ("md", *export.FORMATS):
             raise HTTPException(404, "No result yet")
-        return FileResponse(path, media_type="text/markdown",
-                            filename=f"battle-test-{job.state_code.lower()}-{job.created_at[:10]}.md")
+        filename = f"battle-test-{job.state_code.lower()}-{job.created_at[:10]}.{fmt}"
+        if fmt == "md":
+            return FileResponse(path, media_type="text/markdown", filename=filename)
+        # Word and PDF are built from the saved result each time, so no
+        # extra copies of a case sit on disk.
+        generated = (job.finished_at or job.created_at).replace("T", " ")[:16]
+        content = export.BUILDERS[fmt](store.result(job_id), job.title, generated)
+        return Response(content, media_type=export.FORMATS[fmt],
+                        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
     admin.add_routes(app, auth=auth, store=store, plans=plans, web=web, current=current,
                      checked_form=checked_form, page=page, allowance_for=allowance_for)
