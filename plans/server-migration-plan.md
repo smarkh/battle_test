@@ -659,6 +659,16 @@ how to run it". That replaces the separate `deploy.md` planned here.
   - **Last done 2026-10-05:** the case list on case pages and the
     new-case form (commit `8d23708`). The SSH build failed, so the image
     was built on the laptop and copied. No database change.
+  - **Also 2026-10-05:** the Word and PDF downloads (commit `73f9d51`),
+    again by laptop build and copy, since `requirements.txt` changed.
+    - **Found:** Cloudflare caches `/static/app.css` and `app.js` for 4
+      hours (`Cache-Control: max-age=14400`, added at its edge), so the
+      site served the new pages with the old stylesheet and script.
+    - **Fix (in code, deployed next):** pages link to them as
+      `?v=<hash of the files>`, so a changed file gets a new address.
+    - Until that's deployed: purge the cache in the Cloudflare
+      dashboard (Caching → Configuration → Purge Everything, which also
+      affects `llm.smarkiq.us`), or wait 4 hours, and hard-refresh.
   - Running jobs are interrupted by a restart, and the app marks them
     failed with a message, so update between runs.
   - (`&&` doesn't work in the server's PowerShell 5.1, so run the steps

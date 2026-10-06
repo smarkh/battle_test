@@ -15,15 +15,16 @@ guardrails-style network isolation and data handling).
   - Step 5 parts 1–2: a local web UI with accounts, case deletion, and
     3-month retention.
 
-  187 unit tests pass.
+  188 unit tests pass.
 - **On the smark_iq server (2026-09-28):**
   - Deployed in Docker, fully independent of smark_iq, and **live at
     `https://battle.smarkiq.us`** through its own Cloudflare Tunnel.
   - 14B runs a case in ~90 s, and the three-case evaluation in ~6 min.
   - For now, test accounts and fictional cases only. **Cloudflare Access is
     required before real users.**
-  - **Updated 2026-10-05** (commit `8d23708`): the case list on case
-    pages and the new-case form is live.
+  - **Updated 2026-10-05** (commits `8d23708`, `73f9d51`): the case list
+    on case pages and the new-case form, and Word and PDF downloads, are
+    live.
   - **Updated 2026-10-04** (commit `ef1475d`): setup links, plans and
     usage limits, firm pooling, the queue cap, plan expiry, and the admin
     pages with the activity log are live. Built and restarted over SSH.

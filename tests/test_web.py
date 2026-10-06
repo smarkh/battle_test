@@ -159,6 +159,13 @@ class WebAppTest(unittest.TestCase):
         self.assertEqual(headers["x-frame-options"], "DENY")
         self.assertEqual(headers["cache-control"], "no-store")
 
+    def test_static_files_are_linked_with_a_version(self):
+        page = self.client.get("/cases/new").text
+        css, js = re.findall(r'"(/static/app\.(?:css|js)\?v=[0-9a-f]{12})"', page)
+        self.assertEqual(css.split("?v=")[1], js.split("?v=")[1])
+        self.assertEqual(self.client.get(css).status_code, 200)
+        self.assertIn("EventSource", self.client.get(js).text)
+
     # --- setup links ----------------------------------------------------------
 
     def test_setup_link_sets_the_password_once(self):

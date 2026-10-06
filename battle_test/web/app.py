@@ -7,6 +7,7 @@ it's only ever served on this machine (see __main__.py).
 
 import asyncio
 import dataclasses
+import hashlib
 import hmac
 import json
 import re
@@ -220,6 +221,12 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
     app.state.store, app.state.worker, app.state.auth = store, worker, auth
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
     templates = Jinja2Templates(directory=HERE / "templates")
+    # Pages link to the stylesheet and script as ...?v=<this>. Cloudflare and
+    # browsers cache them for hours, so without it an update shows new pages
+    # with the old styles (seen on the 2026-10-05 deploy).
+    static_version = hashlib.sha256(b"".join(
+        f.read_bytes() for f in sorted((HERE / "static").iterdir()))).hexdigest()[:12]
+    templates.env.globals["static_version"] = static_version
     templates.env.globals.update(states=SUPPORTED_STATES, fact_fields=FACT_FIELDS, modes=MODES,
                                  retention_days=web.retention_days)
 
