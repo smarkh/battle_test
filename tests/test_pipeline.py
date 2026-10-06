@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import unittest
 from datetime import datetime
@@ -6,6 +7,7 @@ from pathlib import Path
 from battle_test import grounding
 from battle_test.config import Config
 from battle_test.law_index import LawSection
+from battle_test.models import Usage
 from battle_test.pipeline import run_case
 from battle_test.report import render_markdown
 
@@ -50,11 +52,14 @@ class FakeClient:
     """Records each call. JSON calls get research/selection answers; drafts
     get a numbered stub, or whatever `drafts` supplies."""
 
-    def __init__(self, drafts=None):
+    def __init__(self, drafts=None, usage=None):
+        self.usage = usage  # (input tokens, output tokens) reported for every call
         self.calls = []
         self.drafts = list(drafts or [])
 
-    def chat(self, model, system, user, on_token=None, json_mode=False):
+    def chat(self, model, system, user, on_token=None, json_mode=False, on_usage=None):
+        if on_usage and self.usage:
+            on_usage(Usage(model, *self.usage))
         self.calls.append({"model": model, "system": system, "user": user, "json": json_mode})
         if json_mode:
             if '"queries"' in user:
@@ -88,6 +93,30 @@ class PipelineTest(unittest.TestCase):
                          ["p-model", "p-model", "d-model", "p-model"])
         self.assertTrue(all(d.generated for d in run.documents))
         self.assertIn("the facts", client.drafting_calls()[0]["user"])
+
+    def test_token_usage_is_totalled_per_model_and_costed(self):
+        from battle_test.config import BedrockModel
+        cfg = dataclasses.replace(CFG, bedrock_models={"p-model": BedrockModel("p", 1.0, 2.0),
+                                                       "d-model": BedrockModel("d", 10.0, 20.0)})
+        run = run_case(cfg, FakeClient(usage=(1000, 100)), FakeLaw(), "UT", facts="f")
+        # Plaintiff: research, selection, complaint, motion, reply. Defendant: research, selection, opposition.
+        self.assertEqual(run.usage, {
+            "p-model": {"calls": 5, "input_tokens": 5000, "output_tokens": 500},
+            "d-model": {"calls": 3, "input_tokens": 3000, "output_tokens": 300},
+        })
+        self.assertAlmostEqual(run.cost_usd, (5000 * 1 + 500 * 2 + 3000 * 10 + 300 * 20) / 1e6)
+        self.assertIn("**Model usage:** 8 calls, 8,000 tokens in, 800 out, estimated cost $0.042",
+                      render_markdown(run, datetime(2026, 10, 5)))
+
+    def test_no_usage_reported_means_no_usage_line(self):
+        run = self.run_case(FakeClient(), facts="f")  # like the demo model
+        self.assertEqual((run.usage, run.cost_usd), ({}, None))
+        self.assertNotIn("Model usage", render_markdown(run, datetime(2026, 10, 5)))
+
+    def test_usage_without_a_price_says_so(self):
+        run = self.run_case(FakeClient(usage=(10, 5)), facts="f", rounds=1)  # CFG has no prices, like Ollama
+        self.assertIsNone(run.cost_usd)
+        self.assertIn("no price set for this model", render_markdown(run, datetime(2026, 10, 5)))
 
     def test_research_and_selection_run_for_each_side(self):
         client = FakeClient()

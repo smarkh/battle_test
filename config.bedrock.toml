@@ -1,0 +1,106 @@
+# battle_test with hosted models on Amazon Bedrock, for evaluating from the
+# laptop. Used only when asked for:
+#
+#   python -m battle_test.evaluate --config config.bedrock.toml --model qwen3-32b --label bedrock-qwen3-32b
+#
+# FICTIONAL CASES ONLY until the lawyer has agreed to case material going to
+# AWS. See plans/aws-bedrock-plan.md.
+#
+# No credentials go in this file. Sign in with `aws sso login` first; boto3
+# picks the session up from there.
+
+[models]
+provider = "bedrock"
+# Names from [bedrock.models] below. `evaluate --model NAME` overrides both.
+plaintiff = "qwen3-32b"
+defendant = "qwen3-32b"
+
+[generation]
+temperature = 0.4
+
+[pipeline]
+rounds = 2
+output_dir = "output"
+
+[bedrock]
+# A regional endpoint, so processing stays in a known region.
+region = "us-west-2"
+# An AWS profile name, if you don't use the default one. A name, not a secret.
+# profile = "battle-test"
+# The most a model may write in one reply. Drafts are ~1,500 tokens, but a
+# model that reasons first spends output tokens on that too.
+max_tokens = 16000
+timeout_seconds = 600
+
+# One entry per model. Each needs:
+#   id                  the model ID or inference profile ID, copied from the
+#                       Bedrock console (Model catalog, or Cross-region
+#                       inference). LEFT BLANK HERE: fill each in once the
+#                       account has access to the model.
+#   input_per_million   US dollars per million tokens, for the cost estimate
+#   output_per_million  shown on each run. From plans/aws-bedrock-plan.md,
+#                       checked 2026-10-03. Check them again before relying
+#                       on the estimates.
+# Optional:
+#   max_tokens          for a model whose limit is below bedrock.max_tokens
+#   temperature = false for a model that rejects a temperature setting
+
+[bedrock.models.qwen3-32b]
+id = ""
+input_per_million = 0.15
+output_per_million = 1.20
+
+[bedrock.models.qwen3-235b]
+id = ""
+input_per_million = 0.53
+output_per_million = 2.66
+
+[bedrock.models.llama3-3-70b]
+id = ""
+input_per_million = 0.99
+output_per_million = 1.32
+
+[bedrock.models.deepseek-v3-2]
+id = ""
+input_per_million = 0.62
+output_per_million = 1.85
+
+[bedrock.models.claude-sonnet-5]
+id = ""
+# Standard price plus the 10% regional-endpoint premium.
+input_per_million = 2.20
+output_per_million = 11.00
+# Recent Claude models return an error if a temperature is sent.
+temperature = false
+
+[corpus]
+snapshot = "v2026.08"
+base_url = "https://oss-data-us.vaquill.ai"
+data_dir = "data"
+jurisdictions = ["ut", "ca", "tx", "federal"]
+document_types = ["statutes", "constitutions", "court_rules"]
+
+[web]
+# The web UI on Bedrock, on this laptop only:
+#   python -m battle_test.web --config config.bedrock.toml
+# Its own port and its own folder for accounts and cases, so it can run
+# next to the Ollama one without the two picking up each other's queue.
+# Every case started here is sent to AWS: fictional cases only.
+host = "127.0.0.1"
+port = 8002
+data_dir = "cases/web-bedrock"
+secure_cookies = false
+behind_proxy = false
+retention_days = 90
+max_active_cases = 3
+
+[plans]
+default = "trial"
+
+[plans.trial]
+label = "Trial"
+cases = 5
+period = "total"
+
+[plans.unlimited]
+label = "Unlimited"

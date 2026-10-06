@@ -2,9 +2,11 @@
 
 import os
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+
+from battle_test.models import PROVIDERS
 
 # The laptop uses config.toml next to the code. The server's container sets
 # BATTLE_TEST_CONFIG to its own file (config.server.toml), so every command
@@ -12,6 +14,17 @@ from pathlib import Path
 DEFAULT_CONFIG_PATH = Path(
     os.environ.get("BATTLE_TEST_CONFIG") or Path(__file__).resolve().parent.parent / "config.toml"
 )
+
+
+@dataclass(frozen=True)
+class BedrockModel:
+    """One Bedrock model, under the short name [models] refers to it by."""
+    id: str  # the model ID or inference profile ID, from the Bedrock console
+    # US dollars per million tokens, for the cost estimate. None = unknown.
+    input_price: float | None = None
+    output_price: float | None = None
+    max_tokens: int | None = None  # overrides bedrock.max_tokens for this model
+    temperature: bool = True  # False for models that reject a temperature
 
 
 @dataclass(frozen=True)
@@ -28,6 +41,23 @@ class Config:
     # None uses Ollama's default (5 minutes). On the shared server GPU a short
     # value frees the card for Open WebUI soon after a run finishes.
     keep_alive: str | None = None
+    provider: str = "ollama"  # or "bedrock"
+    bedrock_region: str = ""
+    bedrock_profile: str = ""  # an AWS profile name. "" = boto3's default credentials.
+    max_tokens: int = 16000  # the most a Bedrock model may write in one reply
+    bedrock_models: dict[str, BedrockModel] = field(default_factory=dict)
+
+    def cost(self, usage: dict[str, dict[str, int]]) -> float | None:
+        """Estimated US dollars for a run's token usage (model -> counts), or
+        None if any model that was used has no price in the config."""
+        total = 0.0
+        for model, counts in usage.items():
+            priced = self.bedrock_models.get(model)
+            if priced is None or priced.input_price is None or priced.output_price is None:
+                return None
+            total += (counts["input_tokens"] * priced.input_price
+                      + counts["output_tokens"] * priced.output_price) / 1_000_000
+        return total if usage else None
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
@@ -37,17 +67,35 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     rounds = raw["pipeline"]["rounds"]
     if rounds not in (1, 2):
         raise ValueError(f"pipeline.rounds must be 1 or 2, got {rounds}")
+    provider = raw["models"].get("provider", "ollama")
+    if provider not in PROVIDERS:
+        raise ValueError(f"models.provider must be one of {PROVIDERS}, got {provider!r}")
+    # Each provider needs only its own section.
+    ollama, bedrock = raw.get("ollama", {}), raw.get("bedrock", {})
+    if provider == "ollama" and "url" not in ollama:
+        raise ValueError(f"{path} has no ollama.url, which the ollama provider needs.")
+    if provider == "bedrock" and not bedrock.get("region"):
+        raise ValueError(f"{path} has no bedrock.region, which the bedrock provider needs.")
 
     return Config(
-        ollama_url=raw["ollama"]["url"].rstrip("/"),
-        timeout_seconds=raw["ollama"]["timeout_seconds"],
+        ollama_url=ollama.get("url", "").rstrip("/"),
+        timeout_seconds=(bedrock if provider == "bedrock" else ollama).get("timeout_seconds", 1800),
         plaintiff_model=raw["models"]["plaintiff"],
         defendant_model=raw["models"]["defendant"],
-        num_ctx=raw["generation"]["num_ctx"],
+        num_ctx=raw["generation"].get("num_ctx", 12288),
         temperature=raw["generation"]["temperature"],
         rounds=rounds,
         output_dir=_resolve(path, raw["pipeline"]["output_dir"]),
-        keep_alive=raw["ollama"].get("keep_alive"),
+        keep_alive=ollama.get("keep_alive"),
+        provider=provider,
+        bedrock_region=bedrock.get("region", ""),
+        bedrock_profile=bedrock.get("profile", ""),
+        max_tokens=bedrock.get("max_tokens", 16000),
+        bedrock_models={
+            name: BedrockModel(m.get("id", ""), m.get("input_per_million"), m.get("output_per_million"),
+                               m.get("max_tokens"), m.get("temperature", True))
+            for name, m in bedrock.get("models", {}).items()
+        },
     )
 
 

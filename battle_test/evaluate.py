@@ -4,6 +4,7 @@
     python -m battle_test.evaluate --case utah_roofing --rounds 1
     python -m battle_test.evaluate --validate                 # check the case files only
     python -m battle_test.evaluate --research-only            # fast: score the search step alone
+    python -m battle_test.evaluate --config config.bedrock.toml --model qwen3-235b --repeats 3
 
 Each case in examples/eval/*.toml names a facts file, the authorities a
 competent brief should cite ("core") or may usefully cite ("useful"), and
@@ -13,6 +14,7 @@ setups, and each run's full document set.
 """
 
 import argparse
+import dataclasses
 import json
 import sys
 import time
@@ -26,7 +28,7 @@ from battle_test import grounding
 from battle_test.citations import PLACEHOLDER
 from battle_test.config import DEFAULT_CONFIG_PATH, load_config, load_corpus_config
 from battle_test.law_index import LawIndex
-from battle_test.ollama_client import OllamaClient, OllamaError
+from battle_test.models import ModelError, make_client
 from battle_test.pipeline import CaseRun, run_case
 from battle_test.report import render_markdown
 
@@ -136,6 +138,13 @@ class Score:
     placeholders: int
     seconds: float = 0.0
     notes: list[str] = field(default_factory=list)
+    repeat: int = 1  # which run of this case, when --repeats is used
+    usage: dict[str, dict[str, int]] = field(default_factory=dict)  # model -> calls and tokens
+    cost_usd: float | None = None  # None = the config has no price for a model used
+
+    @property
+    def label(self) -> str:
+        return self.case if self.repeat == 1 else f"{self.case} #{self.repeat}"
 
     def _rate(self, importance: str, attr: str) -> tuple[int, int]:
         group = [e for e in self.expected if e.importance == importance]
@@ -168,7 +177,7 @@ class Score:
         return sum(self.citation_checks.get(s, 0) for s in grounding.PROBLEM_STATUSES)
 
 
-def score(run: CaseRun, case: EvalCase, seconds: float = 0.0) -> Score:
+def score(run: CaseRun, case: EvalCase, seconds: float = 0.0, repeat: int = 1) -> Score:
     found = {c for citations in run.candidates.values() for c in citations}
     provided = {s.citation for doc in run.documents for s in doc.authorities}
     cited: list[str] = []
@@ -199,6 +208,9 @@ def score(run: CaseRun, case: EvalCase, seconds: float = 0.0) -> Score:
         placeholders=sum(1 for doc in run.documents for m in PLACEHOLDER.finditer(doc.text)
                          if m.group().startswith("[CITATION")),
         seconds=seconds,
+        repeat=repeat,
+        usage=run.usage,
+        cost_usd=run.cost_usd,
     )
 
 
@@ -209,6 +221,30 @@ def score(run: CaseRun, case: EvalCase, seconds: float = 0.0) -> Score:
 def _frac(pair: tuple[int, int]) -> str:
     hit, total = pair
     return f"{hit}/{total}" if total else "–"
+
+
+def _total(scores: list[Score], attr: str) -> tuple[int, int]:
+    pairs = [getattr(s, attr) for s in scores]
+    return sum(p[0] for p in pairs), sum(p[1] for p in pairs)
+
+
+def _cost(scores: list[Score]) -> str:
+    """The runs' estimated cost: "–" if nothing reported usage, "?" if a
+    model that was used has no price in the config."""
+    used = [s for s in scores if s.usage]
+    if not used:
+        return "–"
+    return "?" if any(s.cost_usd is None for s in used) else f"${sum(s.cost_usd for s in used):.3f}"
+
+
+def _usage_totals(scores: list[Score]) -> dict[str, dict[str, int]]:
+    totals: dict[str, dict[str, int]] = {}
+    for s in scores:
+        for model, counts in s.usage.items():
+            total = totals.setdefault(model, dict.fromkeys(counts, 0))
+            for key, n in counts.items():
+                total[key] += n
+    return totals
 
 
 def render_summary(scores: list[Score], label: str, setup: dict[str, str]) -> str:
@@ -223,16 +259,27 @@ def render_summary(scores: list[Score], label: str, setup: dict[str, str]) -> st
     lines += [
         "",
         "| Case | Core found by search | Core given to models | Core cited | Useful cited | Cited on-target "
-        "| Off-topic cited | ❌ problems | `[CITATION NEEDED]` | Minutes |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "| Off-topic cited | ❌ problems | `[CITATION NEEDED]` | Minutes | Cost |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for s in scores:
         lines.append(
-            f"| {s.case} | {_frac(s.core_found)} | {_frac(s.core_provided)} | {_frac(s.core_cited)} "
+            f"| {s.label} | {_frac(s.core_found)} | {_frac(s.core_provided)} | {_frac(s.core_cited)} "
             f"| {_frac(s.useful_cited)} "
             f"| {_frac(s.on_target)} | {len(s.off_topic_cited)} | {s.problems} | {s.placeholders} "
-            f"| {s.seconds / 60:.0f} |"
+            f"| {s.seconds / 60:.0f} | {_cost([s])} |"
         )
+    if len(scores) > 1:
+        lines.append(
+            f"| **Total** | {_frac(_total(scores, 'core_found'))} | {_frac(_total(scores, 'core_provided'))} "
+            f"| **{_frac(_total(scores, 'core_cited'))}** | {_frac(_total(scores, 'useful_cited'))} "
+            f"| {_frac(_total(scores, 'on_target'))} | {sum(len(s.off_topic_cited) for s in scores)} "
+            f"| {sum(s.problems for s in scores)} | {sum(s.placeholders for s in scores)} "
+            f"| {sum(s.seconds for s in scores) / 60:.0f} | {_cost(scores)} |"
+        )
+    for model, counts in _usage_totals(scores).items():
+        lines += ["", f"**`{model}` usage, all runs:** {counts['calls']} calls, "
+                      f"{counts['input_tokens']:,} tokens in, {counts['output_tokens']:,} out."]
     lines += [
         "",
         "*Core found by search / given to models / cited:* expected authorities that the law-index "
@@ -241,7 +288,7 @@ def render_summary(scores: list[Score], label: str, setup: dict[str, str]) -> st
         "how many are on the expected list.",
     ]
     for s in scores:
-        lines += ["", f"## {s.case} ({s.state})", ""]
+        lines += ["", f"## {s.label} ({s.state})", ""]
         for e in s.expected:
             mark = ("✅ cited" if e.cited else "➖ given, not cited" if e.provided
                     else "🔍 found by search, not selected" if e.found else "❌ never found by search")
@@ -320,9 +367,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--validate", action="store_true", help="Only check the case files.")
     parser.add_argument("--research-only", action="store_true",
                         help="Only run the plaintiff's research step and score the search (fast).")
+    parser.add_argument("--model", help="Use this model for both roles, instead of the config's [models].")
+    parser.add_argument("--repeats", type=int, default=1,
+                        help="Run each case this many times. One run is noisy: a change of one "
+                             "authority either way means nothing.")
     args = parser.parse_args(argv)
+    if args.repeats < 1:
+        parser.error("--repeats must be at least 1")
 
     cfg = load_config(args.config)
+    if args.model:
+        cfg = dataclasses.replace(cfg, plaintiff_model=args.model, defendant_model=args.model)
     cases = load_cases(args.case)
     with LawIndex(load_corpus_config(args.config).db_path) as law:
         invalid = {c.name: p for c in cases if (p := validate(c, law))}
@@ -336,7 +391,7 @@ def main(argv: list[str] | None = None) -> int:
             print("Fix the case files (or run --validate) before evaluating.", file=sys.stderr)
             return 1
 
-        client = OllamaClient.from_config(cfg)
+        client = make_client(cfg)
         started = datetime.now()
         out_dir = cfg.output_dir / "eval" / f"{started:%Y%m%d-%H%M%S}-{args.label}"
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -347,7 +402,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"=== {case.name}: research", file=sys.stderr, flush=True)
                 try:
                     rows.append((case, *research_recall(cfg, client, law, case)))
-                except OllamaError as e:
+                except ModelError as e:
                     print(f"error: {e}", file=sys.stderr)
                     return 1
             report = render_research(rows, args.label)
@@ -357,15 +412,18 @@ def main(argv: list[str] | None = None) -> int:
         setup = {
             "label": args.label,
             "started": f"{started:%Y-%m-%d %H:%M}",
+            "provider": cfg.provider,
             "plaintiff model": cfg.plaintiff_model,
             "defendant model": cfg.defendant_model,
             "rounds": str(args.rounds or cfg.rounds),
+            "runs per case": str(args.repeats),
             "law snapshot": law.meta().get("snapshot", "?"),
         }
 
         scores = []
-        for case in cases:
-            print(f"\n=== {case.name} ({case.state}) ===", file=sys.stderr, flush=True)
+        for case, repeat in ((c, r) for c in cases for r in range(1, args.repeats + 1)):
+            name = case.name if repeat == 1 else f"{case.name}-{repeat}"
+            print(f"\n=== {name} ({case.state}) ===", file=sys.stderr, flush=True)
             t0 = time.monotonic()
             try:
                 run = run_case(
@@ -374,14 +432,14 @@ def main(argv: list[str] | None = None) -> int:
                     rounds=args.rounds,
                     on_stage=lambda title, role: print(f"  {title} ({role})", file=sys.stderr, flush=True),
                 )
-            except OllamaError as e:
+            except ModelError as e:
                 print(f"error: {e}", file=sys.stderr)
                 return 1
-            s = score(run, case, time.monotonic() - t0)
+            s = score(run, case, time.monotonic() - t0, repeat)
             scores.append(s)
-            (out_dir / f"{case.name}.md").write_text(render_markdown(run, datetime.now()), encoding="utf-8")
+            (out_dir / f"{name}.md").write_text(render_markdown(run, datetime.now()), encoding="utf-8")
             print(f"  core cited {_frac(s.core_cited)}, off-topic {len(s.off_topic_cited)}, "
-                  f"{s.seconds / 60:.0f} min", file=sys.stderr, flush=True)
+                  f"{s.seconds / 60:.0f} min, cost {_cost([s])}", file=sys.stderr, flush=True)
 
     (out_dir / "summary.md").write_text(render_summary(scores, args.label, setup), encoding="utf-8")
     (out_dir / "results.json").write_text(

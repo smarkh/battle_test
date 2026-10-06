@@ -24,7 +24,7 @@ from fastapi.templating import Jinja2Templates
 from battle_test.config import (DEFAULT_CONFIG_PATH, Plan, Plans, load_config, load_corpus_config, load_plans,
                                 load_web_config)
 from battle_test.law_index import LawIndex
-from battle_test.ollama_client import OllamaClient
+from battle_test.models import make_client
 from battle_test.pipeline import ChatClient, run_case
 from battle_test.prompts import SUPPORTED_STATES
 from battle_test.report import render_markdown
@@ -181,7 +181,7 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
     corpus = load_corpus_config(config_path)
     web = load_web_config(config_path)
     plans = plans or load_plans(config_path)
-    client = client or OllamaClient.from_config(cfg)
+    client = client or make_client(cfg)
     root = data_dir or web.data_dir
     store = JobStore(root)
     auth = AuthStore(root / "users.sqlite")

@@ -17,10 +17,12 @@ No winner is declared.
 | Find the file that does something | [code-guide.md](code-guide.md) |
 | Set up and run it on your own machine | [running-locally.md](running-locally.md) |
 | Start, stop, update or check the deployed copy | [running-on-server.md](running-on-server.md) |
+| Run the models on Amazon Bedrock instead of your own GPU | [running-on-bedrock.md](running-on-bedrock.md) |
 | Make a change: tests, evaluation, and the project's rules | [development.md](development.md) |
 
 A sensible order for a newcomer: how-it-works, running-locally, code-guide,
-development. Read running-on-server only when you need to touch the server.
+development. Read running-on-server only when you need to touch the
+server, and running-on-bedrock only when you want hosted models.
 
 ## Where things stand
 
@@ -28,6 +30,8 @@ development. Read running-on-server only when you need to touch the server.
   public at `https://battle.smarkiq.us`.
 - Only **fictional** cases may be used on the public site, until Cloudflare
   Access is added in front of it.
+- The models can also run on Amazon Bedrock. That's built but hasn't been
+  run against AWS yet, and it's for fictional cases only too.
 - The citation checking works. The quality of the legal choices doesn't
   yet: the models often pick the wrong law, because the search step doesn't
   find the right sections. That's the main open problem.

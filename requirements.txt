@@ -12,5 +12,9 @@ python-multipart>=0.0.9
 python-docx>=1.1
 reportlab>=4.0
 
+# Hosted models on Amazon Bedrock (models.provider = "bedrock"). Not needed
+# for Ollama.
+boto3>=1.35
+
 # Tests for the web UI (FastAPI's TestClient).
 httpx2

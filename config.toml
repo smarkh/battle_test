@@ -6,6 +6,9 @@ url = "http://localhost:11434"
 timeout_seconds = 1800
 
 [models]
+# "ollama" (models on this machine) or "bedrock" (hosted, see
+# config.bedrock.toml and plans/aws-bedrock-plan.md).
+provider = "ollama"
 # Same model for both roles on the dev laptop; try different models per role
 # once on the server.
 plaintiff = "qwen2.5:7b"

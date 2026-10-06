@@ -8,6 +8,7 @@ from battle_test.citations import strip_echoed_markers
 from battle_test.config import Config
 from battle_test.grounding import CitationCheck, CheckedText, LawSearch
 from battle_test.law_index import LawSection
+from battle_test.models import Usage
 
 # Authorities in one drafting prompt when a side also gets the sections the
 # other side cited (so it can check what they actually say).
@@ -23,6 +24,7 @@ class ChatClient(Protocol):
         user: str,
         on_token: Callable[[str], None] | None = None,
         json_mode: bool = False,
+        on_usage: Callable[[Usage], None] | None = None,
     ) -> str: ...
 
 
@@ -51,6 +53,10 @@ class CaseRun:
     research: dict[str, list[str]] = field(default_factory=dict)  # role -> search queries
     candidates: dict[str, list[str]] = field(default_factory=dict)  # role -> citations search found
     documents: list[Document] = field(default_factory=list)
+    # model -> {"calls", "input_tokens", "output_tokens"}, as the provider
+    # reported them. Empty when the client reports nothing (the demo model).
+    usage: dict[str, dict[str, int]] = field(default_factory=dict)
+    cost_usd: float | None = None  # estimated from the config's prices. None = no price known.
 
     @property
     def state(self) -> str:
@@ -94,9 +100,15 @@ def run_case(
         if on_stage:
             on_stage(title, role)
 
+    def record(used: Usage) -> None:
+        counts = run.usage.setdefault(used.model, {"calls": 0, "input_tokens": 0, "output_tokens": 0})
+        counts["calls"] += 1
+        counts["input_tokens"] += used.input_tokens
+        counts["output_tokens"] += used.output_tokens
+
     def asker(role: str) -> Callable[[str], str]:
         model, system = roles[role]
-        return lambda task: client.chat(model, system, task, json_mode=True)
+        return lambda task: client.chat(model, system, task, json_mode=True, on_usage=record)
 
     def gather_authorities(role: str, research_task: str, materials_title: str,
                            materials: str) -> list[LawSection]:
@@ -119,7 +131,7 @@ def run_case(
     def draft(title: str, role: str, task: str, authorities: list[LawSection]) -> CheckedText:
         stage(title, role)
         model, system = roles[role]
-        raw = client.chat(model, system, task, on_token=on_token)
+        raw = client.chat(model, system, task, on_token=on_token, on_usage=record)
         checked = check(strip_echoed_markers(raw).strip(), authorities)
         run.documents.append(Document(title, role, checked.text, True, checked.checks,
                                       checked.unchecked, tuple(authorities)))
@@ -168,4 +180,5 @@ def run_case(
             r_auth,
         )
 
+    run.cost_usd = cfg.cost(run.usage)
     return run

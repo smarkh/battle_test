@@ -13,6 +13,9 @@ timeout_seconds = 1800
 keep_alive = "30s"
 
 [models]
+# "ollama" (models on this machine) or "bedrock" (hosted, see
+# config.bedrock.toml and plans/aws-bedrock-plan.md).
+provider = "ollama"
 # Decided 2026-09-25: start with 14B (fits fully on the 16 GB GPU with a
 # 12k context), then compare ~30B options with the evaluation.
 plaintiff = "qwen2.5:14b"

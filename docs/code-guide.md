@@ -13,6 +13,7 @@ Read [how-it-works.md](how-it-works.md) first. This is the map.
 | `plans/` | Design, decisions, results and future plans |
 | `config.toml` | Laptop settings |
 | `config.server.toml` | Server settings, copied into the Docker image |
+| `config.bedrock.toml` | Settings for running the models on Amazon Bedrock, used only with `--config`. See [running-on-bedrock.md](running-on-bedrock.md) |
 | `requirements.txt` | Python packages for the corpus build, the web UI and its tests |
 | `Dockerfile`, `.dockerignore` | The server image: code only, non-root user |
 | `docker-compose.yml` | The server's two containers and two volumes |
@@ -37,7 +38,9 @@ needed only to build the law index and to run the web UI.
 | `corpus.py` | `python -m battle_test.corpus build / info / search`. Downloads Open US Law, verifies checksums, builds the index. Needs `pyarrow`. | law_index, citations |
 | `report.py` | Turns a `CaseRun` into the Markdown document set: disclaimer, citation-check table, documents, appendix. | grounding |
 | `evaluate.py` | `python -m battle_test.evaluate`. Runs the sample cases and scores them against the expected authorities. | pipeline, report |
-| `ollama_client.py` | A minimal Ollama client: one `chat()` method, streaming, with a JSON mode. | none |
+| `models.py` | What the model clients share: `ModelError`, `Usage` (tokens one call used), and `make_client()`, which picks the client from `models.provider`. | none |
+| `ollama_client.py` | A minimal Ollama client: one `chat()` method, streaming, with a JSON mode. | models |
+| `bedrock_client.py` | The Amazon Bedrock client, with the same `chat()` method. Needs `boto3`, imported only when used. Retries are capped, because every attempt is billed. | models |
 | `config.py` | Loads the TOML config into typed settings: `Config`, `CorpusConfig`, `WebConfig`, `Plans`. | none |
 
 ### How the pieces call each other
@@ -48,7 +51,7 @@ cli.py / evaluate.py / web/app.py
         ▼
    pipeline.run_case()
         ├── prompts.py        builds every prompt
-        ├── client.chat()     ollama_client.py, or web/demo.py
+        ├── client.chat()     ollama_client.py, bedrock_client.py, or web/demo.py
         └── grounding.py
               ├── law_index.py   search, lookup, resolve
               └── citations.py   find and parse citations
@@ -103,7 +106,8 @@ fake model clients and small temporary databases.
 | `test_law_index.py` | Search ranking, lookup, resolving citations |
 | `test_grounding.py` | Research, selection, citation classification and inline marks |
 | `test_pipeline.py` | The order of model calls, what each prompt receives, both input modes |
-| `test_evaluate.py` | Scoring against expected authorities |
+| `test_evaluate.py` | Scoring against expected authorities, cost columns and repeats |
+| `test_models.py` | The Bedrock client (against a fake, so no network or cost), the provider switch, cost estimates, and reading JSON replies |
 | `test_jobs.py` | Case storage, allowances, the queue cap, retention |
 | `test_auth.py` | Passwords, sessions, setup links, lockout, the activity log |
 | `test_users.py` | The account command-line tool |
@@ -121,7 +125,9 @@ fake model clients and small temporary databases.
 | The order of documents, or adding a step | `pipeline.py` |
 | Adding a state | `prompts.py` (`SUPPORTED_STATES`, `TRIAL_COURTS`), `grounding.py` (`SUMMARY_JUDGMENT_RULES`), `[corpus] jurisdictions` in both configs, then rebuild the index |
 | The model or its settings | `[models]` and `[generation]` in the config |
-| A different model provider | A new client with the same `chat()` method as `ollama_client.py` |
+| Ollama or Bedrock | `provider` in `[models]` |
+| The Bedrock models and their prices | `[bedrock.models]` in `config.bedrock.toml` |
+| Another model provider | A new client with the same `chat()` method as `ollama_client.py`, added to `models.make_client()` |
 | A page's layout or wording | `web/templates/`, `web/static/` |
 | Plans and allowances | `[plans]` in both configs |
 | The Markdown output | `report.py` |

@@ -49,9 +49,15 @@ class JsonChat(Protocol):
 
 
 def parse_json_list(reply: str, key: str) -> list:
-    """The list under `key` in a JSON reply, or [] if the reply isn't usable."""
+    """The list under `key` in a JSON reply, or [] if the reply isn't usable.
+
+    Ollama's JSON mode returns bare JSON. Hosted models are only asked for
+    it, and often wrap it in a code fence or a sentence, so anything outside
+    the outermost braces is ignored.
+    """
+    start, end = reply.find("{"), reply.rfind("}")
     try:
-        value = json.loads(reply).get(key, [])
+        value = json.loads(reply[start:end + 1]).get(key, [])
     except (json.JSONDecodeError, AttributeError):
         return []
     return value if isinstance(value, list) else []

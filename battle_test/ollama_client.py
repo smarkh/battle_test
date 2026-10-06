@@ -6,8 +6,10 @@ import urllib.error
 import urllib.request
 from typing import Callable
 
+from battle_test.models import ModelError, Usage
 
-class OllamaError(RuntimeError):
+
+class OllamaError(ModelError):
     pass
 
 
@@ -31,11 +33,13 @@ class OllamaClient:
         user: str,
         on_token: Callable[[str], None] | None = None,
         json_mode: bool = False,
+        on_usage: Callable[[Usage], None] | None = None,
     ) -> str:
         """Send one system+user exchange and return the full reply.
 
         Streams the response so long drafts show progress via on_token.
-        json_mode constrains the reply to valid JSON.
+        json_mode constrains the reply to valid JSON. on_usage is told the
+        token counts Ollama reports.
         """
         body = {
             "model": model,
@@ -72,6 +76,8 @@ class OllamaClient:
                             on_token(piece)
                     if chunk.get("done"):
                         self._warn_if_context_full(chunk, model)
+                        if on_usage:
+                            on_usage(Usage(model, chunk.get("prompt_eval_count", 0), chunk.get("eval_count", 0)))
                         break
         except urllib.error.HTTPError as e:
             raise OllamaError(f"Ollama returned HTTP {e.code}: {e.read().decode(errors='replace')}") from e

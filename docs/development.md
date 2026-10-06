@@ -21,7 +21,8 @@ How to make a change safely. Set up first with
 - **Only fictional cases** go on the public site or to any hosted model,
   until the lawyer advising the project agrees otherwise.
 - **No credentials in files, commands or chat.** Passwords are typed at
-  hidden prompts. The tunnel token lives only in the server's `.env`.
+  hidden prompts. The tunnel token lives only in the server's `.env`. AWS
+  access comes from `aws sso login`, never from keys in a config file.
 - **Don't restart or change the server** without agreeing it first.
 - **Report results honestly,** including what got worse.
 
@@ -68,11 +69,19 @@ residential construction disputes. Each has an expected-authority list in
 | `--research-only` | ~1 min a case | A fast check of the search step alone |
 | `--validate` | Seconds | Checking the lists against the index, after a new law snapshot |
 
+Useful options:
+
+- `--repeats 3` runs each case three times and adds a total row.
+- `--model NAME` uses one model for both roles.
+- `--config config.bedrock.toml` runs the models on Amazon Bedrock. This
+  costs money (cents per case) and sends the case text to AWS, so use the
+  fictional sample cases only. See [running-on-bedrock.md](running-on-bedrock.md).
+
 Results go to `output/eval/<timestamp>-<label>/`:
 
 - `summary.md`: per case, which expected authorities search found, which
-  were given to the models, and which were cited, plus off-topic citations
-  and the citation-check counts
+  were given to the models, and which were cited, plus off-topic citations,
+  the citation-check counts, token usage and estimated cost
 - `results.json`: for comparing setups
 - each case's full document set
 
@@ -130,7 +139,7 @@ one placeholder, so every kind of highlight appears.
 | When you… | Update |
 |---|---|
 | Add, rename or repurpose a file | [code-guide.md](code-guide.md) and the root `README.md` |
-| Change how something is started, stopped or deployed | [running-locally.md](running-locally.md) or [running-on-server.md](running-on-server.md) |
+| Change how something is started, stopped or deployed | [running-locally.md](running-locally.md), [running-on-server.md](running-on-server.md) or [running-on-bedrock.md](running-on-bedrock.md) |
 | Change what the pipeline does | [how-it-works.md](how-it-works.md) |
 | Make a decision or get an evaluation result | `plans/plan.md` |
 | Do something on the server | `plans/server-migration-plan.md` |

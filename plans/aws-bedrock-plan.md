@@ -344,6 +344,56 @@ on your own hardware.
 3. Pick the drafting and checking models, and record the choice in
    `plans/plan.md`.
 
+**Step 1 done (2026-10-05), on the laptop, at no cost.** No AWS call
+has been made yet: the client was tested against a stand-in.
+- **Built:**
+  - `battle_test/bedrock_client.py`: Converse streaming, token usage from
+    each call, at most 4 attempts per call.
+  - `provider = "ollama" | "bedrock"` in `[models]`, and
+    `config.bedrock.toml` with the five candidate models and their prices.
+  - Per-case token totals and estimated cost in the Markdown report, the
+    evaluation summary and `results.json`.
+  - `evaluate --repeats N` and `--model NAME`, and a total row.
+  - Research and selection replies are now read leniently (a code fence
+    or a sentence around the JSON is ignored), for every provider.
+- **Decided 2026-10-05:**
+  - Budget alerts at **$10 and $25** for this phase (the $40 / $75 in
+    Phase 0 were sized for production).
+  - Compare **Qwen3 32B, Qwen3 235B, Llama 3.3 70B, DeepSeek v3.2 and
+    Claude Sonnet 5**, with **3 runs per case**.
+  - Region `us-west-2`.
+  - Where to embed for semantic search (server GPU or Bedrock) waits
+    until that step.
+- **Not built yet:** the cost on the web results page, `[web] workers`,
+  the `checker` role for 3a, and `config.aws.toml`. They wait until the
+  web app runs on Bedrock.
+- **Found:**
+  - botocore's `max_attempts` counts retries after the first try, so 4
+    meant 5 calls. The client uses `total_max_attempts` instead.
+  - Recent Claude models reject a `temperature`, so each model has a
+    `temperature = false` switch.
+  - Model IDs are left blank in `config.bedrock.toml`. They have to come
+    from the Bedrock console once the account has access.
+  - Ollama now reports token counts too, so local runs show usage, with
+    no cost because no price is set.
+- **Checked on the real local model** (laptop `qwen2.5:7b`, Utah case,
+  1 round): the run completed through the new provider switch and
+  reported **7 calls, 34,837 tokens in, 5,301 out**.
+  - **The per-case token estimate above looks low.** That's one round.
+    The 39k-in estimate was for two, counted as characters ÷ 4. A
+    two-round case is likely nearer 45–50k in, so expect costs roughly a
+    fifth to a quarter higher than the tables. Tokenizers differ by model,
+    so Bedrock's own counts will settle it.
+  - Score, for the record: core cited 1/4, off-topic 3. Earlier two-round
+    runs of this case scored 2/4 and 1. It's a single run, so this is
+    within the noise, and nothing in this change alters what Ollama is
+    asked or how its replies are read.
+- **Still unmeasured:** real Bedrock token counts and cost, whether reasoning
+  models bill their thinking as output, and how each model handles the
+  JSON requests. The first real run answers all three for a few cents.
+- **Next, and it needs you:** the AWS account, model access, the model
+  IDs, and `aws sso login` (Phase 1).
+
 ### Phase 3 — Provision the AWS server
 1. **EC2 `t4g.medium`:**
    - Amazon Linux 2023 or Ubuntu, arm64.

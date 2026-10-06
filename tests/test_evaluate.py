@@ -86,6 +86,30 @@ class EvaluateTest(unittest.TestCase):
         self.assertEqual(s.problems, 1)
         self.assertEqual((s.unchecked_lines, s.placeholders), (1, 1))
 
+    def test_summary_shows_cost_repeats_and_a_total(self):
+        def run(cost):
+            r = self.run_with(Document("Motion", "plaintiff", "x", True, checks=(check(SJ),), authorities=(SJ,)))
+            r.usage = {"m": {"calls": 8, "input_tokens": 39_000, "output_tokens": 7_000}}
+            r.cost_usd = cost
+            return r
+
+        scores = [score(run(0.04), self.case, repeat=1), score(run(0.05), self.case, repeat=2)]
+        md = render_summary(scores, "test", {"label": "test"})
+        self.assertIn("| Minutes | Cost |", md)
+        self.assertIn("| t | 0/2 | 1/2 | 1/2 |", md)
+        self.assertIn("| t #2 | 0/2 | 1/2 | 1/2 |", md)
+        self.assertRegex(md, r"\| \*\*Total\*\* \| 0/4 \| 2/4 \| \*\*2/4\*\* \|.*\| \$0\.090 \|")
+        self.assertIn("**`m` usage, all runs:** 16 calls, 78,000 tokens in, 14,000 out.", md)
+        self.assertIn("## t #2 (UT)", md)
+
+        # A model with no price gives "?", never a total that leaves it out.
+        unpriced = [scores[0], score(run(None), self.case, repeat=2)]
+        self.assertRegex(render_summary(unpriced, "test", {}), r"\| \*\*Total\*\* \|.*\| \? \|")
+        # Nothing reported at all (the old behaviour): a dash, and no total row for one run.
+        plain = render_summary([score(self.run_with(), self.case)], "test", {})
+        self.assertIn("| 0 | – |", plain)
+        self.assertNotIn("**Total**", plain)
+
     def test_found_by_search_counts_candidates_from_either_side(self):
         run = self.run_with(Document("Motion", "plaintiff", "", True))
         run.candidates = {"plaintiff": ["Utah Code § 15-1-1"], "defendant": ["Utah Code § 78B-2-307"]}

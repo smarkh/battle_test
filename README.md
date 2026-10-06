@@ -9,7 +9,7 @@ winner is declared. See `plans/plan.md` for the full design.
 what each file does, how to start and stop it on the laptop and on the
 server, and how to make a change.
 
-**Status (2026-10-03):** plan steps 1–3 are built. The web UI (step 5,
+**Status (2026-10-05):** plan steps 1–3 are built. The web UI (step 5,
 parts 1–2) runs locally, and is deployed on the smark_iq server at
 **https://battle.smarkiq.us**, for testing with fictional cases only until
 Cloudflare Access is added. Drafts are grounded in a local copy of the law:
@@ -81,7 +81,9 @@ Each output file contains:
 | `battle_test/corpus.py` | Downloading Open US Law and building the index (`python -m battle_test.corpus`) |
 | `battle_test/report.py` | Writing the Markdown output |
 | `battle_test/evaluate.py` | Scoring runs against the sample cases (`python -m battle_test.evaluate`) |
+| `battle_test/models.py` | What the model clients share, and choosing one from `models.provider` |
 | `battle_test/ollama_client.py` | Minimal Ollama client (streaming, JSON mode) |
+| `battle_test/bedrock_client.py` | Amazon Bedrock client (hosted models), with the same `chat()` method |
 | `battle_test/config.py` | Loads `config.toml` |
 | `battle_test/web/app.py` | Web UI routes: case form, live progress, results, download |
 | `battle_test/web/jobs.py` | Case storage, the usage record and plan limits, the one-at-a-time job queue, live progress events |
@@ -284,6 +286,40 @@ Results go to `output/eval/<timestamp>-<label>/`:
 
 Use a different `--config` file to compare models, e.g. 14B vs. ~30B, or
 local vs. Bedrock.
+
+- `--repeats 3` runs each case three times. One run is noisy, so a change
+  of one authority either way means nothing. The summary gets a row per
+  run and a total.
+- `--model NAME` uses one model for both roles, whatever the config says.
+- The summary shows each run's token usage, and its estimated cost when the
+  config has a price for the model.
+
+## Hosted models on Amazon Bedrock
+
+**Fictional cases only,** until the lawyer has agreed to case material
+going to AWS.
+
+`config.bedrock.toml` switches the model calls to Bedrock. Everything else
+(the law index, citation checking, the reports) still runs on this machine.
+Nothing uses it unless you pass `--config config.bedrock.toml`.
+
+```
+aws sso login
+python -m battle_test.evaluate --config config.bedrock.toml --model qwen3-32b --label bedrock-qwen3-32b --repeats 3
+```
+
+- **Before the first run:** fill in each model's `id` in
+  `config.bedrock.toml` from the Bedrock console, and sign in with the AWS
+  CLI. No credentials go in any file.
+- **Models** are listed under `[bedrock.models]` with their prices, which
+  drive the cost estimate. Check the prices before relying on it.
+- **Cost:** about $0.01 to $0.22 per case depending on the model, and
+  nothing while idle. See `plans/aws-bedrock-plan.md`.
+- A failed call is retried at most three times, then the run stops.
+- The web UI can run on it too, on port 8002 with its own accounts.
+
+Setup, starting and stopping, and troubleshooting are in
+`docs/running-on-bedrock.md`.
 
 ## Tests
 

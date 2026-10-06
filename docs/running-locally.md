@@ -101,6 +101,7 @@ Stop a run with **Ctrl+C**. Nothing is saved for an interrupted run.
 | Evaluate all three sample cases (~40 min) | `.venv\Scripts\python -m battle_test.evaluate --label laptop-7b` |
 | Evaluate the search step only (~1 min a case) | `.venv\Scripts\python -m battle_test.evaluate --research-only` |
 | Check the expected-authority lists against the index | `.venv\Scripts\python -m battle_test.evaluate --validate` |
+| Run on hosted Bedrock models (costs cents; needs AWS sign-in) | See [running-on-bedrock.md](running-on-bedrock.md) |
 | List accounts | `.venv\Scripts\python -m battle_test.web.users list` |
 | Add a user (prints a one-time setup link) | `.venv\Scripts\python -m battle_test.web.users add NAME --plan solo` |
 
@@ -131,6 +132,9 @@ file's folder, so use absolute paths for `data_dir` in `[corpus]` and
 | Symptom | Cause and fix |
 |---|---|
 | `Could not reach Ollama at http://localhost:11434` | Ollama isn't running. Start it, then check `ollama list`. |
+| Ollama returns HTTP 500 with a CUDA error | The GPU failed to load the model. Seen once on 2026-10-05, and the next attempt worked. Run it again. |
+| `bedrock.models.NAME.id is empty` | Copy that model's ID from the Bedrock console into `config.bedrock.toml`. |
+| `No usable AWS credentials` or an expired sign-in | Run `aws sso login`. |
 | `No law index at ...\law.sqlite` | Build it: `python -m battle_test.corpus build`. |
 | A warning that the model "used N of 12288 context tokens" | The input was too long and may have been cut. Shorten it, or raise `num_ctx` in `[generation]` if the GPU has room. |
 | The port is in use | Start with `--port 8001`. |

@@ -6,7 +6,7 @@ This is a standalone project, separate from the smark_iq deployment, but
 expected to reuse lessons learned there (self-hosting, local RAG,
 guardrails-style network isolation and data handling).
 
-## Status (2026-10-04)
+## Status (2026-10-05)
 
 - **Built on the dev laptop:**
   - Steps 1–3: pipeline, local law index (UT, CA, TX, federal),
@@ -15,7 +15,7 @@ guardrails-style network isolation and data handling).
   - Step 5 parts 1–2: a local web UI with accounts, case deletion, and
     3-month retention.
 
-  188 unit tests pass.
+  214 unit tests pass.
 - **On the smark_iq server (2026-09-28):**
   - Deployed in Docker, fully independent of smark_iq, and **live at
     `https://battle.smarkiq.us`** through its own Cloudflare Tunnel.
@@ -45,6 +45,11 @@ guardrails-style network isolation and data handling).
     - Cloudflare's "Always Use HTTPS" was declined for now
 
     ⚠ Cloudflare Access must be added before any real users test it.
+  - **Bedrock, step 1 (2026-10-05):** the Bedrock client, the provider
+    switch, per-case cost tracking and `evaluate --repeats` are built and
+    unit-tested, at no cost. No AWS call has been made. Next is the AWS
+    account setup, which is yours. See `plans/aws-bedrock-plan.md`,
+    Phase 2.
   - **AWS hosting** (Bedrock models + an EC2 app server), which would
     take battle_test off the smark_iq server entirely. Plan and cost
     estimates are in `plans/aws-bedrock-plan.md`: ~$0.10/case on the
@@ -78,6 +83,7 @@ guardrails-style network isolation and data handling).
 **Since 2026-10-05 these instructions also live in `docs/`**, written for
 someone new to the project: `docs/running-locally.md` and
 `docs/running-on-server.md`. When a command changes, update both places.
+Running on Amazon Bedrock is only in `docs/running-on-bedrock.md`.
 
 There are two ways to use battle_test today:
 - **A. Locally on the laptop,** for development and testing (the 7B model,
@@ -1318,20 +1324,22 @@ protections (item 2 above).
 ## Restart prompt
 
 Paste this into a new Claude Code session, opened in the `battle_test`
-folder, to pick up where the 2026-10-04 session left off:
+folder, to pick up where the 2026-10-05 session left off:
 
 ```
 We're continuing work on battle_test, the legal adversarial argument system.
-Start by reading plans/plan.md (especially "Status", build step 5,
-"Decisions made", the Bedrock option and "Open questions"),
-plans/aws-bedrock-plan.md, plans/server-migration-plan.md, and README.md.
-Then skim the code in battle_test/ (including battle_test/web/) and tests/.
+Start by reading docs/README.md and the files it points to (how-it-works,
+code-guide, running-locally, running-on-server, running-on-bedrock,
+development). Then read plans/plan.md (especially "Status", build step 5,
+"Decisions made" and "Open questions"), plans/aws-bedrock-plan.md
+(especially Phase 2 and "Development and testing costs"), and
+plans/server-migration-plan.md. Then skim the code in battle_test/
+(including battle_test/web/) and tests/.
 
-Next up: the Bedrock deployment (plans/aws-bedrock-plan.md). I decided on
-2026-10-04 that it comes before any Stripe or billing work, which waits
-until the product is closer to rollout. Whether REAL case material may go
-to AWS is still the lawyer's call, so Bedrock runs fictional cases only
-until then.
+Next up: the first real Bedrock runs (plans/aws-bedrock-plan.md, Phase 1
+then Phase 2 step 2). The code is built and has never been run against
+AWS. It waits on my AWS setup. Whether REAL case material may go to AWS is
+still the lawyer's call, so Bedrock runs fictional cases only.
 
 Where things stand:
 - Built on this dev laptop (RTX 3050 Ti, 4 GB VRAM, Ollama with qwen2.5:7b):
@@ -1339,52 +1347,70 @@ Where things stand:
     (data/law.sqlite), grounded research -> selection -> drafting, and
     code-level citation checking.
   - 3b evaluation set: three sample cases with expected authorities, and
-    python -m battle_test.evaluate (--research-only for a fast search check).
-  - Web UI: python -m battle_test.web, with accounts, per-user cases,
-    deletion and 90-day retention.
-- Added 2026-10-04, and live on the server (commit ef1475d):
-  - One-time setup links: `users add NAME --plan PLAN` prints a link and
-    the user sets their own password. `invite NAME` makes a new one.
-  - Plans in [plans] in the config (Trial 5 total; Solo 30, Pro 100,
-    Firm 60 a month; Unlimited). A usage table records each case started.
-    Failed runs aren't counted. Accounts with no plan get Trial.
-  - Firms: accounts with the same firm share the sum of their plans.
-  - Queue cap: 3 cases waiting or running per user (max_active_cases).
-  - Plan expiry: a paid-through date, set by hand. After it, the user
-    keeps their cases but can't start new ones.
-  - Admin pages at /admin, for accounts with the admin flag: accounts,
-    plans, setup links, disable/enable, and an append-only activity log.
-    Every change asks for the admin's password again. Admins never see
-    case content. Admin accounts themselves are command-line only.
-  - Not built: Stripe, overage, pay-per-case.
-- 3b search fixes doubled core authorities cited on the 7B (3 -> 6 of 16).
-  Texas didn't improve: keyword search can't cope with each state's
-  different statute wording. 14B on the server scored no better than 7B
-  (4 vs 6 of 16), so search and selection are the bottleneck. The next 3b
-  steps are semantic search and better selection, then re-evaluating with
-  stronger models, which Bedrock makes possible.
+    python -m battle_test.evaluate (--research-only for a fast search
+    check, --repeats N, --model NAME).
+  - Web UI: python -m battle_test.web, with accounts, plans and limits,
+    admin pages, per-user cases, deletion and 90-day retention.
+- Added 2026-10-05:
+  - docs/ folder: how it works, a code guide, and running it locally, on
+    the server and on Bedrock. Keep it accurate as things change.
+  - Case list down the left of every case page and the new-case form,
+    newest first. LIVE on the server.
+  - Download menu on the results page: Word (.docx), PDF or Markdown,
+    built on demand by battle_test/web/export.py (python-docx,
+    reportlab). LIVE on the server. The PDF covers Western European text
+    only.
+  - Stylesheet and script links carry a version (?v=hash), because
+    Cloudflare caches /static for 4 hours. LIVE on the server.
+  - Bedrock step 1, NOT on the server and never run against AWS:
+    - battle_test/bedrock_client.py (Converse streaming, token usage, at
+      most 4 attempts per call) and battle_test/models.py (make_client,
+      ModelError, Usage).
+    - provider = "ollama" | "bedrock" in [models]. config.toml and
+      config.server.toml stay on Ollama.
+    - config.bedrock.toml: five models with prices, and BLANK model IDs
+      that must come from the Bedrock console. It also has [web] (port
+      8002, cases/web-bedrock) so the local web UI can run on Bedrock.
+    - Token totals and estimated cost per case in the Markdown report,
+      the evaluation summary and results.json. Ollama reports tokens too.
+    - Research and selection JSON replies are read leniently.
+    - Not built: cost on the web results page, [web] workers, the checker
+      role for 3a, config.aws.toml.
+- Decided 2026-10-05: budget alerts at $10 and $25 for this phase.
+  Compare Qwen3 32B, Qwen3 235B, Llama 3.3 70B, DeepSeek v3.2 and Claude
+  Sonnet 5, 3 runs per case, in us-west-2. Word AND PDF export, not one.
+- Cost findings: nothing is billed while idle. A model comparison is about
+  $4, and a development month under $5 on open models or about $20 on
+  Sonnet. One real local run used 34.8k input tokens for ONE round, so the
+  plan's 39k-for-two-rounds estimate is low by roughly a fifth to a
+  quarter. Prices date from 2026-10-03 and need re-checking.
+- 3b: search and selection are still the bottleneck (7B cites about 6 of
+  16 core authorities, 14B no better). Next 3b steps are semantic search
+  and better selection, then re-evaluating with stronger models.
 - Server (plans/server-migration-plan.md):
   - Live at https://battle.smarkiq.us in Docker on the smark_iq server,
-    fully independent of smark_iq: its own network and its own Cloudflare
-    Tunnel (battle-test-cloudflared). Only the GPU is shared, and
-    keep_alive = 30s frees it after runs. 90 s per case on qwen2.5:14b.
-  - Updating: git pull over SSH, back up users.sqlite if the accounts
-    database changes, `docker compose build`, then `docker compose up -d`.
-    A code-only build worked over SSH on 2026-10-04. One that has to
-    download something fails over SSH with a credentials error: then
-    build in Remote Desktop, or on the laptop and docker save -> scp ->
-    docker load.
+    fully independent of smark_iq. Only the GPU is shared. 90 s per case
+    on qwen2.5:14b. On commit 9e43916 as of 2026-10-05.
+  - Deploying: git pull over SSH. Then BUILD ON THE LAPTOP AND COPY THE
+    IMAGE (docker compose build, docker save, scp to the server's home
+    folder, docker load over SSH, docker compose up -d). Building over
+    SSH failed on 2026-10-05 even for a code-only change, with the
+    credentials error. Check no case is queued or running first, and
+    back up users.sqlite if the accounts database changes.
   - Server gotchas:
-    - Docker image pulls, and smark_iq's git pull, fail over SSH (Windows
-      Credential Manager).
-    - Set passwords over SSH, not Remote Desktop (keyboard mapping).
     - Use `docker compose stop`, never `down`.
     - The server's shell is PowerShell 5.1: chain with `;`, not `&&`.
-    - smark_iq's containers vanished once, for an unknown cause (see the
-      Incident in the migration plan).
+    - Set passwords over SSH, not Remote Desktop (keyboard mapping).
+    - smark_iq's containers vanished once, for an unknown cause.
+    - An old battle-test-image.tar is still in the server's battle_test
+      folder. Ask me before deleting it.
   - Still open: Cloudflare Access (REQUIRED before any real users or real
     cases, and it should cover /admin), my signed-in checks, and the
     GPU-sharing check, which Bedrock may make moot.
+- Waiting on me, for Bedrock: the AWS account (MFA on root, an admin user
+  through IAM Identity Center), budget alerts, model access in us-west-2,
+  the AWS CLI with `aws configure sso`, and the model IDs for
+  config.bedrock.toml. docs/running-on-bedrock.md lists the steps.
 - Waiting on the lawyer: sending case material to AWS, a review of the
   expected-authority lists, the Texas Property Code § 27.004 question,
   retention vs. record-keeping, and Cloudflare handling case text in
@@ -1392,27 +1418,30 @@ Where things stand:
 
 Before doing anything else:
 1. Run `python -m unittest` (use .venv/Scripts/python) and confirm all
-   tests pass (181 as of 2026-10-04).
+   tests pass (214 as of 2026-10-05).
 2. Check that data/law.sqlite exists. If it doesn't, rebuild it with
    `python -m battle_test.corpus build`.
 3. Check `git status` is clean, and that the latest commit is pushed to
-   GitHub, since the server pulls from there.
+   GitHub, since the server pulls from there. Tell me if the server is
+   behind what's pushed.
 4. Check the server over SSH (Windows ssh.exe, key loaded in ssh-agent):
-   that both stacks are running (docker ps) and battle.smarkiq.us answers.
-   Read-only checks only.
-5. Read plans/aws-bedrock-plan.md and tell me how you'd start the Bedrock
-   work: the order of steps, what can be built and tested on the laptop
-   first (a Bedrock client next to the Ollama one, chosen in config, and
-   logging model cost per case), and which parts need me personally: the
-   AWS account, model access, credentials, and anything in the Cloudflare
-   dashboard. Then wait for me to confirm before starting.
+   that both stacks are running (docker ps) and battle.smarkiq.us and
+   llm.smarkiq.us answer. Read-only checks only.
+5. Ask me how far the AWS setup has got. If it's done, propose the first
+   paid step: ONE single-case run on the cheapest model (about a cent),
+   then report the real token counts and cost against the estimates
+   before anything bigger. Then wait for me to confirm. If it isn't done,
+   suggest what can be done at no cost meanwhile (for example semantic
+   search for 3b, or web UI part 3: upload with text extraction).
 
 Working rules for this project:
 - Don't git commit or push. I handle all commits and pushes myself. When
-  you finish something, list the changed files and suggest a commit message.
+  you finish something, list the changed files and suggest a commit
+  message. Before deploying, check the commit really is pushed.
 - Record decisions and findings in plans/plan.md (and
-  plans/server-migration-plan.md for deployment) as we go, and keep
-  README.md accurate.
+  plans/server-migration-plan.md for deployment,
+  plans/aws-bedrock-plan.md for Bedrock) as we go, and keep README.md and
+  docs/ accurate.
 - Test changes against the real model with the sample cases
   (examples/*_facts.md, scored with battle_test.evaluate), not just unit
   tests, and report results honestly, including what got worse.
@@ -1423,9 +1452,11 @@ Working rules for this project:
   gitignored), never in git or a Docker image, and don't send case content
   to any external service. Fictional sample cases only on Bedrock until
   the lawyer signs off.
+- Anything that costs money needs my go-ahead first, with an estimate.
+  That includes every Bedrock call. Unit tests must never call AWS.
 - Never set real passwords or put credentials (including AWS keys) in
-  files, commands or chat. Interactive steps like creating accounts are
-  mine to run.
+  files, commands or chat. Interactive steps like creating accounts and
+  `aws sso login` are mine to run.
 - Don't restart or change anything on the server without asking first.
 - On Windows Git Bash, set MSYS_NO_PATHCONV=1 when passing container paths
   like /data/... to docker.

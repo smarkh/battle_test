@@ -43,12 +43,21 @@ def render_markdown(run: CaseRun, generated_at: datetime) -> str:
         f"- **Plaintiff model:** `{run.plaintiff_model}`",
         f"- **Defendant model:** `{run.defendant_model}`",
     ]
+    if run.usage:
+        lines.append(f"- **Model usage:** {usage_summary(run.usage, run.cost_usd)}")
     lines += _citation_summary(run)
     for doc in run.documents:
         source = "LLM-generated" if doc.generated else "user-supplied"
         lines += ["", "---", "", f"## {doc.title}", "", f"*{doc.role.title()} · {source}*", "", doc.text]
     lines += _appendix(run)
     return "\n".join(lines) + "\n"
+
+
+def usage_summary(usage: dict[str, dict[str, int]], cost_usd: float | None) -> str:
+    calls, tokens_in, tokens_out = (sum(u[k] for u in usage.values())
+                                    for k in ("calls", "input_tokens", "output_tokens"))
+    cost = "no price set for this model" if cost_usd is None else f"estimated cost ${cost_usd:.3f}"
+    return f"{calls} calls, {tokens_in:,} tokens in, {tokens_out:,} out, {cost}"
 
 
 def _citation_summary(run: CaseRun) -> list[str]:

@@ -20,7 +20,8 @@ class DemoClient:
         self.delay = delay_per_word
 
     def chat(self, model: str, system: str, user: str,
-             on_token: Callable[[str], None] | None = None, json_mode: bool = False) -> str:
+             on_token: Callable[[str], None] | None = None, json_mode: bool = False,
+             on_usage=None) -> str:  # canned text uses no tokens, so there's nothing to report
         if json_mode:
             if '"queries"' in user:
                 return json.dumps({"queries": ["breach of contract damages", "limitation of actions contract"]})

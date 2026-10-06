@@ -71,6 +71,26 @@ Details worth knowing:
 - **Case law isn't supported yet.** The models are told not to cite cases,
   and anything that looks like a case citation is listed as unchecked.
 
+## Where the models run
+
+The pipeline talks to a model through one method, `chat()`, and two
+clients offer it:
+
+- **Ollama** runs open models on the machine itself: the laptop's GPU or
+  the server's. Nothing leaves the machine. This is the default.
+- **Amazon Bedrock** runs larger hosted models. The case text in each
+  prompt is sent to AWS, so only fictional cases may use it until the
+  lawyer advising the project agrees otherwise.
+
+`provider` in `[models]` chooses. Either way, the law index, the search
+and the citation check run locally.
+
+Both clients report the tokens each call used. A run records the totals
+per model, and when the config has a price for the model, an estimated
+cost. Bedrock has no JSON mode, so research and selection replies are read
+leniently: text around the JSON is ignored, and an unusable reply falls
+back as described above.
+
 ## The law index
 
 The law comes from [Open US Law](https://www.vaquill.ai/open-us-law) (by
@@ -190,6 +210,7 @@ Settings live in a TOML file. `battle_test/config.py` loads it.
 |---|---|---|
 | `config.toml` | The laptop (the default) | Local Ollama, `qwen2.5:7b`, `127.0.0.1` |
 | `config.server.toml` | The server's container | Host Ollama, `qwen2.5:14b`, `keep_alive = "30s"`, `/data/...` paths, `0.0.0.0` with `behind_proxy` and `secure_cookies` |
+| `config.bedrock.toml` | Nothing, unless passed with `--config` | Hosted models on Amazon Bedrock, with each model's ID and price |
 
 The `BATTLE_TEST_CONFIG` environment variable picks the file. The Docker
 image sets it to the server config. Most commands also take `--config`.
@@ -197,7 +218,8 @@ image sets it to the server config. Most commands also take `--config`.
 | Section | What it sets |
 |---|---|
 | `[ollama]` | The Ollama address, timeout, and how long the model stays loaded |
-| `[models]` | The model for each role (plaintiff, defendant) |
+| `[models]` | The provider (`ollama` or `bedrock`) and the model for each role (plaintiff, defendant) |
+| `[bedrock]` | The AWS region, the output limit, and each hosted model's ID and price |
 | `[generation]` | Context size and temperature |
 | `[pipeline]` | Default rounds and the output folder |
 | `[corpus]` | The law snapshot, which jurisdictions and document types to index, and the data folder |

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from battle_test.config import DEFAULT_CONFIG_PATH, load_config, load_corpus_config
 from battle_test.law_index import LawIndex
-from battle_test.ollama_client import OllamaClient, OllamaError
+from battle_test.models import ModelError, make_client
 from battle_test.pipeline import run_case
 from battle_test.prompts import SUPPORTED_STATES
 from battle_test.report import render_markdown
@@ -39,7 +39,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     cfg = load_config(args.config)
-    client = OllamaClient.from_config(cfg)
+    client = make_client(cfg)
     try:
         law = LawIndex(load_corpus_config(args.config).db_path)
     except FileNotFoundError as e:
@@ -67,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
             on_stage=on_stage,
             on_token=None if args.quiet else on_token,
         )
-    except OllamaError as e:
+    except ModelError as e:
         print(f"\nerror: {e}", file=sys.stderr)
         return 1
     finally:
