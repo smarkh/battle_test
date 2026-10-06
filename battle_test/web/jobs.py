@@ -170,7 +170,8 @@ class JobStore:
         where, args = ("WHERE user_id = ?", (user_id,)) if user_id is not None else ("", ())
         with self._lock:
             rows = self._db.execute(
-                f"SELECT {_FIELDS} FROM cases {where} ORDER BY created_at DESC", args
+                # rowid breaks ties: created_at only goes down to the second.
+                f"SELECT {_FIELDS} FROM cases {where} ORDER BY created_at DESC, rowid DESC", args
             ).fetchall()
         return [Job(*r) for r in rows]
 

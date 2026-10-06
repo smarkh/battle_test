@@ -5,6 +5,10 @@ the complaint (or takes yours) and a motion for summary judgment. A defendant
 model writes the opposition, and optionally the plaintiff model replies. No
 winner is declared. See `plans/plan.md` for the full design.
 
+**New here? Start with [`docs/`](docs/README.md):** how the system works,
+what each file does, how to start and stop it on the laptop and on the
+server, and how to make a change.
+
 **Status (2026-10-03):** plan steps 1–3 are built. The web UI (step 5,
 parts 1–2) runs locally, and is deployed on the smark_iq server at
 **https://battle.smarkiq.us**, for testing with fictional cases only until
@@ -89,6 +93,7 @@ Each output file contains:
 | `battle_test/web/templates/`, `static/` | Pages, CSS, and the small progress/tabs script |
 | `examples/` | Fictional sample cases (UT, CA, TX) for testing |
 | `examples/eval/` | Expected authorities for each sample case |
+| `docs/` | How it works, a guide to the code, running it locally and on the server, and how to work on it |
 | `plans/plan.md` | Design, decisions, build steps, and open questions |
 
 ## Web UI
@@ -182,6 +187,9 @@ python -m battle_test.web --demo-model    # canned drafts, no GPU needed
   - ❌/⚠ marks and `[CITATION NEEDED]` placeholders are highlighted.
   - Below the documents: the authorities appendix and the research queries.
   - A Markdown download.
+- **Switching cases:** every case page (progress, results, or a failed
+  run) and the new-case form list your cases down the left, newest first, with each one's
+  status. The one you're on is highlighted.
 - **Deleting and retention:** "Delete case" (after a confirmation page)
   removes a case and all its files for good. Finished cases are also deleted
   automatically after `retention_days` (default 90, set in `[web]`). The

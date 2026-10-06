@@ -295,6 +295,8 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
     def page(request: Request, name: str, session: Session | None, **context) -> HTMLResponse:
         if session:
             context["allowance"] = allowance_for(session.user)
+            if name == "new.html":  # however the form is shown, the user's cases go down the left
+                context["nav_jobs"] = store.list(session.user.id)
         return templates.TemplateResponse(request, name, {"session": session, **context})
 
     def own_job(job_id: str, session: Session) -> Job:
@@ -483,11 +485,13 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
     def case(request: Request, job_id: str):
         session = current(request)
         job = own_job(job_id, session)
+        # The user's cases, newest first, to switch between down the left.
+        nav_jobs = store.list(session.user.id)
         if job.status in (QUEUED, RUNNING):
             position = store.queue_position(job) if job.status == QUEUED else 0
-            return page(request, "progress.html", session, job=job, position=position)
+            return page(request, "progress.html", session, job=job, position=position, nav_jobs=nav_jobs)
         if job.status == FAILED:
-            return page(request, "failed.html", session, job=job)
+            return page(request, "failed.html", session, job=job, nav_jobs=nav_jobs)
         result = store.result(job_id)
         documents = [
             {**doc, "html": render.document_html(doc), "summary": render.check_summary(doc),
@@ -495,7 +499,7 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
             for doc in result["documents"]
         ]
         return page(request, "result.html", session, job=job, result=result, documents=documents,
-                    authorities=render.authorities(result))
+                    authorities=render.authorities(result), nav_jobs=nav_jobs)
 
     @app.get("/cases/{job_id}/events")
     async def events(request: Request, job_id: str):

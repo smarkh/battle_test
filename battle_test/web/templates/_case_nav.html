@@ -1,0 +1,15 @@
+{# The user's cases, newest first, beside the case being viewed (or the new-case form, which has no `job`). #}
+<nav class="case-nav" aria-label="Your cases">
+  <h2>Your cases</h2>
+  <ul>
+  {% for other in nav_jobs %}
+    <li>
+      <a href="/cases/{{ other.id }}" {% if job is defined and other.id == job.id %}aria-current="page"{% endif %}>
+        <span class="case-nav-title">{{ other.title }}</span>
+        <span class="case-nav-meta">{{ other.state_code }} · {{ other.created_at.replace("T", " ")[:16] }}
+          <span class="status {{ other.status }}">{{ other.status }}</span></span>
+      </a>
+    </li>
+  {% endfor %}
+  </ul>
+</nav>

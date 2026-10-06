@@ -198,6 +198,50 @@ Options if it gets there:
   show it in the case's report and the evaluation summary. Real spend is
   then visible, not estimated.
 
+## Development and testing costs (before any real users)
+
+Worked out 2026-10-05, from the measured tokens per case and the price
+table above. The prices were not re-checked that day.
+
+**Nothing is charged while idle.** On-demand Bedrock bills per token, with
+no minimum and no charge for having model access. The ~$30/month fixed
+cost only starts when the EC2 server is created (Phase 3). Development
+and evaluation from the laptop (hybrid B) need no server.
+
+| Activity | What it sends | Cost |
+|---|---|---|
+| Unit tests, and the web UI on the demo model | Nothing | $0 |
+| `evaluate --research-only` (3 cases) | 3 small calls | A few cents at most |
+| One full evaluation (3 cases, 2 rounds) | 24 calls, ~117k in / ~21k out | $0.03 to $1.29, by model (below) |
+| Model comparison: 5 models x 3 cases x 3 repeats | 45 cases | ~$3.20 |
+
+One full evaluation, by model: gpt-oss-120b $0.03, Qwen3 32B $0.04,
+Mistral Large 3 $0.09, DeepSeek v3.2 $0.11, Qwen3 235B $0.12, Llama 3.3
+70B $0.15, Claude Haiku 4.5 $0.25, Claude Sonnet 5 $0.65, Claude Opus 5.5
+$1.29.
+
+A month of development, by how hard the evaluation is run:
+
+| Evaluations a month | Cases | Qwen3 32B | Qwen3 235B | Claude Sonnet 5 | Claude Opus 5.5 |
+|---|---|---|---|---|---|
+| 10 (light) | 30 | $0.40 | $1.20 | $6.50 | $13 |
+| 30 (regular) | 90 | $1.30 | $3.60 | $19 | $39 |
+| 200 (heavy: 10 a day) | 600 | $8 | $24 | $129 | $257 |
+
+**What could make it cost more than this:**
+- **Longer drafts.** The estimate assumes ~1,000-word drafts. A model
+  that writes twice as much roughly doubles the output cost, which is
+  about half the total on most of these models.
+- **Reasoning tokens.** Models that think before answering may bill that
+  thinking as output. Unmeasured: the first real run will show it.
+- **The 3a check,** once built, adds about 30% to each case.
+- **A runaway loop** in new code. The retry logic must give up after a
+  few attempts.
+
+**Controls for this stage:** an AWS Budgets alert at $10 and $25, a cheap
+default model in the evaluation config, and `--research-only`, `--case`
+and `--rounds 1` for quick iterations.
+
 ## Data handling (still needs the lawyer)
 
 Moving to AWS changes two things from today:

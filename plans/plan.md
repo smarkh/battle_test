@@ -15,7 +15,7 @@ guardrails-style network isolation and data handling).
   - Step 5 parts 1–2: a local web UI with accounts, case deletion, and
     3-month retention.
 
-  181 unit tests pass.
+  182 unit tests pass.
 - **On the smark_iq server (2026-09-28):**
   - Deployed in Docker, fully independent of smark_iq, and **live at
     `https://battle.smarkiq.us`** through its own Cloudflare Tunnel.
@@ -70,6 +70,10 @@ guardrails-style network isolation and data handling).
   intake" (needs the lawyer's input first).
 
 ## Start and stop: how to run it
+
+**Since 2026-10-05 these instructions also live in `docs/`**, written for
+someone new to the project: `docs/running-locally.md` and
+`docs/running-on-server.md`. When a command changes, update both places.
 
 There are two ways to use battle_test today:
 - **A. Locally on the laptop,** for development and testing (the 7B model,
@@ -869,6 +873,19 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
        then the form refusing a second on a 1-case trial.
    - **Part 2 is now complete.** Next is part 3: upload with text
      extraction, and `.docx`/PDF export.
+   - **Case list on case pages (2026-10-05).** The progress, results and
+     failure pages, and the new-case form, list the user's cases down the left, newest first,
+     with state, start time and status, and the open case highlighted.
+     - Below ~900 px wide the list moves above the case, in a short
+       scrolling box.
+     - The statuses are as of page load. They don't update live, though
+       a progress page reloads itself when its own case finishes.
+     - Cases started in the same second now list in a fixed order.
+     - **Tested:** 1 new web test (182 in all), plus a Chrome pass on the
+       demo model with a throwaway account: three cases, switching
+       between a queued and a finished one, no console errors. The
+       narrow layout was not checked in the browser (the screenshot
+       tool timed out).
    - **New-case options renamed** to say what gets drafted: "Draft the
      complaint and the motion" (from case information) or "Use my
      complaint, draft only the motion" (paste). The case list shows which
@@ -1267,10 +1284,16 @@ folder, to pick up where the 2026-10-04 session left off:
 
 ```
 We're continuing work on battle_test, the legal adversarial argument system.
-Start by reading plans/plan.md (especially "Status", build steps 3 and 5,
-"Model size estimate", the Bedrock option and "Open questions"),
-plans/server-migration-plan.md, and README.md. Then skim the code in
-battle_test/ (including battle_test/web/) and tests/.
+Start by reading plans/plan.md (especially "Status", build step 5,
+"Decisions made", the Bedrock option and "Open questions"),
+plans/aws-bedrock-plan.md, plans/server-migration-plan.md, and README.md.
+Then skim the code in battle_test/ (including battle_test/web/) and tests/.
+
+Next up: the Bedrock deployment (plans/aws-bedrock-plan.md). I decided on
+2026-10-04 that it comes before any Stripe or billing work, which waits
+until the product is closer to rollout. Whether REAL case material may go
+to AWS is still the lawyer's call, so Bedrock runs fictional cases only
+until then.
 
 Where things stand:
 - Built on this dev laptop (RTX 3050 Ti, 4 GB VRAM, Ollama with qwen2.5:7b):
@@ -1280,46 +1303,54 @@ Where things stand:
   - 3b evaluation set: three sample cases with expected authorities, and
     python -m battle_test.evaluate (--research-only for a fast search check).
   - Web UI: python -m battle_test.web, with accounts, per-user cases,
-    deletion, 90-day retention, one-time setup links, plans with case
-    allowances (firm pooling, queue cap, plan expiry), and admin pages
-    with an activity log at /admin. All of it is live on the server.
+    deletion and 90-day retention.
+- Added 2026-10-04, and live on the server (commit ef1475d):
+  - One-time setup links: `users add NAME --plan PLAN` prints a link and
+    the user sets their own password. `invite NAME` makes a new one.
+  - Plans in [plans] in the config (Trial 5 total; Solo 30, Pro 100,
+    Firm 60 a month; Unlimited). A usage table records each case started.
+    Failed runs aren't counted. Accounts with no plan get Trial.
+  - Firms: accounts with the same firm share the sum of their plans.
+  - Queue cap: 3 cases waiting or running per user (max_active_cases).
+  - Plan expiry: a paid-through date, set by hand. After it, the user
+    keeps their cases but can't start new ones.
+  - Admin pages at /admin, for accounts with the admin flag: accounts,
+    plans, setup links, disable/enable, and an append-only activity log.
+    Every change asks for the admin's password again. Admins never see
+    case content. Admin accounts themselves are command-line only.
+  - Not built: Stripe, overage, pay-per-case.
 - 3b search fixes doubled core authorities cited on the 7B (3 -> 6 of 16).
   Texas didn't improve: keyword search can't cope with each state's
-  different statute wording. The next 3b steps are semantic search
-  (probably on the server), better selection, and re-evaluating on 14B /
-  ~30B.
-- Server migration (plans/server-migration-plan.md):
-  - Phases 0-3 are done. The app runs on the smark_iq server in Docker, and
-    was tested privately: 90 s per case on qwen2.5:14b.
-  - Revised 2026-09-28: battle_test is FULLY INDEPENDENT of smark_iq, with
-    its own network and its own Cloudflare Tunnel (battle-test-cloudflared)
-    at battle.smarkiq.us. Only the GPU is shared, and keep_alive = 30s
-    frees it after runs.
-  - Phase 4 is DONE: live at https://battle.smarkiq.us (tunnel ID
-    04dcccfb-...). Phase 5's anonymous checks pass. Still open:
-    - the user's signed-in checks
-    - (Cloudflare "Always Use HTTPS" was declined for now; an app-only
-      redirect is possible later)
-    - the GPU-sharing check
-    - Cloudflare Access (required before real users)
-  - Updating the image without Remote Desktop: build on the laptop, then
-    docker save -> scp to the server's home folder -> docker load over SSH
-    (see the migration plan).
+  different statute wording. 14B on the server scored no better than 7B
+  (4 vs 6 of 16), so search and selection are the bottleneck. The next 3b
+  steps are semantic search and better selection, then re-evaluating with
+  stronger models, which Bedrock makes possible.
+- Server (plans/server-migration-plan.md):
+  - Live at https://battle.smarkiq.us in Docker on the smark_iq server,
+    fully independent of smark_iq: its own network and its own Cloudflare
+    Tunnel (battle-test-cloudflared). Only the GPU is shared, and
+    keep_alive = 30s frees it after runs. 90 s per case on qwen2.5:14b.
+  - Updating: git pull over SSH, back up users.sqlite if the accounts
+    database changes, `docker compose build`, then `docker compose up -d`.
+    A code-only build worked over SSH on 2026-10-04. One that has to
+    download something fails over SSH with a credentials error: then
+    build in Remote Desktop, or on the laptop and docker save -> scp ->
+    docker load.
   - Server gotchas:
     - Docker image pulls, and smark_iq's git pull, fail over SSH (Windows
-      Credential Manager), so do them in Remote Desktop. A code-only
-      `docker compose build` does work over SSH (2026-10-04); one that
-      has to download something doesn't.
+      Credential Manager).
     - Set passwords over SSH, not Remote Desktop (keyboard mapping).
     - Use `docker compose stop`, never `down`.
+    - The server's shell is PowerShell 5.1: chain with `;`, not `&&`.
     - smark_iq's containers vanished once, for an unknown cause (see the
       Incident in the migration plan).
-  - Cloudflare Access MUST be added before any real users or real cases.
-- 14B on the server scored no better than 7B on law selection (4 vs 6
-  core authorities of 16). Search and selection are the bottleneck; see 3b.
-- Waiting on the lawyer: a review of the expected-authority lists, the Texas
-  Property Code § 27.004 question, local vs. Bedrock, retention vs.
-  record-keeping, and Cloudflare handling case text in transit.
+  - Still open: Cloudflare Access (REQUIRED before any real users or real
+    cases, and it should cover /admin), my signed-in checks, and the
+    GPU-sharing check, which Bedrock may make moot.
+- Waiting on the lawyer: sending case material to AWS, a review of the
+  expected-authority lists, the Texas Property Code § 27.004 question,
+  retention vs. record-keeping, and Cloudflare handling case text in
+  transit.
 
 Before doing anything else:
 1. Run `python -m unittest` (use .venv/Scripts/python) and confirm all
@@ -1327,13 +1358,15 @@ Before doing anything else:
 2. Check that data/law.sqlite exists. If it doesn't, rebuild it with
    `python -m battle_test.corpus build`.
 3. Check `git status` is clean, and that the latest commit is pushed to
-   GitHub, since the server will clone from there.
+   GitHub, since the server pulls from there.
 4. Check the server over SSH (Windows ssh.exe, key loaded in ssh-agent):
-   that both stacks are running (docker ps) and llm.smarkiq.us answers.
-5. Tell me what you think the next step should be (probably the Bedrock
-   deployment in plans/aws-bedrock-plan.md, which I decided on 2026-10-04
-   comes before any Stripe billing work), including which parts need me
-   personally: the AWS account and credentials, and the Cloudflare
+   that both stacks are running (docker ps) and battle.smarkiq.us answers.
+   Read-only checks only.
+5. Read plans/aws-bedrock-plan.md and tell me how you'd start the Bedrock
+   work: the order of steps, what can be built and tested on the laptop
+   first (a Bedrock client next to the Ollama one, chosen in config, and
+   logging model cost per case), and which parts need me personally: the
+   AWS account, model access, credentials, and anything in the Cloudflare
    dashboard. Then wait for me to confirm before starting.
 
 Working rules for this project:
@@ -1350,9 +1383,12 @@ Working rules for this project:
   in a scratch config, never the real accounts database.
 - Case documents are sensitive. Keep them in cases/ or output/ (both
   gitignored), never in git or a Docker image, and don't send case content
-  to any external service.
-- Never set real passwords or put credentials in files, commands or chat.
-  Interactive steps like creating accounts are mine to run.
+  to any external service. Fictional sample cases only on Bedrock until
+  the lawyer signs off.
+- Never set real passwords or put credentials (including AWS keys) in
+  files, commands or chat. Interactive steps like creating accounts are
+  mine to run.
+- Don't restart or change anything on the server without asking first.
 - On Windows Git Bash, set MSYS_NO_PATHCONV=1 when passing container paths
   like /data/... to docker.
 ```

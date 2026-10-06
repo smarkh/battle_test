@@ -26,9 +26,13 @@
   <div class="preview-banner">
     Local preview, served on this computer only. Draft output for attorney review. Not legal advice.
   </div>
-  <main>
-    {% block content %}{% endblock %}
-  </main>
+  {# Case pages and the new-case form pass nav_jobs, and get the user's cases down the left. #}
+  <div class="layout{% if nav_jobs %} with-case-nav{% endif %}">
+    {% if nav_jobs %}{% include "_case_nav.html" %}{% endif %}
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+  </div>
   <script src="/static/app.js"></script>
 </body>
 </html>

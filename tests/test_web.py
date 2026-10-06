@@ -613,6 +613,29 @@ class WebAppTest(unittest.TestCase):
                 self.assertEqual(other.get(path).status_code, 404)
         self.assertIn("Start your first case", other.get("/").text)
 
+    def test_case_page_lists_own_cases_newest_first(self):
+        first = self.finished_case(plaintiff="Avery First")
+        second = self.finished_case(plaintiff="Blake Second")
+        failed = self.finished_case(plaintiff="Casey Third")
+        self.app.state.store.update(failed.rsplit("/", 1)[1], status="failed", error="boom")
+        other = TestClient(self.app)
+        self.login("other", client=other)
+        theirs = self.submit(client=other, plaintiff="Someone Else").headers["location"]
+        self.assertTrue(self.app.state.worker.wait_idle())
+
+        for url in (first, failed):  # a results page and a failure page
+            with self.subTest(url=url):
+                nav = re.search(r'<nav class="case-nav".*?</nav>', self.client.get(url).text, re.DOTALL).group()
+                self.assertEqual(re.findall(r'href="(/cases/\w+)"', nav), [failed, second, first])
+                self.assertEqual(re.findall(r'href="(/cases/\w+)" aria-current="page"', nav), [url])
+                self.assertNotIn("Someone Else", nav)
+        self.assertNotIn(theirs, self.client.get(first).text)
+        # The new-case form lists them too, with none marked as open.
+        for page in (self.client.get("/cases/new").text, self.submit(state="XX").text):
+            self.assertEqual(re.findall(r'href="(/cases/[0-9a-f]{32})"', page), [failed, second, first])
+            self.assertNotIn("aria-current", page)
+        self.assertNotIn("case-nav", other.get("/account").text)
+
     def test_delete_case(self):
         case_url = self.finished_case()
         job_id = case_url.rsplit("/", 1)[1]
