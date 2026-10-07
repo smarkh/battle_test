@@ -26,7 +26,7 @@ output_dir = "output"
 # A regional endpoint, so processing stays in a known region.
 region = "us-west-2"
 # An AWS profile name, if you don't use the default one. A name, not a secret.
-# profile = "battle-test"
+profile = "battle-test"
 # The most a model may write in one reply. Drafts are ~1,500 tokens, but a
 # model that reasons first spends output tokens on that too.
 max_tokens = 16000
@@ -35,8 +35,10 @@ timeout_seconds = 600
 # One entry per model. Each needs:
 #   id                  the model ID or inference profile ID, copied from the
 #                       Bedrock console (Model catalog, or Cross-region
-#                       inference). LEFT BLANK HERE: fill each in once the
-#                       account has access to the model.
+#                       inference). Listed 2026-10-06. Llama 3.3 70B and
+#                       Claude Sonnet 5 are only offered through a "us."
+#                       inference profile, which may process a call in any
+#                       US region, not only bedrock.region.
 #   input_per_million   US dollars per million tokens, for the cost estimate
 #   output_per_million  shown on each run. From plans/aws-bedrock-plan.md,
 #                       checked 2026-10-03. Check them again before relying
@@ -46,27 +48,27 @@ timeout_seconds = 600
 #   temperature = false for a model that rejects a temperature setting
 
 [bedrock.models.qwen3-32b]
-id = ""
+id = "qwen.qwen3-32b-v1:0"
 input_per_million = 0.15
 output_per_million = 1.20
 
 [bedrock.models.qwen3-235b]
-id = ""
+id = "qwen.qwen3-235b-a22b-2507-v1:0"
 input_per_million = 0.53
 output_per_million = 2.66
 
 [bedrock.models.llama3-3-70b]
-id = ""
+id = "us.meta.llama3-3-70b-instruct-v1:0"
 input_per_million = 0.99
 output_per_million = 1.32
 
 [bedrock.models.deepseek-v3-2]
-id = ""
+id = "deepseek.v3.2"
 input_per_million = 0.62
 output_per_million = 1.85
 
 [bedrock.models.claude-sonnet-5]
-id = ""
+id = "us.anthropic.claude-sonnet-5"
 # Standard price plus the 10% regional-endpoint premium.
 input_per_million = 2.20
 output_per_million = 11.00

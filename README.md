@@ -304,13 +304,16 @@ going to AWS.
 Nothing uses it unless you pass `--config config.bedrock.toml`.
 
 ```
-aws sso login
+aws sso login --profile battle-test
 python -m battle_test.evaluate --config config.bedrock.toml --model qwen3-32b --label bedrock-qwen3-32b --repeats 3
 ```
 
-- **Before the first run:** fill in each model's `id` in
-  `config.bedrock.toml` from the Bedrock console, and sign in with the AWS
-  CLI. No credentials go in any file.
+- **Not working yet (2026-10-06):** AWS refuses every call with "Access
+  to Bedrock models is not allowed for this account". It needs an AWS
+  Support case.
+- **Before a run:** sign in with the AWS CLI. The model IDs and the
+  profile name are in `config.bedrock.toml`. No credentials go in any
+  file.
 - **Models** are listed under `[bedrock.models]` with their prices, which
   drive the cost estimate. Check the prices before relying on it.
 - **Cost:** about $0.01 to $0.22 per case depending on the model, and

@@ -30,8 +30,9 @@ server, and running-on-bedrock only when you want hosted models.
   public at `https://battle.smarkiq.us`.
 - Only **fictional** cases may be used on the public site, until Cloudflare
   Access is added in front of it.
-- The models can also run on Amazon Bedrock. That's built but hasn't been
-  run against AWS yet, and it's for fictional cases only too.
+- The models can also run on Amazon Bedrock. That's built and set up, but
+  AWS is blocking Bedrock for the account (2026-10-06), so no model has
+  answered yet. It's for fictional cases only too.
 - The citation checking works. The quality of the legal choices doesn't
   yet: the models often pick the wrong law, because the search step doesn't
   find the right sections. That's the main open problem.

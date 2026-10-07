@@ -21,7 +21,15 @@ class Usage:
     output_tokens: int
 
 
-PROVIDERS = ("ollama", "bedrock")
+def add_usage(totals: dict[str, dict[str, int]], used: Usage) -> None:
+    """Add one call to a run's totals (model -> calls and tokens)."""
+    counts = totals.setdefault(used.model, {"calls": 0, "input_tokens": 0, "output_tokens": 0})
+    counts["calls"] += 1
+    counts["input_tokens"] += used.input_tokens
+    counts["output_tokens"] += used.output_tokens
+
+
+PROVIDERS =("ollama", "bedrock")
 
 
 def make_client(cfg):

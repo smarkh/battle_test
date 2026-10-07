@@ -107,6 +107,12 @@ class BedrockClientTest(unittest.TestCase):
             client(FakeRuntime(error=denied)).chat("cheap", "s", "u")
         with self.assertRaisesRegex(ModelError, "aws sso login"):
             client(FakeRuntime(error=NoCredentialsError())).chat("cheap", "s", "u")
+        # Seen on the first real call, 2026-10-06. Not a problem with the request, despite the code.
+        blocked = ClientError({"Error": {"Code": "ValidationException", "Message":
+                               "Error 002: Access to Bedrock models is not allowed for this account"}}, "ConverseStream")
+        with self.assertRaisesRegex(ModelError, "AWS Support") as raised:
+            client(FakeRuntime(error=blocked)).chat("cheap", "s", "u")
+        self.assertNotIn("temperature", str(raised.exception))
 
     def test_a_bug_in_a_callback_is_not_mistaken_for_an_aws_error(self):
         def broken(piece):

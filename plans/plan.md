@@ -47,9 +47,13 @@ guardrails-style network isolation and data handling).
     ⚠ Cloudflare Access must be added before any real users test it.
   - **Bedrock, step 1 (2026-10-05):** the Bedrock client, the provider
     switch, per-case cost tracking and `evaluate --repeats` are built and
-    unit-tested, at no cost. No AWS call has been made. Next is the AWS
-    account setup, which is yours. See `plans/aws-bedrock-plan.md`,
-    Phase 2.
+    unit-tested, at no cost.
+  - **Bedrock, AWS setup (2026-10-06): blocked by AWS.** Sign-in works
+    (profile `battle-test`) and the five model IDs are filled in. The
+    first real call was refused, on every model, with `Error 002: Access
+    to Bedrock models is not allowed for this account`. Nothing was
+    billed. Next is yours: an AWS Support case, and the Anthropic
+    use-case form. See `plans/aws-bedrock-plan.md`, Phase 1.
   - **AWS hosting** (Bedrock models + an EC2 app server), which would
     take battle_test off the smark_iq server entirely. Plan and cost
     estimates are in `plans/aws-bedrock-plan.md`: ~$0.10/case on the
@@ -1324,7 +1328,7 @@ protections (item 2 above).
 ## Restart prompt
 
 Paste this into a new Claude Code session, opened in the `battle_test`
-folder, to pick up where the 2026-10-05 session left off:
+folder, to pick up where the 2026-10-06 session left off:
 
 ```
 We're continuing work on battle_test, the legal adversarial argument system.
@@ -1332,14 +1336,16 @@ Start by reading docs/README.md and the files it points to (how-it-works,
 code-guide, running-locally, running-on-server, running-on-bedrock,
 development). Then read plans/plan.md (especially "Status", build step 5,
 "Decisions made" and "Open questions"), plans/aws-bedrock-plan.md
-(especially Phase 2 and "Development and testing costs"), and
-plans/server-migration-plan.md. Then skim the code in battle_test/
-(including battle_test/web/) and tests/.
+(especially the notes under Phase 1 and Phase 2, and "Development and
+testing costs"), and plans/server-migration-plan.md. Then skim the code in
+battle_test/ (including battle_test/web/) and tests/.
 
 Next up: the first real Bedrock runs (plans/aws-bedrock-plan.md, Phase 1
-then Phase 2 step 2). The code is built and has never been run against
-AWS. It waits on my AWS setup. Whether REAL case material may go to AWS is
-still the lawyer's call, so Bedrock runs fictional cases only.
+then Phase 2 step 2). The code is built and the laptop is set up, but AWS
+is BLOCKING Bedrock for my account, so no model has answered yet. It
+waits on an AWS Support case, which is mine. Whether REAL case material
+may go to AWS is still the lawyer's call, so Bedrock runs fictional cases
+only.
 
 Where things stand:
 - Built on this dev laptop (RTX 3050 Ti, 4 GB VRAM, Ollama with qwen2.5:7b):
@@ -1362,20 +1368,39 @@ Where things stand:
     only.
   - Stylesheet and script links carry a version (?v=hash), because
     Cloudflare caches /static for 4 hours. LIVE on the server.
-  - Bedrock step 1, NOT on the server and never run against AWS:
+  - Bedrock step 1, NOT on the server:
     - battle_test/bedrock_client.py (Converse streaming, token usage, at
       most 4 attempts per call) and battle_test/models.py (make_client,
       ModelError, Usage).
     - provider = "ollama" | "bedrock" in [models]. config.toml and
       config.server.toml stay on Ollama.
-    - config.bedrock.toml: five models with prices, and BLANK model IDs
-      that must come from the Bedrock console. It also has [web] (port
-      8002, cases/web-bedrock) so the local web UI can run on Bedrock.
+    - config.bedrock.toml: five models with IDs and prices. It also has
+      [web] (port 8002, cases/web-bedrock) so the local web UI can run on
+      Bedrock.
     - Token totals and estimated cost per case in the Markdown report,
       the evaluation summary and results.json. Ollama reports tokens too.
     - Research and selection JSON replies are read leniently.
     - Not built: cost on the web results page, [web] workers, the checker
       role for 3a, config.aws.toml.
+- Bedrock, 2026-10-06 (details in plans/aws-bedrock-plan.md, Phase 1):
+  - AWS sign-in works: AWS CLI 2.37.10, profile battle-test (account
+    548108386131, AdministratorAccess, us-west-2). ~/.aws/config was
+    written by hand, because `aws configure sso` signed in but saved no
+    profile. I sign in each session with
+    `aws sso login --profile battle-test`, in my own PowerShell window.
+  - config.bedrock.toml has profile = "battle-test" and all five model
+    IDs. Llama 3.3 70B and Claude Sonnet 5 are only offered through a
+    "us." inference profile, which may process in any US region.
+  - BLOCKED: every call fails with "Error 002: Access to Bedrock models
+    is not allowed for this account" (Qwen3 32B, DeepSeek v3.2, Llama 3.3
+    70B, from our client and the AWS CLI). The sign-in, the IDs and
+    per-model availability all check out. Nothing has been billed.
+  - evaluate --research-only now records token usage and cost.
+  - The client explains the account block instead of suggesting a
+    temperature setting.
+  - Prices: Qwen3 32B, Qwen3 235B and DeepSeek v3.2 confirmed. Llama 3.3
+    70B (one reading gave $0.40 / $0.60, config has $0.99 / $1.32) and
+    Claude Sonnet 5 not confirmed.
 - Decided 2026-10-05: budget alerts at $10 and $25 for this phase.
   Compare Qwen3 32B, Qwen3 235B, Llama 3.3 70B, DeepSeek v3.2 and Claude
   Sonnet 5, 3 runs per case, in us-west-2. Word AND PDF export, not one.
@@ -1383,7 +1408,7 @@ Where things stand:
   $4, and a development month under $5 on open models or about $20 on
   Sonnet. One real local run used 34.8k input tokens for ONE round, so the
   plan's 39k-for-two-rounds estimate is low by roughly a fifth to a
-  quarter. Prices date from 2026-10-03 and need re-checking.
+  quarter.
 - 3b: search and selection are still the bottleneck (7B cites about 6 of
   16 core authorities, 14B no better). Next 3b steps are semantic search
   and better selection, then re-evaluating with stronger models.
@@ -1407,18 +1432,22 @@ Where things stand:
   - Still open: Cloudflare Access (REQUIRED before any real users or real
     cases, and it should cover /admin), my signed-in checks, and the
     GPU-sharing check, which Bedrock may make moot.
-- Waiting on me, for Bedrock: the AWS account (MFA on root, an admin user
-  through IAM Identity Center), budget alerts, model access in us-west-2,
-  the AWS CLI with `aws configure sso`, and the model IDs for
-  config.bedrock.toml. docs/running-on-bedrock.md lists the steps.
-- Waiting on the lawyer: sending case material to AWS, a review of the
+- Waiting on me, for Bedrock:
+  - An AWS Support case (Account and billing) asking for Bedrock access
+    on account 548108386131 in us-west-2, quoting Error 002.
+  - The Anthropic use-case form for Claude Sonnet 5 (its agreement shows
+    as not available).
+  - Checking the Llama 3.3 70B and Claude Sonnet 5 prices by eye on the
+    Bedrock pricing page.
+- Waiting on the lawyer: sending case material to AWS (including that two
+  of the models may process in any US region), a review of the
   expected-authority lists, the Texas Property Code § 27.004 question,
   retention vs. record-keeping, and Cloudflare handling case text in
   transit.
 
 Before doing anything else:
 1. Run `python -m unittest` (use .venv/Scripts/python) and confirm all
-   tests pass (214 as of 2026-10-05).
+   tests pass (215 as of 2026-10-06).
 2. Check that data/law.sqlite exists. If it doesn't, rebuild it with
    `python -m battle_test.corpus build`.
 3. Check `git status` is clean, and that the latest commit is pushed to
@@ -1427,12 +1456,18 @@ Before doing anything else:
 4. Check the server over SSH (Windows ssh.exe, key loaded in ssh-agent):
    that both stacks are running (docker ps) and battle.smarkiq.us and
    llm.smarkiq.us answer. Read-only checks only.
-5. Ask me how far the AWS setup has got. If it's done, propose the first
-   paid step: ONE single-case run on the cheapest model (about a cent),
-   then report the real token counts and cost against the estimates
-   before anything bigger. Then wait for me to confirm. If it isn't done,
-   suggest what can be done at no cost meanwhile (for example semantic
-   search for 3b, or web UI part 3: upload with text extraction).
+5. Ask me whether AWS has lifted the Bedrock block, and whether I've
+   signed in today (`aws sso login --profile battle-test`, which I run
+   myself). If both, propose the first paid step: the research-only
+   check on the cheapest model, which I approved on 2026-10-06 (about
+   $0.002 expected, $0.06 at most):
+   `python -m battle_test.evaluate --config config.bedrock.toml --model
+   qwen3-32b --research-only --label bedrock-qwen3-32b`.
+   Report the real token counts and cost against the estimates, then
+   propose ONE single-case run (about a cent) and wait for me to confirm
+   before anything bigger. If the block is still there, suggest what can
+   be done at no cost meanwhile (for example semantic search for 3b, or
+   web UI part 3: upload with text extraction).
 
 Working rules for this project:
 - Don't git commit or push. I handle all commits and pushes myself. When

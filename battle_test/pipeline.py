@@ -8,7 +8,7 @@ from battle_test.citations import strip_echoed_markers
 from battle_test.config import Config
 from battle_test.grounding import CitationCheck, CheckedText, LawSearch
 from battle_test.law_index import LawSection
-from battle_test.models import Usage
+from battle_test.models import Usage, add_usage
 
 # Authorities in one drafting prompt when a side also gets the sections the
 # other side cited (so it can check what they actually say).
@@ -101,10 +101,7 @@ def run_case(
             on_stage(title, role)
 
     def record(used: Usage) -> None:
-        counts = run.usage.setdefault(used.model, {"calls": 0, "input_tokens": 0, "output_tokens": 0})
-        counts["calls"] += 1
-        counts["input_tokens"] += used.input_tokens
-        counts["output_tokens"] += used.output_tokens
+        add_usage(run.usage, used)
 
     def asker(role: str) -> Callable[[str], str]:
         model, system = roles[role]

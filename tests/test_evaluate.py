@@ -123,6 +123,14 @@ class EvaluateTest(unittest.TestCase):
         self.assertIn("**Total: 1/3 expected authorities found by search.**", md)
         self.assertIn("🔍 found · *core* · `Utah R. Civ. P. 56`", md)
         self.assertIn("- limitation of actions", md)
+        self.assertNotIn("Model usage", md)
+
+    def test_research_report_shows_usage_and_cost(self):
+        usage = {"m": {"calls": 3, "input_tokens": 7_500, "output_tokens": 300}}
+        md = render_research([(self.case, ["q"], [])], "test", usage, 0.002)
+        self.assertIn("**Model usage:** 3 calls, 7,500 tokens in, 300 out, estimated cost $0.002", md)
+        self.assertLess(md.index("**Total:"), md.index("**Model usage:"))
+        self.assertLess(md.index("**Model usage:"), md.index("## t:"))
 
     def test_any_alternative_counts(self):
         run = self.run_with(Document("Motion", "plaintiff", "", True, checks=(check(LIMITS),)))

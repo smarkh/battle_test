@@ -50,6 +50,10 @@ def _aws_errors() -> tuple:
 def _explain(error: Exception) -> str:
     code = getattr(error, "response", {}).get("Error", {}).get("Code", "")
     hint = _HINTS.get(code)
+    if "not allowed for this account" in str(error):
+        # Arrives as a ValidationException, but it's about the account, not the request.
+        hint = ("AWS is blocking Bedrock for the whole account, whatever the model. Nothing in the config "
+                "fixes that: open a case with AWS Support (Account and billing) asking for Bedrock access.")
     if hint is None and type(error).__name__ in ("NoCredentialsError", "ProfileNotFound", "SSOTokenLoadError",
                                                  "UnauthorizedSSOTokenError", "TokenRetrievalError"):
         hint = ("No usable AWS credentials. Sign in with `aws sso login` (and set AWS_PROFILE or bedrock.profile "

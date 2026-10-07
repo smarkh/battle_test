@@ -8,10 +8,13 @@ still run on your machine.
 > the sample cases in `examples/` until the lawyer advising the project
 > has agreed to real case material going there.
 
-> **Status (2026-10-05): built, but never run against AWS.** The Bedrock
-> client passes its tests against a stand-in. No AWS account existed yet,
-> so every command below that reaches AWS is untested. Expect to adjust
-> this page after the first real run.
+> **Status (2026-10-06): set up, but AWS is blocking Bedrock for the
+> account.** Sign-in works (profile `battle-test`) and the model IDs are
+> filled in. The first real call was refused with `Error 002: Access to
+> Bedrock models is not allowed for this account`, on every model. It
+> needs an AWS Support case: see Troubleshooting. No model has answered
+> yet, so the commands under "Start" are still untested, and nothing has
+> been billed. Expect to adjust this page after the first real run.
 
 Commands are for PowerShell on the laptop, from the project folder.
 
@@ -30,31 +33,72 @@ run cost" below.
 
 These need you personally. None of it goes in a file.
 
-1. **Create the AWS account.** Put MFA on the root user, then create a
-   day-to-day admin user through IAM Identity Center. Don't use root
-   again.
-2. **Set budget alerts** in AWS Budgets, at $10 and $25 a month.
-3. **Request model access** in the Bedrock console, in `us-west-2`, for
-   the models in `config.bedrock.toml`: Qwen3 32B, Qwen3 235B, Llama 3.3
-   70B, DeepSeek v3.2 and Claude Sonnet 5. Some providers ask for a short
-   use-case form first.
-4. **Install the AWS CLI,** then set up sign-in:
+Console menus move, so treat the click paths as approximate.
+
+1. **Create the AWS account and a day-to-day user.**
+   1. Create the account at `aws.amazon.com`, on the free Basic support
+      plan.
+   2. As root, put MFA on the root user (account menu → Security
+      credentials → Assign MFA device).
+   3. Enable **IAM Identity Center**, with the console region set to
+      `us-west-2`.
+   4. In Identity Center, add a user for yourself, create a permission
+      set from the predefined `AdministratorAccess`, and assign both to
+      the account (AWS accounts → Assign users).
+   5. Note the **AWS access portal URL** (like
+      `https://d-xxxxxxxxxx.awsapps.com/start`) and the Identity Center
+      region. Neither is a secret.
+   6. Sign out of root. Sign in through the portal URL from now on.
+2. **Set budget alerts.** Billing and Cost Management → Budgets → Create
+   budget → Customize → Cost budget, monthly, $25. Add two alerts on
+   actual cost, by email: 40% ($10) and 100% ($25). Alerts lag by hours
+   and don't stop spending.
+3. **Check the models are offered.** There is no "Model access" page to
+   request them on any more (seen 2026-10-06). Bedrock enables a model
+   the first time the account calls it. *This is unconfirmed until the
+   first real run.*
+   1. In the Bedrock console, in `us-west-2`, open **Model catalog** and
+      check each model in `config.bedrock.toml` has a page: Qwen3 32B,
+      Qwen3 235B, Llama 3.3 70B, DeepSeek v3.2 and Claude Sonnet 5.
+   2. **Claude only:** Anthropic models need use-case details submitted
+      once per account. Look for a "Submit use case details" banner on
+      the Claude Sonnet 5 page, or choose "Open in playground", which
+      brings the form up. No prompt needs sending.
+   3. The first call to a model may fail with an access error and work
+      a couple of minutes later.
+4. **Install the AWS CLI** (`winget install Amazon.AWSCLI`, then open a
+   new terminal), and set up sign-in:
    ```powershell
    aws configure sso
    ```
-   Note the profile name it creates.
-5. **Fill in the model IDs.** Each model in `config.bedrock.toml` has
-   `id = ""`. Copy each ID from the Bedrock console (Model catalog, or
-   Cross-region inference for an inference profile ID). These commands
-   list them:
+   Give it the portal URL and Identity Center region from step 1, accept
+   the default scopes, approve in the browser, then choose `us-west-2`,
+   `json`, and a profile name such as `battle-test`. Check it with
+   `aws sts get-caller-identity --profile battle-test`.
+   - Run it in an ordinary PowerShell window. It asks questions, so it
+     fails from inside Claude Code ("expecting a Windows console").
+   - On 2026-10-06 it signed in but saved no profile, so
+     `~/.aws/config` was written by hand: a `[profile battle-test]`
+     block (`sso_session`, `sso_account_id`, `sso_role_name`, `region`,
+     `output`) and a `[sso-session battle-test]` block (`sso_start_url`,
+     `sso_region`, `sso_registration_scopes`). It holds no secrets.
+5. **Fill in the model IDs.** *Done 2026-10-06 for the five models.* For
+   a new model, copy its ID from the Bedrock console (Model catalog, or
+   Cross-region inference for an inference profile ID). Some models
+   (Llama 3.3 70B and Claude Sonnet 5 here) are only offered through a
+   `us.` inference profile, which may process a call in any US region.
+   These commands list them:
    ```powershell
    aws bedrock list-foundation-models --region us-west-2 --query "modelSummaries[].modelId"
    aws bedrock list-inference-profiles --region us-west-2 --query "inferenceProfileSummaries[].inferenceProfileId"
    ```
 6. **Check the prices** in `config.bedrock.toml` against the Bedrock
-   pricing page. They drive the cost estimate and date from 2026-10-03.
-7. **If your profile isn't the default one,** set `profile = "NAME"` under
-   `[bedrock]` in `config.bedrock.toml`. A profile name isn't a secret.
+   pricing page. They drive the cost estimate. Qwen3 32B, Qwen3 235B and
+   DeepSeek v3.2 were confirmed on 2026-10-06. Llama 3.3 70B and Claude
+   Sonnet 5 still date from 2026-10-03 and need checking by eye.
+7. **The profile** is set under `[bedrock]` in `config.bedrock.toml`
+   (`profile = "battle-test"`). Change it if yours has another name. A
+   profile name isn't a secret.
 8. **Install the Python packages** if you haven't since `boto3` was added:
    ```powershell
    .venv\Scripts\python -m pip install -r requirements.txt
@@ -64,11 +108,10 @@ These need you personally. None of it goes in a file.
 
 Sign in. The sign-in lasts a few hours:
 ```powershell
-aws sso login
-aws sts get-caller-identity
+aws sso login --profile battle-test
+aws sts get-caller-identity --profile battle-test
 ```
-The second command should print your account. Add `--profile NAME` to
-both if you use a named profile.
+The second command should print your account.
 
 Also check the law index exists (`data\law.sqlite`), as for any local run.
 
@@ -149,6 +192,8 @@ console blocks all further calls.
   result: calls, tokens in and out, and estimated cost.
 - **Per evaluation:** the Cost column and total row in `summary.md`, and
   the usage line under the table.
+- **Per `--research-only` check:** the "Model usage" line under the total
+  in `research.md`.
 - **`?` in place of a cost** means the config has no price for a model
   that was used. A partial total is never shown.
 - **The estimate is tokens × the prices in the config.** The real charge
@@ -160,7 +205,7 @@ Each model is a block in `config.bedrock.toml`:
 
 ```toml
 [bedrock.models.qwen3-32b]
-id = ""                    # from the Bedrock console
+id = "qwen.qwen3-32b-v1:0" # from the Bedrock console
 input_per_million = 0.15   # US dollars
 output_per_million = 1.20
 ```
@@ -187,7 +232,8 @@ output_per_million = 1.20
 |---|---|
 | `bedrock.models.NAME.id is empty` | Fill in that model's ID in `config.bedrock.toml` (setup step 5). No call was made. |
 | `No usable AWS credentials`, or the sign-in has expired | Run `aws sso login`. Set `profile` under `[bedrock]` if you use a named profile. |
-| `This AWS account or role isn't allowed to use that model` | Request access to the model in the Bedrock console (setup step 3). |
+| `This AWS account or role isn't allowed to use that model` | On a model's first call, wait a couple of minutes and run again. For Claude, submit the use-case form (setup step 3). |
+| `Access to Bedrock models is not allowed for this account` (Error 002) | AWS is blocking Bedrock for the whole account, on every model. Seen on the first real call, 2026-10-06. Open an AWS Support case (Account and billing, free) asking for Bedrock access. Nothing in the config fixes it. |
 | `Bedrock doesn't know that model ID in this region` | Check the model's `id` and `bedrock.region`. Some models need an inference profile ID, not the plain model ID. |
 | `Bedrock rejected the request` | The model may not accept a temperature (set `temperature = false`) or may need a smaller `max_tokens`. |
 | `Still throttled after 4 attempts` | New accounts have low limits. Wait and run again, or ask AWS for a higher quota. |

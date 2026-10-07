@@ -28,9 +28,9 @@ from battle_test import grounding
 from battle_test.citations import PLACEHOLDER
 from battle_test.config import DEFAULT_CONFIG_PATH, load_config, load_corpus_config
 from battle_test.law_index import LawIndex
-from battle_test.models import ModelError, make_client
+from battle_test.models import ModelError, add_usage, make_client
 from battle_test.pipeline import CaseRun, run_case
-from battle_test.report import render_markdown
+from battle_test.report import render_markdown, usage_summary
 
 CASES_DIR = Path(__file__).resolve().parent.parent / "examples" / "eval"
 
@@ -317,7 +317,7 @@ def _score_dict(s: Score) -> dict:
 # Research only: a fast check of the search step
 # ---------------------------------------------------------------------------
 
-def research_recall(cfg, client, law, case: EvalCase) -> tuple[list[str], list[str]]:
+def research_recall(cfg, client, law, case: EvalCase, on_usage=None) -> tuple[list[str], list[str]]:
     """Run just the plaintiff's research step and the index search.
 
     Returns (queries, candidate citations). One short model call instead of a
@@ -330,12 +330,14 @@ def research_recall(cfg, client, law, case: EvalCase) -> tuple[list[str], list[s
     facts = case.facts_path.read_text(encoding="utf-8")
     task = prompts.plaintiff_research_task(state, "Case information", facts)
     system = prompts.plaintiff_system(state)
-    queries = grounding.research(lambda t: client.chat(cfg.plaintiff_model, system, t, json_mode=True), task)
+    queries = grounding.research(
+        lambda t: client.chat(cfg.plaintiff_model, system, t, json_mode=True, on_usage=on_usage), task)
     candidates = grounding.gather_candidates(law, queries, case.state.lower())
     return queries, [c.citation for c in candidates]
 
 
-def render_research(rows: list[tuple[EvalCase, list[str], list[str]]], label: str) -> str:
+def render_research(rows: list[tuple[EvalCase, list[str], list[str]]], label: str,
+                    usage: dict[str, dict[str, int]] | None = None, cost_usd: float | None = None) -> str:
     lines = [f"# Research-only check — {label}", "",
              "Plaintiff research step only: which expected authorities the law-index search returned.", ""]
     total = found = 0
@@ -351,6 +353,8 @@ def render_research(rows: list[tuple[EvalCase, list[str], list[str]]], label: st
                   for e in case.expected]
         lines.append("")
     lines[4:4] = [f"**Total: {found}/{total} expected authorities found by search.**", ""]
+    if usage:
+        lines[6:6] = [f"**Model usage:** {usage_summary(usage, cost_usd)}", ""]
     return "\n".join(lines) + "\n"
 
 
@@ -398,14 +402,16 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.research_only:
             rows = []
+            usage: dict[str, dict[str, int]] = {}
             for case in cases:
                 print(f"=== {case.name}: research", file=sys.stderr, flush=True)
                 try:
-                    rows.append((case, *research_recall(cfg, client, law, case)))
+                    rows.append((case, *research_recall(cfg, client, law, case,
+                                                        on_usage=lambda used: add_usage(usage, used))))
                 except ModelError as e:
                     print(f"error: {e}", file=sys.stderr)
                     return 1
-            report = render_research(rows, args.label)
+            report = render_research(rows, args.label, usage, cfg.cost(usage))
             (out_dir / "research.md").write_text(report, encoding="utf-8")
             print(report)
             return 0

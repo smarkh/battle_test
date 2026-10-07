@@ -333,6 +333,53 @@ on your own hardware.
    / `InvokeModel*` on the chosen models. Use `aws configure sso`. Nothing
    goes in the repo.
 
+**Phase 1 under way (2026-10-06).** The steps are written out in
+`docs/running-on-bedrock.md`.
+- **Reached:** step 3, model access. Steps 1 and 2 (account, MFA,
+  Identity Center user, budget alerts) came before it.
+- **Found: the Bedrock console has no "Model access" page any more,** so
+  step 3 as written couldn't be done. Models are understood to be
+  enabled on the account's first call to them, with a one-time use-case
+  form for Anthropic models only. That's from general knowledge of the
+  change, not checked against this account: the first real run confirms
+  it.
+- **Sign-in done (2026-10-06):** AWS CLI 2.37.10, profile `battle-test`
+  (account 548108386131, `AdministratorAccess`, `us-west-2`).
+  `aws configure sso` signed in but stopped before saving a profile, so
+  `~/.aws/config` was written by hand. It holds no secrets.
+- **Model IDs filled in** in `config.bedrock.toml`, from
+  `list-foundation-models` and `list-inference-profiles`. Qwen3 32B,
+  Qwen3 235B and DeepSeek v3.2 run on demand in `us-west-2`. **Llama 3.3
+  70B and Claude Sonnet 5 are only offered through a `us.` inference
+  profile,** which may process a call in any US region. That weakens
+  "processing stays in a known region" for those two: one more point for
+  the lawyer.
+- **Prices, re-checked 2026-10-06, partly:** Qwen3 32B, Qwen3 235B and
+  DeepSeek v3.2 match the config. The pricing page couldn't be read
+  reliably for Llama 3.3 70B (one reading gave $0.40 / $0.60, against
+  $0.99 / $1.32 in the config) or Claude Sonnet 5 (not found). Check
+  those two by eye before trusting their cost estimates.
+- **First real call tried (2026-10-06), and blocked by AWS:** `Error
+  002: Access to Bedrock models is not allowed for this account`.
+  - It's account-wide: Qwen3 32B, DeepSeek v3.2 and Llama 3.3 70B all
+    return it, from our client and from the AWS CLI alike.
+  - It isn't the sign-in, the model IDs or per-model access:
+    `get-foundation-model-availability` reports the models as authorised
+    and available, and the quotas are normal.
+  - Nothing was billed: no call got as far as a model.
+  - **Next, and it needs you:** an AWS Support case (Account and billing)
+    asking for Bedrock access on account 548108386131 in `us-west-2`.
+  - Claude Sonnet 5 also shows its agreement as not available, so the
+    Anthropic use-case form is still to submit.
+  - The client now explains this error instead of suggesting a
+    temperature setting.
+- **Found in the code, and fixed:** `evaluate --research-only` didn't
+  record token usage, so on Bedrock it would have reported no tokens or
+  cost. It now prints a "Model usage" line under the total, as full runs
+  do.
+- **Server:** on `9e43916`, one commit behind GitHub (`d530527`, the
+  Bedrock groundwork). Nothing there needs it yet.
+
 ### Phase 2 — Code, then evaluate from the laptop (hybrid B)
 1. Build the code changes above, with tests.
 2. Run the evaluation set on candidate models from the laptop, e.g.
