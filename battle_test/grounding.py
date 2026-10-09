@@ -9,6 +9,7 @@ every citation in the draft is checked against the index in code.
 
 import json
 from dataclasses import dataclass
+from itertools import zip_longest
 from typing import Protocol
 
 from battle_test.citations import (
@@ -27,6 +28,11 @@ EXCERPT_CHARS = 700
 # 8, not 4: in the baseline evaluation, even good topic queries missed ~40%
 # of the expected authorities at 4 results each.
 RESULTS_PER_QUERY = 8
+# The most candidates shown to the model for selection. Each takes about 60
+# tokens there, and the selection prompt has to fit in num_ctx with the case
+# materials. Keyword search alone rarely reaches this. With semantic search
+# each query can return twice as many, and this cuts the lowest-ranked.
+MAX_CANDIDATES = 110
 
 # Every summary judgment brief needs the state's own summary judgment rule.
 # Looked up directly, not left to search and selection: the first grounded
@@ -93,14 +99,24 @@ def summary_judgment_rule(index: LawSearch, state: str) -> list[LawSection]:
 
 def gather_candidates(index: LawSearch, queries: list[str], state: str) -> list[LawSection]:
     """Search each query and interleave the results by rank (every query's
-    best hit first), so a cut-off keeps the best of each query."""
+    best hit first), so a cut-off keeps the best of each query.
+
+    An index that can also search by meaning (semantic.SemanticLaw) is asked
+    both ways, and each query's two result lists alternate: keyword's best,
+    semantic's best, keyword's second, and so on.
+    """
     per_query = [index.search(q, state, limit=RESULTS_PER_QUERY) for q in queries]
+    by_meaning = getattr(index, "semantic_search", None)
+    if by_meaning:
+        semantic = by_meaning(queries, state, limit=RESULTS_PER_QUERY)
+        per_query = [[s for pair in zip_longest(keyword, meaning) for s in pair if s is not None]
+                     for keyword, meaning in zip(per_query, semantic)]
     seen: dict[str, LawSection] = {}
-    for rank in range(RESULTS_PER_QUERY):
+    for rank in range(max(map(len, per_query), default=0)):
         for results in per_query:
             if rank < len(results):
                 seen.setdefault(results[rank].citation, results[rank])
-    return list(seen.values())
+    return list(seen.values())[:MAX_CANDIDATES]
 
 
 def candidate_list(candidates: list[LawSection]) -> str:

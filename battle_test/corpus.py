@@ -3,6 +3,8 @@
     python -m battle_test.corpus build        # download (if needed) + index
     python -m battle_test.corpus info         # snapshot date and row counts
     python -m battle_test.corpus search --state UT "summary judgment"
+    python -m battle_test.corpus embed        # section vectors for semantic search
+    python -m battle_test.corpus search --state TX --semantic "time limit to sue on a contract"
 
 Data: Open US Law by Vaquill AI, CC BY 4.0 (https://www.vaquill.ai/open-us-law).
 """
@@ -20,6 +22,7 @@ from pathlib import Path
 from battle_test.citations import split_corpus_citation
 from battle_test.config import DEFAULT_CONFIG_PATH, CorpusConfig, load_corpus_config
 from battle_test.law_index import LawIndex, citation_key
+from battle_test.models import ModelError
 
 ATTRIBUTION = "Open US Law by Vaquill AI, CC BY 4.0"
 
@@ -205,9 +208,37 @@ def _cmd_info(cfg: CorpusConfig) -> None:
         print(f"{j:12} {t:14} {s:12} {n:9,} {unofficial:16,}")
 
 
-def _cmd_search(cfg: CorpusConfig, state: str, query: str, limit: int) -> None:
+def _cmd_embed(cfg: CorpusConfig, config_path: Path) -> None:
+    from battle_test import semantic
+
+    search = semantic.load_search_config(config_path)
+    if not search.embedding_model:
+        raise SystemExit(f"Set search.embedding_model in {config_path} first.")
+    print(f"Embedding the in-force sections of {cfg.db_path} with {search.embedding_model}. "
+          "This takes a while, and can be stopped and resumed.")
+    started = datetime.now()
+
+    def on_progress(done: int, total: int) -> None:
+        if done == total or done % (semantic.BATCH * 100) == 0:
+            minutes = (datetime.now() - started).total_seconds() / 60
+            print(f"  {done:,} / {total:,} sections  ({minutes:.0f} min)", flush=True)
+
+    meta = semantic.build(cfg.db_path, semantic.Embedder(search.embedding_url, search.embedding_model), on_progress)
+    path = semantic.vectors_path(cfg.db_path)
+    print(f"Built {path} ({meta['count']:,} sections, {meta['dimensions']} dimensions, "
+          f"{path.stat().st_size / 1e6:.0f} MB)")
+
+
+def _cmd_search(cfg: CorpusConfig, state: str, query: str, limit: int, config_path: Path | None = None) -> None:
     with LawIndex(cfg.db_path) as index:
-        results = index.search(query, state, limit=limit)
+        if config_path:  # --semantic
+            from battle_test import semantic
+            search = semantic.load_search_config(config_path)
+            law = semantic.SemanticLaw(index, semantic.VectorIndex(semantic.vectors_path(cfg.db_path)),
+                                       semantic.Embedder(search.embedding_url, search.embedding_model))
+            results = law.semantic_search([query], state, limit=limit)[0]
+        else:
+            results = index.search(query, state, limit=limit)
     for s in results:
         flag = "" if s.official_source else "  [no official source URL]"
         print(f"\n{s.citation} — {s.section_title}{flag}")
@@ -226,7 +257,10 @@ def main(argv: list[str] | None = None) -> int:
     search = sub.add_parser("search", help="Full-text search over state + federal law.")
     search.add_argument("--state", required=True, type=str.lower, choices=("ut", "ca", "tx"))
     search.add_argument("--limit", type=int, default=5)
+    search.add_argument("--semantic", action="store_true",
+                        help="Search by meaning (needs `embed` to have been run), not by keyword.")
     search.add_argument("query")
+    sub.add_parser("embed", help="Build the section vectors for semantic search (slow; resumable).")
     args = parser.parse_args(argv)
 
     cfg = load_corpus_config(args.config)
@@ -235,9 +269,11 @@ def main(argv: list[str] | None = None) -> int:
             _cmd_build(cfg)
         elif args.command == "info":
             _cmd_info(cfg)
+        elif args.command == "embed":
+            _cmd_embed(cfg, args.config)
         else:
-            _cmd_search(cfg, args.state, args.query, args.limit)
-    except FileNotFoundError as e:  # no index built yet
+            _cmd_search(cfg, args.state, args.query, args.limit, args.config if args.semantic else None)
+    except (FileNotFoundError, ModelError) as e:  # no index built yet, or Ollama isn't reachable
         print(f"error: {e}", file=sys.stderr)
         return 1
     return 0

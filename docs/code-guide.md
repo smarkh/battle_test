@@ -35,7 +35,8 @@ needed only to build the law index and to run the web UI.
 | `grounding.py` | Research (model queries plus the standard ones), gathering search candidates, selection, formatting sections for a prompt, and `check_citations()`, which classifies every citation in a draft. | citations, law_index |
 | `citations.py` | Pure text handling: finds citations in a draft, parses them, and normalises code names so "Utah Code Ann." and "U.C.A." match. No database access. | none |
 | `law_index.py` | `LawIndex`: reads `law.sqlite`. `search()` is the keyword search, `lookup()` finds an exact citation, and `resolve()` matches a parsed citation from a draft. | citations |
-| `corpus.py` | `python -m battle_test.corpus build / info / search`. Downloads Open US Law, verifies checksums, builds the index. Needs `pyarrow`. | law_index, citations |
+| `corpus.py` | `python -m battle_test.corpus build / info / search / embed`. Downloads Open US Law, verifies checksums, builds the index. Needs `pyarrow`. `embed` builds the vectors for semantic search. | law_index, citations, semantic |
+| `semantic.py` | Semantic search. `Embedder` calls an Ollama embedding model, `build()` embeds every in-force section (resumable), `VectorIndex` finds the nearest sections, and `attach()` wraps a `LawIndex` as a `SemanticLaw` when `[search] semantic` is on. Needs `numpy`, imported only here. | law_index, models |
 | `report.py` | Turns a `CaseRun` into the Markdown document set: disclaimer, citation-check table, documents, appendix. | grounding |
 | `evaluate.py` | `python -m battle_test.evaluate`. Runs the sample cases and scores them against the expected authorities. | pipeline, report |
 | `models.py` | What the model clients share: `ModelError`, `Usage` (tokens one call used), and `make_client()`, which picks the client from `models.provider`. | none |
@@ -104,7 +105,8 @@ fake model clients and small temporary databases.
 |---|---|
 | `test_citations.py` | Finding and parsing citations in all their written forms |
 | `test_law_index.py` | Search ranking, lookup, resolving citations |
-| `test_grounding.py` | Research, selection, citation classification and inline marks |
+| `test_grounding.py` | Research, merging keyword and semantic candidates, selection, citation classification and inline marks |
+| `test_semantic.py` | Semantic search against a small index and a stand-in embedding model: finding by meaning, resuming a build, and refusing stale vectors |
 | `test_pipeline.py` | The order of model calls, what each prompt receives, both input modes |
 | `test_evaluate.py` | Scoring against expected authorities, cost columns and repeats |
 | `test_models.py` | The Bedrock client (against a fake, so no network or cost), the provider switch, cost estimates, and reading JSON replies |
@@ -119,7 +121,7 @@ fake model clients and small temporary databases.
 | To change… | Look in |
 |---|---|
 | What a model is told to write | `prompts.py` |
-| How law is searched or ranked | `law_index.py` (`search`, `STATE_BOOST`), `grounding.py` (`STANDARD_QUERIES`, `RESULTS_PER_QUERY`) |
+| How law is searched or ranked | `law_index.py` (`search`, `STATE_BOOST`), `grounding.py` (`STANDARD_QUERIES`, `RESULTS_PER_QUERY`, `MAX_CANDIDATES`), `semantic.py` (`EMBED_CHARS`, the model prefixes) |
 | How many sections a model gets, or how much of each | `grounding.py` (`MAX_AUTHORITIES`, `EXCERPT_CHARS`), `pipeline.py` (`MAX_COMBINED_AUTHORITIES`) |
 | A citation form the checker doesn't recognise | `citations.py` (`_PATTERNS`), with a test in `test_citations.py` |
 | The order of documents, or adding a step | `pipeline.py` |

@@ -5,6 +5,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from battle_test import semantic
 from battle_test.config import DEFAULT_CONFIG_PATH, load_config, load_corpus_config
 from battle_test.law_index import LawIndex
 from battle_test.models import ModelError, make_client
@@ -40,9 +41,16 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     cfg = load_config(args.config)
     client = make_client(cfg)
+    db_path = load_corpus_config(args.config).db_path
     try:
-        law = LawIndex(load_corpus_config(args.config).db_path)
+        law = LawIndex(db_path)
     except FileNotFoundError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    try:
+        search = semantic.attach(law, args.config, db_path)
+    except ModelError as e:
+        law.close()
         print(f"error: {e}", file=sys.stderr)
         return 1
 
@@ -59,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         run = run_case(
             cfg,
             client,
-            law,
+            search,
             args.state,
             facts=text if args.facts else None,
             complaint=text if args.complaint else None,

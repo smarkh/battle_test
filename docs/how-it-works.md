@@ -105,6 +105,20 @@ California, Texas and federal law.
 - Search is **keyword search**. It returns only law that's in force, from
   the chosen state and federal law, with the state's law ranked slightly
   higher.
+- **Semantic search** can run alongside it (`semantic = true` under
+  `[search]`; off by default). Keyword search only matches shared words,
+  so it misses a statute that words a topic differently from the query,
+  and each state words its statutes its own way. Semantic search matches
+  on meaning:
+  - `python -m battle_test.corpus embed` turns every in-force section
+    into a vector with an embedding model on Ollama, once per snapshot.
+    The vectors are saved next to the index (`data/law-vectors.npy`).
+  - At run time each search query is turned into a vector the same way,
+    and the closest sections are returned.
+  - Each query's keyword and semantic results are merged in alternation,
+    and the model then selects from the combined list, as before.
+  - The same model must embed the sections and the queries. Vectors made
+    by another model, or before the index was rebuilt, are refused.
 - The data is a quarterly snapshot. Every output states the date the law
   is current as of.
 
@@ -226,6 +240,7 @@ image sets it to the server config. Most commands also take `--config`.
 | `[generation]` | Context size and temperature |
 | `[pipeline]` | Default rounds and the output folder |
 | `[corpus]` | The law snapshot, which jurisdictions and document types to index, and the data folder |
+| `[search]` | Whether semantic search is on, and the embedding model it uses |
 | `[web]` | Host, port, data folder, cookie and proxy settings, retention, the queue cap, how many cases run at once (`workers`), the public address |
 | `[plans]` | The plans and their case allowances |
 

@@ -119,7 +119,8 @@ one placeholder, so every kind of highlight appears.
 ## Conventions in the code
 
 - **The pipeline stays on the standard library.** Third-party packages
-  belong to the corpus build and the web UI only.
+  belong to the corpus build, the web UI, Bedrock and semantic search
+  (`numpy`), each imported only where it's used.
 - **Dependencies are passed in.** `run_case()` takes its model client and
   law index as arguments. Don't reach for a global.
 - **Constants carry their reasons.** Where a number was tuned (for

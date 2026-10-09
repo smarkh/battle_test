@@ -23,6 +23,7 @@ from fastapi.templating import Jinja2Templates
 
 from battle_test.config import (DEFAULT_CONFIG_PATH, Plan, Plans, load_config, load_corpus_config, load_plans,
                                 load_web_config)
+from battle_test import semantic
 from battle_test.law_index import LawIndex
 from battle_test.models import make_client
 from battle_test.pipeline import ChatClient, run_case
@@ -191,7 +192,7 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
         # the thread that made them.
         with LawIndex(law_db or corpus.db_path) as law:
             run = run_case(
-                cfg, client, law, job.state_code,
+                cfg, client, semantic.attach(law, config_path, law_db or corpus.db_path), job.state_code,
                 facts=text if job.input_mode == "facts" else None,
                 complaint=text if job.input_mode == "complaint" else None,
                 rounds=job.rounds, on_stage=on_stage, on_token=on_token,

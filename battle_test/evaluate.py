@@ -24,7 +24,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from battle_test import grounding
+from battle_test import grounding, semantic
 from battle_test.citations import PLACEHOLDER
 from battle_test.config import DEFAULT_CONFIG_PATH, load_config, load_corpus_config
 from battle_test.law_index import LawIndex
@@ -383,7 +383,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.model:
         cfg = dataclasses.replace(cfg, plaintiff_model=args.model, defendant_model=args.model)
     cases = load_cases(args.case)
-    with LawIndex(load_corpus_config(args.config).db_path) as law:
+    search_cfg = semantic.load_search_config(args.config)
+    db_path = load_corpus_config(args.config).db_path
+    with LawIndex(db_path) as index:
+        try:
+            law = index if args.validate else semantic.attach(index, args.config, db_path)
+        except ModelError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
         invalid = {c.name: p for c in cases if (p := validate(c, law))}
         for name, problems in invalid.items():
             print(f"{name}: " + "; ".join(problems), file=sys.stderr)
@@ -422,6 +429,7 @@ def main(argv: list[str] | None = None) -> int:
             "plaintiff model": cfg.plaintiff_model,
             "defendant model": cfg.defendant_model,
             "rounds": str(args.rounds or cfg.rounds),
+            "search": f"keyword + semantic ({search_cfg.embedding_model})" if search_cfg.semantic else "keyword",
             "runs per case": str(args.repeats),
             "law snapshot": law.meta().get("snapshot", "?"),
         }

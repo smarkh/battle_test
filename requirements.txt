@@ -12,6 +12,10 @@ python-multipart>=0.0.9
 python-docx>=1.1
 reportlab>=4.0
 
+# Semantic search over the law index (search.semantic = true). Not needed
+# for keyword search alone.
+numpy>=1.26
+
 # Hosted models on Amazon Bedrock (models.provider = "bedrock"). Not needed
 # for Ollama.
 boto3>=1.35

@@ -130,6 +130,13 @@ class LawIndex:
         ).fetchall()
         return [LawSection(*row) for row in rows]
 
+    def by_ids(self, ids: list[int]) -> list[LawSection]:
+        """The sections with these row ids, in the order given (for semantic search)."""
+        marks = ", ".join("?" * len(ids))
+        rows = {row[0]: row[1:] for row in self._db.execute(
+            f"SELECT id, {_COLUMNS} FROM sections WHERE id IN ({marks})", ids)}
+        return [LawSection(*rows[i]) for i in ids if i in rows]
+
     def lookup(self, citation: str) -> list[LawSection]:
         """Sections whose citation matches exactly (after normalisation).
 

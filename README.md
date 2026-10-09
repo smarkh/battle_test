@@ -78,6 +78,7 @@ Each output file contains:
 | `battle_test/grounding.py` | Research, authority selection, and checking each draft's citations |
 | `battle_test/citations.py` | Finding and parsing citations in text (no database) |
 | `battle_test/law_index.py` | Searching the local law index and resolving citations |
+| `battle_test/semantic.py` | Semantic search: section vectors from an Ollama embedding model, searched alongside keywords (off by default) |
 | `battle_test/corpus.py` | Downloading Open US Law and building the index (`python -m battle_test.corpus`) |
 | `battle_test/report.py` | Writing the Markdown output |
 | `battle_test/evaluate.py` | Scoring runs against the sample cases (`python -m battle_test.evaluate`) |
@@ -259,6 +260,19 @@ Files are checked against the dataset's published SHA256 checksums. Which
 jurisdictions and document types are included, and which quarterly snapshot,
 is set under `[corpus]` in `config.toml`. Everything lives in `data/`, which
 is gitignored.
+
+**Semantic search** (optional, off by default) finds sections by meaning as
+well as by keyword. It needs an embedding model in Ollama and a one-time
+build of the section vectors:
+
+```
+ollama pull nomic-embed-text
+python -m battle_test.corpus embed        # slow (over an hour); can be stopped and resumed
+python -m battle_test.corpus search --state TX --semantic "time limit to sue on a contract"
+```
+
+Then set `semantic = true` under `[search]` in `config.toml`. See
+`docs/how-it-works.md`.
 
 ## Evaluation
 

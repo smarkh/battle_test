@@ -53,6 +53,25 @@ class ResearchAndSelectionTest(unittest.TestCase):
         a1, a2, b1 = section("A1"), section("A2"), section("B1")
         law = FakeLaw({"a": [a1, a2], "b": [b1, a1]})
         self.assertEqual(grounding.gather_candidates(law, ["a", "b"], "ut"), [a1, b1, a2])
+        self.assertEqual(grounding.gather_candidates(law, [], "ut"), [])
+
+    def test_candidates_alternate_keyword_and_semantic_results(self):
+        k1, k2, s1, s2, both = (section(c) for c in ("K1", "K2", "S1", "S2", "BOTH"))
+
+        class SemanticLaw(FakeLaw):
+            def semantic_search(self, queries, state, *, limit=10):
+                return [{"a": [s1, both, s2], "b": []}[q][:limit] for q in queries]
+
+        law = SemanticLaw({"a": [k1, both], "b": [k2]})
+        # Query a: keyword K1, BOTH; semantic S1, BOTH, S2. Query b: keyword K2 only.
+        self.assertEqual(grounding.gather_candidates(law, ["a", "b"], "ut"), [k1, k2, s1, both, s2])
+
+    def test_candidates_are_capped_keeping_the_best_ranked(self):
+        results = {f"q{n}": [section(f"Q{n}-{rank}") for rank in range(grounding.RESULTS_PER_QUERY)]
+                   for n in range(20)}
+        candidates = grounding.gather_candidates(FakeLaw(results), list(results), "ut")
+        self.assertEqual(len(candidates), grounding.MAX_CANDIDATES)
+        self.assertEqual([c.citation for c in candidates[:20]], [f"Q{n}-0" for n in range(20)])
 
     def test_select_uses_valid_picks_and_falls_back(self):
         cands = [section("A"), section("B"), section("C")]

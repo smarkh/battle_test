@@ -15,7 +15,7 @@ guardrails-style network isolation and data handling).
   - Step 5 parts 1–2: a local web UI with accounts, case deletion, and
     3-month retention.
 
-  214 unit tests pass.
+  235 unit tests pass (2026-10-09).
 - **On the smark_iq server (2026-09-28):**
   - Deployed in Docker, fully independent of smark_iq, and **live at
     `https://battle.smarkiq.us`** through its own Cloudflare Tunnel.
@@ -33,8 +33,10 @@ guardrails-style network isolation and data handling).
   Utah improved, Texas didn't: keyword search can't cope with each state's
   different statute wording. See 3b.
 - **Next up:**
-  - 3b: semantic search (probably on the server), better selection, then
-    re-evaluate on 14B / ~30B.
+  - 3b: semantic search, better selection, then re-evaluate on 14B /
+    ~30B. **Semantic search is built but off (2026-10-09):** the section
+    vectors haven't been built and no evaluation has run with it. See
+    "Semantic search: pilot and build" in 3b.
   - Web UI part 3: upload with text extraction. (`.docx`/PDF export was
     built 2026-10-05.)
   - Server deployment (web UI part 4): **done, and live** (see
@@ -672,6 +674,70 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
      - **Watch for overfitting:** the expected lists and the standard
        queries were written by the same person tuning the search. The
        lawyer's review of the lists protects against that.
+   - **Semantic search: pilot and build (2026-10-08).**
+     - **The index is bigger than this plan said:** about 370,000
+       sections, 359,000 in force, not 150,000.
+     - **The laptop is fast enough, so the server isn't needed.** Measured
+       on the laptop's 4 GB card, embedding the first 1,500 characters of
+       each section: `nomic-embed-text` 71 sections a second (the whole
+       index in about 1.5 hours), `qwen3-embedding:0.6b` 21 a second
+       (about 4.7 hours).
+     - **Pilot:** one state's sections embedded, then 16 search queries
+       replayed (the 7B's own from 2026-09-25 plus the standard ones),
+       8 results per query. Expected authorities found:
+
+       | State, model | Keyword | Semantic | 4 + 4 | 8 + 8 |
+       |---|---|---|---|---|
+       | Utah, `nomic-embed-text` | 5/7 | 4/7 | 5/7 | 5/7 |
+       | Utah, `qwen3-embedding:0.6b` | 5/7 | 5/7 | 6/7 | 6/7 |
+       | Texas, `nomic-embed-text` | 1/8 | 4/8 | 2/8 | 4/8 |
+       | Texas, `qwen3-embedding:0.6b` | 1/8 | 4/8 | 2/8 | 4/8 |
+
+       - **The two models find the same Texas authorities** (2026-10-09).
+         The larger one ranks them a little higher: § 15.002 at 3 and
+         §§ 16.004 and 38.001 at 7, where the smaller one had two of
+         them at 8. RCLA § 27.002 moves from rank 128 to 80, still far
+         out of reach.
+
+       - **Texas is where it helps:** semantic search found § 16.004
+         (limitations), § 38.001 (attorney's fees) and § 15.002 (venue),
+         which keyword search has never found there.
+       - **Utah gains little,** because the standard queries were written
+         in Utah's wording. The larger model found the venue statute
+         (§ 78B-3a-201) that keyword search misses.
+       - **Still not found by either:** the case-specific law (Texas RCLA
+         and DTPA). The model's queries for it are too vague for any
+         search. That's a research-prompt problem.
+       - **Caveat:** the pilot searched state law only, with no federal
+         sections competing, which flatters semantic search a little.
+     - **Built:** `battle_test/semantic.py`, `corpus embed` (resumable),
+       `corpus search --semantic`, and `[search]` in `config.toml`.
+       Keyword and semantic results alternate per query. **Off by
+       default** until the full vectors are built and the evaluation has
+       been run with it.
+     - **New limit: `MAX_CANDIDATES = 110`.** Two result lists per query
+       can double the candidates, and the selection prompt has to fit in
+       `num_ctx`. Two of the Texas finds were ranked 8th, so a cap that
+       cuts deep ranks can lose them. Selection is the next thing to fix.
+     - **Long runs need care (2026-10-09):**
+       - Claude Code stops its background tasks when the laptop is low
+         on memory. That killed the Texas run with the larger model
+         twice, at 63% and 82%. Run long builds from an ordinary
+         PowerShell window.
+       - Ollama on the server refused one embedding request in each of
+         two runs (HTTP 400, about one in 1,900 batches) and accepted the
+         same rows when sent again. Its reply said Windows had no free
+         socket for its own internal call ("Only one usage of each
+         socket address"). `Embedder` now tries each request three
+         times.
+       - The server's card embeds with `qwen3-embedding:0.6b` at about
+         45 sections a second through an SSH tunnel
+         (`ssh -N -L 11435:127.0.0.1:11434 smark@smark-iq`, then
+         `embedding_url = "http://127.0.0.1:11435"`), twice the laptop.
+         The model was pulled on the server for this.
+     - **Not done yet:** the full build, tuning how state law ranks
+       against federal law in semantic results, and the evaluation with
+       semantic search on.
    - **Needs the lawyer:**
      - **The lists are drafts** (`lawyer_reviewed = false`). Choosing the
        right law is the judgement being measured, so the lists should be
@@ -1332,7 +1398,7 @@ protections (item 2 above).
 ## Restart prompt
 
 Paste this into a new Claude Code session, opened in the `battle_test`
-folder, to pick up where the 2026-10-08 session left off:
+folder, to pick up where the 2026-10-09 session left off:
 
 ```
 We're continuing work on battle_test, the legal adversarial argument system.
@@ -1392,6 +1458,21 @@ Where things stand:
   on the real pipeline (four cases at once), NOT on Bedrock. NOT on the
   server, which doesn't need it. Also fixed: cases submitted in the same
   second showed the same queue position.
+- Added 2026-10-08/09: semantic search, BUILT BUT OFF (plan.md, 3b,
+  "Semantic search: pilot and build").
+  - battle_test/semantic.py, `python -m battle_test.corpus embed`
+    (resumable), `corpus search --semantic`, [search] in config.toml
+    (semantic = false). Needs numpy.
+  - NOT done: the full vector build (data/law-vectors.npy doesn't exist),
+    tuning state against federal law in semantic results, and an
+    evaluation with it on.
+  - Long jobs: Claude Code stops its background tasks when the laptop
+    runs low on memory, which killed two pilot runs. Run the build in my
+    own PowerShell window. Don't restart a stopped job unless I ask.
+  - Both Ollamas have qwen3-embedding:0.6b, and the laptop also has
+    nomic-embed-text. Ask before removing the server's.
+  - Turning it on will break the web tests as written: they read
+    config.toml with a temporary law index that has no vectors.
 - Bedrock, 2026-10-06 (details in plans/aws-bedrock-plan.md, Phase 1):
   - AWS sign-in works: AWS CLI 2.37.10, profile battle-test (account
     548108386131, AdministratorAccess, us-west-2). ~/.aws/config was
