@@ -140,8 +140,11 @@ class WebConfig:
     # command prints. "" means http://host:port (the laptop).
     public_url: str = ""
     # How many cases one user may have waiting or running at once, so nobody
-    # fills the one-at-a-time queue. 0 = no cap.
+    # fills the queue. 0 = no cap.
     max_active_cases: int = 3
+    # How many cases run at the same time. 1 for Ollama, which has one GPU.
+    # Bedrock has no such limit, so its config can raise this.
+    workers: int = 1
 
     @property
     def base_url(self) -> str:
@@ -170,11 +173,18 @@ LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 def load_web_config(path: Path = DEFAULT_CONFIG_PATH) -> WebConfig:
     with open(path, "rb") as f:
-        raw = tomllib.load(f)["web"]
+        config = tomllib.load(f)
+    raw = config["web"]
+    workers = raw.get("workers", 1)
+    if not isinstance(workers, int) or isinstance(workers, bool) or workers < 1:
+        raise ValueError(f"web.workers must be a whole number, 1 or more, got {workers!r}")
+    if workers > 1 and config.get("models", {}).get("provider", "ollama") == "ollama":
+        raise ValueError(f"{path} has web.workers = {workers}, but the ollama provider has one GPU and "
+                         "runs one case at a time. Leave web.workers out, or set it to 1.")
     return WebConfig(raw["host"], raw["port"], _resolve(path, raw["data_dir"]),
                      raw.get("secure_cookies", False), raw.get("retention_days", 90),
                      raw.get("behind_proxy", False), raw.get("public_url", ""),
-                     raw.get("max_active_cases", 3))
+                     raw.get("max_active_cases", 3), workers)
 
 
 PERIODS = ("month", "total")

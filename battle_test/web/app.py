@@ -198,7 +198,7 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
             )
         return run, render_markdown(run, datetime.now())
 
-    worker = Worker(store, runner)
+    worker = Worker(store, runner, web.workers)
 
     def purge() -> None:
         store.purge_expired(web.retention_days)
@@ -496,7 +496,8 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
         nav_jobs = store.list(session.user.id)
         if job.status in (QUEUED, RUNNING):
             position = store.queue_position(job) if job.status == QUEUED else 0
-            return page(request, "progress.html", session, job=job, position=position, nav_jobs=nav_jobs)
+            return page(request, "progress.html", session, job=job, position=position, nav_jobs=nav_jobs,
+                        workers=web.workers)
         if job.status == FAILED:
             return page(request, "failed.html", session, job=job, nav_jobs=nav_jobs)
         result = store.result(job_id)

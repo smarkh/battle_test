@@ -10,6 +10,7 @@ role on an AWS server.
 """
 
 import sys
+import threading
 from typing import Callable
 
 from battle_test.models import ModelError, Usage
@@ -73,6 +74,7 @@ class BedrockClient:
         self.profile = profile
         self.timeout_seconds = timeout_seconds
         self._runtime = runtime
+        self._starting = threading.Lock()
 
     @classmethod
     def from_config(cls, cfg) -> "BedrockClient":
@@ -80,6 +82,11 @@ class BedrockClient:
                    profile=cfg.bedrock_profile, timeout_seconds=cfg.timeout_seconds)
 
     def _client(self):
+        # Locked: with [web] workers above 1, several cases can make their first call at once.
+        with self._starting:
+            return self._locked_client()
+
+    def _locked_client(self):
         if self._runtime is None:
             try:
                 import boto3

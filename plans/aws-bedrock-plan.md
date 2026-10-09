@@ -411,9 +411,20 @@ has been made yet: the client was tested against a stand-in.
   - Region `us-west-2`.
   - Where to embed for semantic search (server GPU or Bedrock) waits
     until that step.
-- **Not built yet:** the cost on the web results page, `[web] workers`,
-  the `checker` role for 3a, and `config.aws.toml`. They wait until the
-  web app runs on Bedrock.
+- **Not built yet:** the cost on the web results page, the `checker` role
+  for 3a, and `config.aws.toml`. They wait until the web app runs on
+  Bedrock.
+- **`[web] workers` built (2026-10-08).** It sets how many cases run at
+  once.
+  - `config.bedrock.toml` has `workers = 4`, one more than the per-user
+    cap of 3, so one user can't hold every place. The Ollama configs
+    stay at 1, and a config that sets more than 1 on Ollama is refused.
+  - Checked with the demo model on the real pipeline and law index: six
+    two-round cases, four running at once, all finished correctly.
+  - **Not checked against Bedrock,** which is still blocked. Whether four
+    cases at once meets any throttling there is unknown.
+  - Found and fixed on the way: two cases submitted in the same second
+    showed the same queue position.
 - **Found:**
   - botocore's `max_attempts` counts retries after the first try, so 4
     meant 5 calls. The client uses `total_max_attempts` instead.

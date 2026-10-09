@@ -70,7 +70,7 @@ canned drafts.
 |---|---|
 | `__main__.py` | `python -m battle_test.web`. Checks the config is allowed to serve on its host, then starts uvicorn. Flags: `--demo-model`, `--port`, `--config`. |
 | `app.py` | `create_app()`: every user-facing route (sign-in, setup link, account, case list, new case, progress stream, results, delete, download), the security headers, the CSRF and same-origin checks, and the hourly retention purge. |
-| `jobs.py` | `JobStore`: cases and the usage record in `cases.sqlite`, plus each case's folder. `Worker`: the background thread that runs one case at a time. `Progress`: the in-memory event log the progress page reads. |
+| `jobs.py` | `JobStore`: cases and the usage record in `cases.sqlite`, plus each case's folder. `Worker`: the background threads that run queued cases, one at a time or `[web] workers` at once. `Progress`: the in-memory event log the progress page reads. |
 | `auth.py` | `AuthStore`: accounts, password hashing, one-time setup links, sessions, login lockout, and the activity log, all in `users.sqlite`. |
 | `admin.py` | The `/admin` routes: accounts, plans, setup links, disable and enable, the activity log. |
 | `users.py` | `python -m battle_test.web.users`: the command-line account tool (`add`, `invite`, `passwd`, `plan`, `firm`, `paid`, `disable`, `enable`, `list`, `usage`). |
@@ -108,7 +108,7 @@ fake model clients and small temporary databases.
 | `test_pipeline.py` | The order of model calls, what each prompt receives, both input modes |
 | `test_evaluate.py` | Scoring against expected authorities, cost columns and repeats |
 | `test_models.py` | The Bedrock client (against a fake, so no network or cost), the provider switch, cost estimates, and reading JSON replies |
-| `test_jobs.py` | Case storage, allowances, the queue cap, retention |
+| `test_jobs.py` | Case storage, allowances, the queue cap, retention, and the worker running several cases at once |
 | `test_auth.py` | Passwords, sessions, setup links, lockout, the activity log |
 | `test_users.py` | The account command-line tool |
 | `test_web.py` | The routes end to end: sign-in, cases, privacy, CSRF, admin pages |

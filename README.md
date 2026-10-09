@@ -86,7 +86,7 @@ Each output file contains:
 | `battle_test/bedrock_client.py` | Amazon Bedrock client (hosted models), with the same `chat()` method |
 | `battle_test/config.py` | Loads `config.toml` |
 | `battle_test/web/app.py` | Web UI routes: case form, live progress, results, download |
-| `battle_test/web/jobs.py` | Case storage, the usage record and plan limits, the one-at-a-time job queue, live progress events |
+| `battle_test/web/jobs.py` | Case storage, the usage record and plan limits, the job queue and its workers, live progress events |
 | `battle_test/web/auth.py` | Accounts, password hashing, one-time setup links, sessions, login lockout |
 | `battle_test/web/admin.py` | Admin pages: accounts, plans, setup links, the activity log |
 | `battle_test/web/users.py` | Admin command for accounts (`python -m battle_test.web.users`) |
@@ -181,7 +181,8 @@ python -m battle_test.web --demo-model    # canned drafts, no GPU needed
   - **"Draft the complaint and the motion"**: fill in the case information.
   - **"Use my complaint, draft only the motion"**: paste a complaint you
     wrote. It's used as written, and its citations are still checked.
-- **Progress:** runs go into a queue and execute one at a time. The page
+- **Progress:** runs go into a queue and execute one at a time (or
+  several at once on Bedrock: `workers` in `[web]`). The page
   shows each stage live and streams the draft text. You can close it and
   come back.
 - **Results:** the disclaimer and law date, the citation check, and each

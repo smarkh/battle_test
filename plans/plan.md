@@ -54,6 +54,10 @@ guardrails-style network isolation and data handling).
     to Bedrock models is not allowed for this account`. Nothing was
     billed. Next is yours: an AWS Support case, and the Anthropic
     use-case form. See `plans/aws-bedrock-plan.md`, Phase 1.
+  - **Several cases at once (2026-10-08):** `workers` in `[web]` sets how
+    many cases run together. It's 4 in `config.bedrock.toml` and stays 1
+    on Ollama, which has one GPU. Checked with the demo model, not yet on
+    Bedrock.
   - **AWS hosting** (Bedrock models + an EC2 app server), which would
     take battle_test off the smark_iq server entirely. Plan and cost
     estimates are in `plans/aws-bedrock-plan.md`: ~$0.10/case on the
@@ -1328,7 +1332,7 @@ protections (item 2 above).
 ## Restart prompt
 
 Paste this into a new Claude Code session, opened in the `battle_test`
-folder, to pick up where the 2026-10-06 session left off:
+folder, to pick up where the 2026-10-08 session left off:
 
 ```
 We're continuing work on battle_test, the legal adversarial argument system.
@@ -1380,8 +1384,14 @@ Where things stand:
     - Token totals and estimated cost per case in the Markdown report,
       the evaluation summary and results.json. Ollama reports tokens too.
     - Research and selection JSON replies are read leniently.
-    - Not built: cost on the web results page, [web] workers, the checker
-      role for 3a, config.aws.toml.
+    - Not built: cost on the web results page, the checker role for 3a,
+      config.aws.toml.
+- Added 2026-10-08: [web] workers, how many cases run at once.
+  config.bedrock.toml has workers = 4. The Ollama configs stay at 1 (one
+  GPU), and more than 1 on Ollama is refused. Checked with the demo model
+  on the real pipeline (four cases at once), NOT on Bedrock. NOT on the
+  server, which doesn't need it. Also fixed: cases submitted in the same
+  second showed the same queue position.
 - Bedrock, 2026-10-06 (details in plans/aws-bedrock-plan.md, Phase 1):
   - AWS sign-in works: AWS CLI 2.37.10, profile battle-test (account
     548108386131, AdministratorAccess, us-west-2). ~/.aws/config was
@@ -1447,7 +1457,7 @@ Where things stand:
 
 Before doing anything else:
 1. Run `python -m unittest` (use .venv/Scripts/python) and confirm all
-   tests pass (215 as of 2026-10-06).
+   tests pass (220 as of 2026-10-08).
 2. Check that data/law.sqlite exists. If it doesn't, rebuild it with
    `python -m battle_test.corpus build`.
 3. Check `git status` is clean, and that the latest commit is pushed to

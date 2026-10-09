@@ -95,6 +95,10 @@ secure_cookies = false
 behind_proxy = false
 retention_days = 90
 max_active_cases = 3
+# How many cases run at the same time. Bedrock has no single GPU to queue
+# for, so this can be above 1. One more than max_active_cases, so one user
+# can't hold every place.
+workers = 4
 
 [plans]
 default = "trial"

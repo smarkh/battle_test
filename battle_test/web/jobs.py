@@ -1,8 +1,9 @@
-"""Case jobs for the web UI: storage, live progress, and a one-at-a-time worker.
+"""Case jobs for the web UI: storage, live progress, and the worker that runs them.
 
-There's one GPU, so runs execute one at a time on a single worker thread and
-later submissions wait in the queue. Each case's input and results live in
-their own folder under the web data dir (inside gitignored cases/).
+With Ollama there's one GPU, so runs execute one at a time on a single
+worker thread and later submissions wait in the queue. With Bedrock,
+[web] workers can allow several at once. Each case's input and results live
+in their own folder under the web data dir (inside gitignored cases/).
 """
 
 # Postponed annotations: JobStore has a method named `list`, which would
@@ -191,11 +192,13 @@ class JobStore:
                 self._db.execute("UPDATE usage SET counted = 0 WHERE case_id = ?", (job_id,))
 
     def queue_position(self, job: Job) -> int:
-        """1 = next to run. Counts queued jobs submitted no later than this one."""
+        """1 = next to run. Counts queued jobs submitted before this one."""
         with self._lock:
             (n,) = self._db.execute(
-                "SELECT COUNT(*) FROM cases WHERE status = ? AND created_at <= ? AND id != ?",
-                (QUEUED, job.created_at, job.id),
+                # rowid breaks ties: created_at only goes down to the second.
+                "SELECT COUNT(*) FROM cases WHERE status = ? AND (created_at < ? OR (created_at = ? "
+                "AND rowid < (SELECT rowid FROM cases WHERE id = ?)))",
+                (QUEUED, job.created_at, job.created_at, job.id),
             ).fetchone()
         return n + 1
 
@@ -297,14 +300,16 @@ Runner = Callable[[Job, str, Callable[[str, str], None], Callable[[str], None]],
 
 
 class Worker:
-    """Runs queued jobs one at a time on a background thread."""
+    """Runs queued jobs on background threads, `workers` at a time, oldest first."""
 
-    def __init__(self, store: JobStore, runner: Runner):
+    def __init__(self, store: JobStore, runner: Runner, workers: int = 1):
         self.store = store
         self.runner = runner
+        self.workers = workers
         self._queue: queue.Queue[str] = queue.Queue()
         self._progress: dict[str, Progress] = {}
-        self._thread = threading.Thread(target=self._loop, name="battle-test-worker", daemon=True)
+        self._threads = [threading.Thread(target=self._loop, name=f"battle-test-worker-{n}", daemon=True)
+                         for n in range(1, workers + 1)]
 
     def start(self) -> None:
         # A restart loses whatever was running. Say so, and resume the queue.
@@ -313,7 +318,8 @@ class Worker:
                 self.store.update(job.id, status=FAILED, error="Interrupted: the server restarted during this run.")
             elif job.status == QUEUED:
                 self._queue.put(job.id)
-        self._thread.start()
+        for thread in self._threads:
+            thread.start()
 
     def submit(self, job_id: str) -> None:
         self._progress[job_id] = Progress()

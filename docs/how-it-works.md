@@ -156,8 +156,11 @@ load nothing from third parties.
 - **Accounts.** There's no self-signup. An admin creates an account and
   gets a one-time setup link, and the user sets their own password there.
   Each user sees only their own cases. Anyone else gets a 404.
-- **The queue.** One background worker thread runs one case at a time,
-  because there's one GPU. Queued cases survive a restart. A case that was
+- **The queue.** Background worker threads take cases from a queue, oldest
+  first. On Ollama there's one thread, so one case runs at a time, because
+  there's one GPU. On Bedrock, `workers` in `[web]` sets how many run at
+  once. Each run has its own state, so cases running together don't
+  affect each other. Queued cases survive a restart. A case that was
   mid-run is marked failed with an "interrupted" message.
 - **Live progress.** The pipeline reports stages and text through
   callbacks, and the browser receives them as server-sent events. A
@@ -223,7 +226,7 @@ image sets it to the server config. Most commands also take `--config`.
 | `[generation]` | Context size and temperature |
 | `[pipeline]` | Default rounds and the output folder |
 | `[corpus]` | The law snapshot, which jurisdictions and document types to index, and the data folder |
-| `[web]` | Host, port, data folder, cookie and proxy settings, retention, the queue cap, the public address |
+| `[web]` | Host, port, data folder, cookie and proxy settings, retention, the queue cap, how many cases run at once (`workers`), the public address |
 | `[plans]` | The plans and their case allowances |
 
 ## How it's deployed

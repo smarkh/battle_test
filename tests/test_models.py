@@ -159,6 +159,25 @@ class ProviderConfigTest(unittest.TestCase):
         self.assertNotEqual(web.data_dir, local.data_dir)  # two servers on one queue would run cases twice
         self.assertEqual(web.data_dir.parent.name, "cases")  # gitignored
         self.assertIn("unlimited", load_plans(ROOT / "config.bedrock.toml").by_name)
+        # Several cases at once on Bedrock, with a place left when one user is at their cap.
+        self.assertGreater(web.workers, web.max_active_cases)
+        self.assertEqual(local.workers, 1)
+        self.assertEqual(load_web_config(ROOT / "config.server.toml").workers, 1)
+
+    def test_workers_must_be_a_positive_number_and_one_on_ollama(self):
+        from battle_test.config import load_web_config
+        bedrock = (ROOT / "config.bedrock.toml").read_text(encoding="utf-8")
+        ollama = (ROOT / "config.toml").read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.toml"
+            for text, message in [(bedrock.replace("workers = 4", "workers = 0"), "1 or more"),
+                                  (bedrock.replace("workers = 4", "workers = true"), "1 or more"),
+                                  (ollama.replace("[web]", "[web]\nworkers = 2"), "one GPU")]:
+                path.write_text(text, encoding="utf-8")
+                with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                    load_web_config(path)
+            path.write_text(ollama.replace("[web]", "[web]\nworkers = 1"), encoding="utf-8")
+            self.assertEqual(load_web_config(path).workers, 1)
 
     def test_web_app_starts_on_the_bedrock_config_without_calling_aws(self):
         try:

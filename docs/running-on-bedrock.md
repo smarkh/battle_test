@@ -162,7 +162,10 @@ Then start it and open **http://127.0.0.1:8002**:
 
 - It uses port 8002, so it can run alongside the Ollama one on 8000.
 - Every case started here is sent to AWS and billed. Fictional cases only.
-- Cases still run one at a time.
+- Up to four cases run at once (`workers = 4` under `[web]`), and the
+  rest wait in the queue. Each user can still have only three waiting or
+  running, so one person can't take every place. Running several at once
+  costs the same per case: it only spends it sooner.
 - The results page doesn't show the cost yet. The Markdown download does.
 
 ## Stop
@@ -223,7 +226,6 @@ output_per_million = 1.20
 - **Bedrock on the server or on AWS itself.** The public site at
   `battle.smarkiq.us` still runs on the server's own GPU. Moving it is
   Phase 3 onwards in `plans/aws-bedrock-plan.md`.
-- **Several cases at once** in the web UI.
 - **Cost on the web results page.**
 
 ## Troubleshooting

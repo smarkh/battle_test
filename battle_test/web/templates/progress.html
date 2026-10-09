@@ -5,8 +5,9 @@
 <p class="muted">{{ states[job.state_code] }} · {{ job.rounds }} round{{ "s" if job.rounds > 1 }} · started {{ job.created_at.replace("T", " ")[:16] }}</p>
 
 <div id="progress" data-case="{{ job.id }}">
-  <p id="queue" class="notice" {% if job.status != "queued" %}hidden{% endif %}>
-    Waiting in the queue{% if position %}: position {{ position }}{% endif %}. Runs go one at a time.
+  {% set pace = "Runs go one at a time." if workers == 1 else "Up to %d cases run at once." % workers %}
+  <p id="queue" class="notice" data-pace="{{ pace }}" {% if job.status != "queued" %}hidden{% endif %}>
+    Waiting in the queue{% if position %}: position {{ position }}{% endif %}. {{ pace }}
   </p>
   <p id="status" class="notice" {% if job.status != "running" %}hidden{% endif %}>
     Running{% if job.stage %}: {{ job.stage }}{% endif %}…

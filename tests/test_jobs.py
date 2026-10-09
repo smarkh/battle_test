@@ -1,9 +1,12 @@
 import tempfile
+import threading
+import time
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from battle_test.web.jobs import DONE, FAILED, QUEUED, RUNNING, JobStore, QueueFull, QuotaExceeded
+from battle_test.pipeline import CaseRun
+from battle_test.web.jobs import DONE, FAILED, QUEUED, RUNNING, JobStore, QueueFull, QuotaExceeded, Worker
 
 
 class JobStoreRetentionTest(unittest.TestCase):
@@ -150,6 +153,101 @@ class UsageTest(unittest.TestCase):
         self.store.create(1, "UT", "facts", "privileged facts", 1, "Whitfield v. Summit")
         row = self.store._db.execute("SELECT * FROM usage").fetchone()
         self.assertFalse({"privileged facts", "Whitfield v. Summit"} & set(row))
+
+
+class WorkerTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = JobStore(Path(self.tmp.name))
+        self.release = threading.Event()
+        self.lock = threading.Lock()
+        self.running = self.most_at_once = 0
+        self.started = []
+
+    def tearDown(self):
+        self.release.set()
+        self.store.close()
+        self.tmp.cleanup()
+
+    def runner(self, job, text, on_stage, on_token):
+        """Holds each run open until released, and records how many overlap."""
+        with self.lock:
+            self.running += 1
+            self.most_at_once = max(self.most_at_once, self.running)
+            self.started.append(job.title)
+        on_token(job.title)
+        self.release.wait(10)
+        with self.lock:
+            self.running -= 1
+        return CaseRun(job.state_code, job.rounds, "p", "d"), f"report for {job.title}"
+
+    def submit(self, worker, count):
+        jobs = [self.store.create(n, "UT", "facts", "x", 1, f"case {n}") for n in range(1, count + 1)]
+        for job in jobs:
+            worker.submit(job.id)
+        return jobs
+
+    def wait_for(self, condition):
+        deadline = time.monotonic() + 10
+        while not condition() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(condition())
+
+    def test_runs_as_many_at_once_as_there_are_workers_and_queues_the_rest(self):
+        worker = Worker(self.store, self.runner, workers=3)
+        worker.start()
+        jobs = self.submit(worker, 5)
+        self.wait_for(lambda: self.running == 3)
+        time.sleep(0.1)  # long enough for a fourth to start, if anything let it
+        self.assertEqual(self.most_at_once, 3)
+        self.assertEqual(sorted(self.started), ["case 1", "case 2", "case 3"])  # oldest first
+        self.assertEqual([self.store.get(j.id).status for j in jobs], [RUNNING] * 3 + [QUEUED] * 2)
+        self.assertEqual([self.store.queue_position(self.store.get(j.id)) for j in jobs[3:]], [1, 2])
+
+        self.release.set()
+        self.assertTrue(worker.wait_idle())
+        self.assertEqual({self.store.get(j.id).status for j in jobs}, {DONE})
+        self.assertEqual(self.most_at_once, 3)
+        for job in jobs:  # each case kept its own result and its own progress log
+            self.assertEqual(self.store.result_markdown_path(job.id).read_text(encoding="utf-8"),
+                             f"report for {job.title}")
+            self.assertEqual([e for e in worker.progress(job.id).since(0) if e["type"] == "text"],
+                             [{"type": "text", "text": job.title}])
+
+    def test_one_worker_still_runs_one_at_a_time(self):
+        worker = Worker(self.store, self.runner)
+        worker.start()
+        jobs = self.submit(worker, 2)
+        self.wait_for(lambda: self.running == 1)
+        time.sleep(0.1)
+        self.assertEqual([self.store.get(j.id).status for j in jobs], [RUNNING, QUEUED])
+        self.release.set()
+        self.assertTrue(worker.wait_idle())
+        self.assertEqual(self.most_at_once, 1)
+
+    def test_one_failed_run_leaves_the_others_and_the_worker_alone(self):
+        def runner(job, text, on_stage, on_token):
+            if job.title == "case 2":
+                raise RuntimeError("boom")
+            return self.runner(job, text, on_stage, on_token)
+
+        worker = Worker(self.store, runner, workers=2)
+        worker.start()
+        self.release.set()
+        jobs = self.submit(worker, 4)
+        self.assertTrue(worker.wait_idle())
+        self.assertEqual([self.store.get(j.id).status for j in jobs], [DONE, FAILED, DONE, DONE])
+
+    def test_restart_fails_every_interrupted_run_and_resumes_the_queue(self):
+        first, second, waiting = (self.store.create(n, "UT", "facts", "x", 1, f"case {n}") for n in (1, 2, 3))
+        for job in (first, second):  # two were running when the server stopped
+            self.store.update(job.id, status=RUNNING)
+        self.release.set()
+        worker = Worker(self.store, self.runner, workers=2)
+        worker.start()
+        self.assertTrue(worker.wait_idle())
+        self.assertEqual([self.store.get(j.id).status for j in (first, second, waiting)], [FAILED, FAILED, DONE])
+        self.assertIn("Interrupted", self.store.get(second.id).error)
 
 
 if __name__ == "__main__":

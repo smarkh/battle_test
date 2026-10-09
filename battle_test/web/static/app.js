@@ -44,7 +44,7 @@ if (progress) {
 
   events.addEventListener("queue", (e) => {
     queue.hidden = false;
-    queue.textContent = `Waiting in the queue: position ${JSON.parse(e.data).position}. Runs go one at a time.`;
+    queue.textContent = `Waiting in the queue: position ${JSON.parse(e.data).position}. ${queue.dataset.pace}`;
   });
   events.addEventListener("stage", (e) => {
     const { title, role } = JSON.parse(e.data);
