@@ -10,7 +10,7 @@ every citation in the draft is checked against the index in code.
 import json
 from dataclasses import dataclass
 from itertools import zip_longest
-from typing import Protocol
+from typing import Callable, Protocol
 
 from battle_test.citations import (
     CitationRef,
@@ -28,11 +28,10 @@ EXCERPT_CHARS = 700
 # 8, not 4: in the baseline evaluation, even good topic queries missed ~40%
 # of the expected authorities at 4 results each.
 RESULTS_PER_QUERY = 8
-# The most candidates shown to the model for selection. Each takes about 60
-# tokens there, and the selection prompt has to fit in num_ctx with the case
-# materials. Keyword search alone rarely reaches this. With semantic search
-# each query can return twice as many, and this cuts the lowest-ranked.
-MAX_CANDIDATES = 110
+# How much of each candidate the model sees when selecting. Benchmarked on
+# the three sample cases, 2026-10-09: 40 words found more expected
+# authorities than 25 or 80 on both qwen2.5:7b and 14b.
+CANDIDATE_WORDS = 40
 
 # Every summary judgment brief needs the state's own summary judgment rule.
 # Looked up directly, not left to search and selection: the first grounded
@@ -52,6 +51,10 @@ class LawSearch(Protocol):
 
 class JsonChat(Protocol):
     def __call__(self, task: str) -> str: ...
+
+
+# One research query and the sections the search found for it, best first.
+Topic = tuple[str, list[LawSection]]
 
 
 def parse_json_list(reply: str, key: str) -> list:
@@ -97,9 +100,11 @@ def summary_judgment_rule(index: LawSearch, state: str) -> list[LawSection]:
     return [s for s in index.lookup(SUMMARY_JUDGMENT_RULES[state]) if s.in_force][:1]
 
 
-def gather_candidates(index: LawSearch, queries: list[str], state: str) -> list[LawSection]:
-    """Search each query and interleave the results by rank (every query's
-    best hit first), so a cut-off keeps the best of each query.
+def gather_by_topic(index: LawSearch, queries: list[str], state: str) -> list[Topic]:
+    """Search each query. Returns (query, sections found) for each, best first.
+
+    A section found by several queries stays only with the one that ranked
+    it highest, so the model is asked about it once.
 
     An index that can also search by meaning (semantic.SemanticLaw) is asked
     both ways, and each query's two result lists alternate: keyword's best,
@@ -111,30 +116,60 @@ def gather_candidates(index: LawSearch, queries: list[str], state: str) -> list[
         semantic = by_meaning(queries, state, limit=RESULTS_PER_QUERY)
         per_query = [[s for pair in zip_longest(keyword, meaning) for s in pair if s is not None]
                      for keyword, meaning in zip(per_query, semantic)]
-    seen: dict[str, LawSection] = {}
+    owner: dict[str, int] = {}
     for rank in range(max(map(len, per_query), default=0)):
-        for results in per_query:
+        for n, results in enumerate(per_query):
             if rank < len(results):
-                seen.setdefault(results[rank].citation, results[rank])
-    return list(seen.values())[:MAX_CANDIDATES]
+                owner.setdefault(results[rank].citation, n)
+    return [(query, list({s.citation: s for s in results if owner[s.citation] == n}.values()))
+            for n, (query, results) in enumerate(zip(queries, per_query))]
+
+
+def _by_rank(lists: list[list[LawSection]]) -> list[LawSection]:
+    """Every list's first section, then every list's second, and so on."""
+    return [s for row in zip_longest(*lists) for s in row if s is not None]
+
+
+def all_candidates(topics: list[Topic]) -> list[LawSection]:
+    """Every section the search found, each topic's best hit first."""
+    return _by_rank([sections for _, sections in topics])
+
+
+def gather_candidates(index: LawSearch, queries: list[str], state: str) -> list[LawSection]:
+    return all_candidates(gather_by_topic(index, queries, state))
 
 
 def candidate_list(candidates: list[LawSection]) -> str:
     lines = []
     for i, s in enumerate(candidates, 1):
-        start = " ".join(s.text.split()[:25])
+        start = " ".join(s.text.split()[:CANDIDATE_WORDS])
         lines.append(f"[{i}] {s.citation} — {s.section_title}\n    {start}…")
     return "\n".join(lines)
 
 
-def select(ask: JsonChat, task: str, candidates: list[LawSection], limit: int) -> list[LawSection]:
-    """The candidates the model picked, falling back to the top-ranked ones
-    if it returns nothing usable."""
-    picked = []
-    for n in parse_json_list(ask(task), "selected"):
-        if isinstance(n, int) and 1 <= n <= len(candidates) and candidates[n - 1] not in picked:
-            picked.append(candidates[n - 1])
-    return (picked or candidates)[:limit]
+def select(ask: JsonChat, task_for: Callable[[str, str], str], topics: list[Topic],
+           limit: int) -> list[LawSection]:
+    """Ask the model, one topic at a time, which of that topic's candidates
+    states the rule for this case. `task_for(topic, candidate list)` writes
+    each prompt.
+
+    At most one pick per topic. When there are more picks than `limit`, the
+    model's own topics and the standard ones take turns, so the cut never
+    falls on one kind alone. Falls back to the top-ranked candidates if the
+    model picks nothing at all.
+    """
+    picks: dict[str, LawSection] = {}
+    for query, sections in topics:
+        if not sections:
+            continue
+        for n in parse_json_list(ask(task_for(query, candidate_list(sections))), "selected"):
+            # bool is an int in Python, and `true` isn't a pick
+            if isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= len(sections):
+                picks[query] = sections[n - 1]
+                break
+    own = [picks[q] for q, _ in topics if q in picks and q not in STANDARD_QUERIES]
+    standard = [picks[q] for q, _ in topics if q in picks and q in STANDARD_QUERIES]
+    return (_by_rank([own, standard]) or all_candidates(topics))[:limit]
 
 
 def merge(*groups: list[LawSection], limit: int = MAX_AUTHORITIES) -> list[LawSection]:

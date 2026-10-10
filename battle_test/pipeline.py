@@ -112,14 +112,15 @@ def run_case(
         stage("Legal research", role)
         queries = grounding.research(asker(role), research_task)
         run.research[role] = queries
-        candidates = grounding.gather_candidates(law, queries, sc)
-        run.candidates[role] = [s.citation for s in candidates]
-        if not candidates:
+        topics = grounding.gather_by_topic(law, queries, sc)
+        run.candidates[role] = [s.citation for s in grounding.all_candidates(topics)]
+        if not run.candidates[role]:
             return []
         stage("Selecting authorities", role)
-        task = prompts.select_task(role, materials_title, materials,
-                                   grounding.candidate_list(candidates), grounding.MAX_AUTHORITIES)
-        return grounding.select(asker(role), task, candidates, grounding.MAX_AUTHORITIES)
+        return grounding.select(
+            asker(role),
+            lambda topic, candidates: prompts.select_task(role, materials_title, materials, topic, candidates),
+            topics, grounding.MAX_AUTHORITIES)
 
     def check(text: str, provided: list[LawSection] | None) -> CheckedText:
         cites = None if provided is None else {s.citation for s in provided}

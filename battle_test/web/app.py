@@ -191,8 +191,10 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
         # Opened per run, on the worker thread: SQLite connections stay on
         # the thread that made them.
         with LawIndex(law_db or corpus.db_path) as law:
+            # A stand-in index has no section vectors, so it's searched by keyword alone.
+            search = law if law_db else semantic.attach(law, config_path, corpus.db_path)
             run = run_case(
-                cfg, client, semantic.attach(law, config_path, law_db or corpus.db_path), job.state_code,
+                cfg, client, search, job.state_code,
                 facts=text if job.input_mode == "facts" else None,
                 complaint=text if job.input_mode == "complaint" else None,
                 rounds=job.rounds, on_stage=on_stage, on_token=on_token,

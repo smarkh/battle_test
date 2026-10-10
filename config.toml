@@ -41,7 +41,9 @@ document_types = ["statutes", "constitutions", "court_rules"]
 # Semantic search finds sections by meaning as well as by keyword. It needs
 # the section vectors, built once per law snapshot with
 # `python -m battle_test.corpus embed` (slow), and the embedding model in
-# Ollama (`ollama pull <model>`). Off until the vectors are built.
+# Ollama (`ollama pull <model>`). The vectors are built (2026-10-09), but it's
+# off: the first evaluation showed no gain until selection copes with the
+# longer candidate list (plans/plan.md, 3b).
 semantic = false
 # The model that built the vectors must also embed the queries. Changing it
 # means running `corpus embed` again.

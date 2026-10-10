@@ -107,6 +107,19 @@ class SemanticSearchTest(unittest.TestCase):
         self.assertEqual(hits[1][0].citation, "Tex. CPRC § 15.002")
         self.assertEqual(self.searcher().semantic_search([], "tx"), [])
 
+    def test_state_law_ranks_ahead_of_equally_close_federal_law(self):
+        semantic.build(self.db, FakeEmbedder())
+        vectors = semantic.VectorIndex(semantic.vectors_path(self.db))
+        query = FakeEmbedder().queries(["time limit to sue"])
+        cite = lambda ids: self.law.by_ids(ids)[0].citation
+
+        self.assertEqual(cite(vectors.nearest(query, ["federal", "tx"], 1, boost={"tx": 1.04})[0]),
+                         "Tex. CPRC § 16.004")
+        self.assertEqual(cite(vectors.nearest(query, ["federal", "tx"], 1, boost={"federal": 1.04})[0]),
+                         "28 U.S.C. § 1658")
+        hits = self.searcher().semantic_search(["time limit to sue"], "tx", limit=2)[0]
+        self.assertEqual([s.citation for s in hits], ["Tex. CPRC § 16.004", "28 U.S.C. § 1658"])
+
     def test_only_the_state_and_federal_law_in_force_is_searched(self):
         semantic.build(self.db, FakeEmbedder())
         cites = [s.citation for s in self.searcher().semantic_search(["time limit to sue"], "tx", limit=10)[0]]
@@ -197,6 +210,11 @@ class EmbedderTest(unittest.TestCase):
         from battle_test.models import ModelError
         with self.assertRaisesRegex(ModelError, "Could not reach Ollama"):
             semantic.Embedder("http://127.0.0.1:9", "nomic-embed-text", timeout_seconds=2).queries(["x"])
+
+    def test_localhost_is_called_by_address(self):
+        self.assertEqual(semantic.Embedder("http://localhost:11434", "m").url, "http://127.0.0.1:11434")
+        self.assertEqual(semantic.Embedder("http://host.docker.internal:11434", "m").url,
+                         "http://host.docker.internal:11434")
 
     def replies(self, *replies):
         """Patch Ollama to give these replies in turn: an HTTP status, or a list of vectors."""

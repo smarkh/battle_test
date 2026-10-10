@@ -131,16 +131,27 @@ state's summary judgment rule is supplied separately.)
 {wrap("Motion for summary judgment", motion)}"""
 
 
-def select_task(side: str, materials_title: str, materials: str, candidates: str, limit: int) -> str:
+# One topic and its handful of candidates per call. Asked to pick 10 from
+# about 100 in a single call, qwen2.5:7b and 14b both chose close to at
+# random (labor and tax code sections for a remodelling contract). Asked this
+# way they picked 21 of the 24 expected authorities the search had found,
+# against 6 (benchmark on the three sample cases, 2026-10-09). The case and
+# the instructions come first and are the same for every topic, so Ollama
+# reuses its work on them from one call to the next.
+def select_task(side: str, materials_title: str, materials: str, topic: str, candidates: str) -> str:
     return f"""\
-Below is the case and a numbered list of candidate authorities found by \
-searching the law index. Choose the ones that would genuinely help the \
-{side} in THIS case. Skip any that are about unrelated subjects (for example \
-insurance, taxes or public agencies when the case is a private contract \
-dispute). Choose at most {limit}. Respond with JSON only, in exactly this form:
+Below is the case, one legal topic the {side} needs law on, and a numbered \
+list of candidate authorities that a search of the law index returned for \
+that topic. Choose the candidate that states the rule a court would apply \
+to THIS case on this topic. Most candidates will be about unrelated subjects \
+(for example insurance, taxes or public agencies when the case is a private \
+contract dispute): skip those. Choose at most 1, and choose none if no \
+candidate fits. Respond with JSON only, in exactly this form:
 {{"selected": [numbers]}}
 
 {wrap(materials_title, materials)}
+
+Topic: {topic}
 
 {wrap("Candidate authorities", candidates)}"""
 

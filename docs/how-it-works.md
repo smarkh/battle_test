@@ -42,13 +42,14 @@ The same pipeline also runs from the command line
 ## The pipeline, step by step
 
 All of this is `run_case()` in `battle_test/pipeline.py`. A 2-round case
-that starts from case information makes **8 model calls**.
+that starts from case information makes **6 long model calls** (two for
+research, four drafts) and about **25 short ones** for selection.
 
 | # | Stage | Who | What happens |
 |---|---|---|---|
 | 1 | Legal research | Plaintiff | The model lists its legal issues as short search queries, in statute wording, as JSON. Six standard procedural queries (limitations, venue, jurisdiction, attorney fees, interest, damages) are always added. |
-| | Search | Code | Each query is run against the law index, 8 results each. The results are interleaved so every query's best hit comes first. |
-| 2 | Selecting authorities | Plaintiff | The model sees the candidates (citation, title, first 25 words) and picks up to 10, as JSON. |
+| | Search | Code | Each query is run against the law index, 8 results each. A section found by several queries stays with the one that ranked it highest. |
+| 2 | Selecting authorities | Plaintiff | One short call per query: the model sees that query's candidates (citation, title, first 40 words) and picks the one that states the rule for this case, or none, as JSON. Up to 10 picks are kept. |
 | 3 | Complaint | Plaintiff | Drafted from the case information and the selected sections. Skipped if the user supplied a complaint, which is used as written but still checked. |
 | 4 | Motion for summary judgment | Plaintiff | Drafted from the complaint and the selected sections, plus the state's summary judgment rule. |
 | 5 | Legal research | Defendant | The same as step 1, from the complaint and the motion. |
@@ -65,9 +66,16 @@ Details worth knowing:
   Utah R. Civ. P. 56, Cal. CCP § 437c, Tex. R. Civ. P. 166a.
 - **A drafting prompt holds at most 12 sections,** each cut to about 700
   characters, so the longest prompt (the reply) fits the model's context.
+- **Selection asks about one query at a time** because small models pick
+  close to at random from a long list. Asked to choose 10 from about 100
+  in one call, `qwen2.5:7b` kept 6 of the 24 expected authorities the
+  search had found on the sample cases. Asked per query, it kept 21.
+- **When there are more than 10 picks,** the model's own queries and the
+  standard ones take turns, so the cut doesn't fall on one kind alone.
 - **If a model's JSON reply is unusable,** research falls back to the
-  standard queries alone, and selection falls back to the top-ranked
-  candidates. A run doesn't fail over it.
+  standard queries alone, and a selection call counts as no pick. If
+  nothing is picked at all, the top-ranked candidates are used. A run
+  doesn't fail over it.
 - **Case law isn't supported yet.** The models are told not to cite cases,
   and anything that looks like a case citation is listed as unchecked.
 
@@ -116,7 +124,9 @@ California, Texas and federal law.
   - At run time each search query is turned into a vector the same way,
     and the closest sections are returned.
   - Each query's keyword and semantic results are merged in alternation,
-    and the model then selects from the combined list, as before.
+    and the model then selects from that query's combined list, as before.
+  - The vectors are built on the laptop, but it's off in `config.toml`:
+    the first evaluation with it on showed no gain (`plans/plan.md`, 3b).
   - The same model must embed the sections and the queries. Vectors made
     by another model, or before the index was rebuilt, are refused.
 - The data is a quarterly snapshot. Every output states the date the law

@@ -15,7 +15,7 @@ guardrails-style network isolation and data handling).
   - Step 5 parts 1–2: a local web UI with accounts, case deletion, and
     3-month retention.
 
-  235 unit tests pass (2026-10-09).
+  240 unit tests pass (2026-10-09).
 - **On the smark_iq server (2026-09-28):**
   - Deployed in Docker, fully independent of smark_iq, and **live at
     `https://battle.smarkiq.us`** through its own Cloudflare Tunnel.
@@ -33,10 +33,20 @@ guardrails-style network isolation and data handling).
   Utah improved, Texas didn't: keyword search can't cope with each state's
   different statute wording. See 3b.
 - **Next up:**
-  - 3b: semantic search, better selection, then re-evaluate on 14B /
-    ~30B. **Semantic search is built but off (2026-10-09):** the section
-    vectors haven't been built and no evaluation has run with it. See
-    "Semantic search: pilot and build" in 3b.
+  - 3b, as of 2026-10-09:
+    - **Semantic search is built, the vectors are built, and it's off.**
+      The first evaluation with it on showed no gain (4/16 core cited
+      against 6/16), because selection couldn't cope with the longer
+      candidate list.
+    - **Selection was rebuilt:** one short call per query. In a
+      selection-only benchmark it kept 21 of 24 expected authorities
+      where the old method kept 6.
+    - **A full evaluation with the new selection was started and hasn't
+      been read.** Then: semantic search back on, the research prompt,
+      and re-evaluating on 14B / ~30B.
+
+    See "Semantic search: pilot and build" and "Selection: one call per
+    query" in 3b.
   - Web UI part 3: upload with text extraction. (`.docx`/PDF export was
     built 2026-10-05.)
   - Server deployment (web UI part 4): **done, and live** (see
@@ -730,14 +740,123 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
          socket for its own internal call ("Only one usage of each
          socket address"). `Embedder` now tries each request three
          times.
+       - **`localhost` made the first full build six times too slow**
+         (12 sections a second, not 71). On Windows it's tried over IPv6
+         first, where Ollama isn't listening, and falling back costs
+         2 seconds a request: 2.5 s a batch against 0.4 s. The pilot
+         had used `127.0.0.1`, so it didn't show. `Embedder` now calls
+         `127.0.0.1` when the config says `localhost`. The drafting
+         client still uses `localhost`, where 2 seconds a call is small.
        - The server's card embeds with `qwen3-embedding:0.6b` at about
          45 sections a second through an SSH tunnel
          (`ssh -N -L 11435:127.0.0.1:11434 smark@smark-iq`, then
          `embedding_url = "http://127.0.0.1:11435"`), twice the laptop.
          The model was pulled on the server for this.
-     - **Not done yet:** the full build, tuning how state law ranks
-       against federal law in semantic results, and the evaluation with
-       semantic search on.
+     - **Full build and first evaluation (2026-10-09). No gain yet.**
+       - **Built:** 358,663 sections with `nomic-embed-text`, on the
+         laptop, in about 1.5 hours once the `localhost` delay was fixed.
+         `semantic = true` in `config.toml`.
+       - **Search-only check, same evening, expected authorities found:**
+         keyword 8/25, keyword + semantic 9/25 (California 3 → 4 of 10,
+         Texas 1/8 and Utah 4/7 unchanged).
+       - **Full run, 7B, one run per case:**
+
+         | | 2026-09-25, keyword | 2026-10-09, + semantic |
+         |---|---|---|
+         | Core found by search | 6/16 | 6/16 |
+         | Core given to the models | 7/16 | 5/16 |
+         | Core cited | 6/16 | 4/16 |
+         | Off-topic cited | 2 | 3 |
+         | ❌ citation problems | 0 | 6 (all Texas) |
+
+         One run per case is noisy, so 6 → 4 isn't proof it got worse.
+         It is clear it didn't get better.
+       - **Why the pilot's Texas gain didn't carry over:**
+         - The Texas finds sit at semantic rank 8, the last result for
+           their query. With two lists per query there are about 175
+           candidates, `MAX_CANDIDATES = 110` drops the lowest-ranked,
+           and those are the ones dropped. Uncapped, search would find
+           11/25.
+         - The model's queries change from run to run. § 38.001 was
+           found in this run and not in the search-only check.
+       - **Selection is now the weak step.** More was found and not
+         selected than before: Cal. CCP § 337 and Civ. Code § 3287 were
+         cited on 2026-09-25, and this time were found but not picked
+         from the 110. Texas § 38.001 the same.
+       - **Combining the lists differently doesn't help.** Reciprocal
+         rank fusion, "in both lists first" and 4 + 4 were replayed over
+         three runs' queries. All landed within one or two of 25 of plain
+         alternation, which is noise, so the method was left alone.
+       - **State law is favoured in semantic results:**
+         `semantic.STATE_BOOST = 1.04`. Unboosted, federal sections were
+         37% of the top 8 for these state-law cases, and 12% with it. It
+         didn't change the count of authorities found.
+       - **Turned off again the same evening** (`semantic = false`), until
+         it's re-evaluated with the new selection below. The vectors
+         stay in `data/`.
+       - **Side effect on the laptop:** with the embedding model on the
+         4 GB card, `qwen2.5:7b` ran 59% on the CPU. The three cases took
+         45 minutes, against about 40.
+   - **Selection: one call per query (2026-10-09).**
+     - **The old selection was close to random.** Asked to pick 10 from
+       about 100 candidates in one call, the 7B chose a labor code
+       section, a tax code section and a federal foreign-relations
+       statute for the California remodel case, and five sale-of-goods
+       sections for the Utah roofing case.
+     - **Benchmark:** the plaintiff's selection step alone, with the
+       queries fixed (those of the 2026-10-09 search-only run), three
+       tries per case. The score is how many of the expected authorities
+       that search had found were kept. Keyword candidates held 8 of
+       them per try, keyword + semantic (uncapped) 11.
+
+       | Method | 7B, keyword | 7B, + semantic | 14B, keyword | 14B, + semantic |
+       |---|---|---|---|---|
+       | One call over all candidates (old) | 6/24 | 13/33 | 7/24 | 14/33 |
+       | Same, candidates grouped by query | not run | not run | 3/24 | 5/33 |
+       | Two passes, chunks of 30 | 12/24 | 15/33 | 12/24 | 16/33 |
+       | One call per query, 2 picks each | 16/24 | 18/33 | 18/24 | 18/33 |
+       | One call per query, 1 pick, cut in query order | 19/24 | 20/33 | 21/24 | 21/33 |
+       | **One call per query, 1 pick, model's and standard queries taking turns** | **21/24** | **25/33** | **24/24** | **27/33** |
+       | Same, then the model makes the final cut | not run | not run | 15/24 | 21/33 |
+
+       - **A model twice the size didn't fix the old method** (7 against
+         6 of 24). The way of asking mattered far more than the model.
+       - **40 words per candidate beat 25 and 80** (7B keyword: 16/24 at
+         25 words; 14B keyword: 16/24 at 25, 18/24 at 80).
+       - **A final cut by the model made it worse.** It kept about 5 of
+         its 14 picks. So the cut is done in code.
+       - **Semantic search helps once selection works:** 25 against 21
+         expected authorities kept on the 7B, 27 against 24 on the 14B.
+       - **Caveats:** the three tries per case came out nearly
+         identical, so this is three cases of evidence, not nine. The
+         method was chosen on the same three cases it's scored on. Only
+         the plaintiff's selection was measured.
+       - Both models ran on the server through the SSH tunnel (about
+         5 seconds a try, against 50 on the laptop). The same 7B on the
+         laptop gave matching results for what it finished.
+     - **Built:** `grounding.gather_by_topic` and a new `grounding.select`,
+       and `prompts.select_task` now takes one query and its candidates.
+       `MAX_CANDIDATES` is gone, since no single prompt holds every
+       candidate any more.
+     - **Cost:** about 25 short selection calls a case where there were
+       2. Roughly a minute and a half more per case on the laptop. About
+       40,000 more input tokens a case, which matters only on an
+       expensive Bedrock model. The case text is the same in every call,
+       so Bedrock prompt caching would cut it; not built.
+     - **Full evaluation with it: started 2026-10-09 23:47, keyword
+       search, 7B, label `per-topic-selection`. Not read yet.** The
+       result is in `output/eval/` under that label. Compare with 6/16
+       core cited on 2026-09-25.
+     - **Next:**
+       1. Read that evaluation. If it holds up, run it with
+          `--repeats 3`.
+       2. Turn semantic search back on and evaluate again. The benchmark
+          says it should now help.
+       3. The research prompt: the case-specific law (Texas RCLA and
+          DTPA, California contractor licensing) is still never found,
+          because the model's queries are too vague.
+       4. `qwen3-embedding:0.6b` against `nomic-embed-text`, if semantic
+          search earns its place. Needs a full rebuild.
    - **Needs the lawyer:**
      - **The lists are drafts** (`lawyer_reviewed = false`). Choosing the
        right law is the judgement being measured, so the lists should be
@@ -1410,12 +1529,17 @@ development). Then read plans/plan.md (especially "Status", build step 5,
 testing costs"), and plans/server-migration-plan.md. Then skim the code in
 battle_test/ (including battle_test/web/) and tests/.
 
-Next up: the first real Bedrock runs (plans/aws-bedrock-plan.md, Phase 1
-then Phase 2 step 2). The code is built and the laptop is set up, but AWS
-is BLOCKING Bedrock for my account, so no model has answered yet. It
-waits on an AWS Support case, which is mine. Whether REAL case material
-may go to AWS is still the lawyer's call, so Bedrock runs fictional cases
-only.
+Next up, two tracks:
+1. Search and selection quality (plan.md, build step 3b), which needs no
+   AWS. Read the evaluation started on 2026-10-09 with the new per-query
+   selection, then turn semantic search back on and evaluate it, then
+   work on the research prompt. See "Changed 2026-10-09" below.
+2. The first real Bedrock runs (plans/aws-bedrock-plan.md, Phase 1 then
+   Phase 2 step 2). The code is built and the laptop is set up, but AWS
+   is BLOCKING Bedrock for my account, so no model has answered yet. It
+   waits on an AWS Support case, which is mine. Whether REAL case
+   material may go to AWS is still the lawyer's call, so Bedrock runs
+   fictional cases only.
 
 Where things stand:
 - Built on this dev laptop (RTX 3050 Ti, 4 GB VRAM, Ollama with qwen2.5:7b):
@@ -1458,21 +1582,35 @@ Where things stand:
   on the real pipeline (four cases at once), NOT on Bedrock. NOT on the
   server, which doesn't need it. Also fixed: cases submitted in the same
   second showed the same queue position.
-- Added 2026-10-08/09: semantic search, BUILT BUT OFF (plan.md, 3b,
+- Added 2026-10-08/09: semantic search, BUILT AND OFF (plan.md, 3b,
   "Semantic search: pilot and build").
   - battle_test/semantic.py, `python -m battle_test.corpus embed`
     (resumable), `corpus search --semantic`, [search] in config.toml
     (semantic = false). Needs numpy.
-  - NOT done: the full vector build (data/law-vectors.npy doesn't exist),
-    tuning state against federal law in semantic results, and an
-    evaluation with it on.
+  - The vectors ARE built on the laptop (data/law-vectors.npy, 358,663
+    sections, nomic-embed-text, about 1.5 hours). NOT on the server.
+  - First evaluation with it on: no gain (4/16 core cited against 6/16
+    on 2026-09-25, one run per case). Selection was the weak step, so I
+    had it turned off and selection fixed first.
   - Long jobs: Claude Code stops its background tasks when the laptop
-    runs low on memory, which killed two pilot runs. Run the build in my
-    own PowerShell window. Don't restart a stopped job unless I ask.
+    runs low on memory, which killed two pilot runs. Run long builds in
+    my own PowerShell window. Don't restart a stopped job unless I ask.
   - Both Ollamas have qwen3-embedding:0.6b, and the laptop also has
     nomic-embed-text. Ask before removing the server's.
-  - Turning it on will break the web tests as written: they read
-    config.toml with a temporary law index that has no vectors.
+- Changed 2026-10-09: selection is now ONE SHORT CALL PER QUERY (plan.md,
+  3b, "Selection: one call per query"). The old single call picked close
+  to at random from about 100 candidates.
+  - Selection-only benchmark, expected authorities kept: 21/24 against
+    6/24 on the 7B, 24/24 against 7/24 on the 14B.
+  - A full evaluation with it (keyword search, 7B, label
+    per-topic-selection) was started at 23:47 and NOT READ. Find it in
+    output/eval/ and record the result in plan.md first thing. If the
+    folder has no summary.md, the run didn't finish: ask me before
+    re-running it.
+  - Then: semantic search back on and evaluated, then the research
+    prompt (case-specific law is still never found).
+  - The benchmark scripts were in the session's scratch folder and are
+    not in the repo.
 - Bedrock, 2026-10-06 (details in plans/aws-bedrock-plan.md, Phase 1):
   - AWS sign-in works: AWS CLI 2.37.10, profile battle-test (account
     548108386131, AdministratorAccess, us-west-2). ~/.aws/config was

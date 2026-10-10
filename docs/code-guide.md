@@ -32,7 +32,7 @@ needed only to build the law index and to run the web UI.
 | `cli.py` | The command line: `python -m battle_test --state UT --facts FILE`. Parses arguments, runs one case, writes the Markdown file. `__main__.py` just calls it. | pipeline, report |
 | `pipeline.py` | `run_case()`: the whole flow, from research to the reply. Defines `CaseRun` (one run's results) and `Document` (one brief with its citation checks). Also defines `ChatClient`, the interface a model client must offer. | grounding, prompts |
 | `prompts.py` | Every prompt: the system prompts for each role, and the task prompts for research, selection and each brief. Also the supported states and each state's trial court. | none |
-| `grounding.py` | Research (model queries plus the standard ones), gathering search candidates, selection, formatting sections for a prompt, and `check_citations()`, which classifies every citation in a draft. | citations, law_index |
+| `grounding.py` | Research (model queries plus the standard ones), gathering search candidates per query, selection (one call per query), formatting sections for a prompt, and `check_citations()`, which classifies every citation in a draft. | citations, law_index |
 | `citations.py` | Pure text handling: finds citations in a draft, parses them, and normalises code names so "Utah Code Ann." and "U.C.A." match. No database access. | none |
 | `law_index.py` | `LawIndex`: reads `law.sqlite`. `search()` is the keyword search, `lookup()` finds an exact citation, and `resolve()` matches a parsed citation from a draft. | citations |
 | `corpus.py` | `python -m battle_test.corpus build / info / search / embed`. Downloads Open US Law, verifies checksums, builds the index. Needs `pyarrow`. `embed` builds the vectors for semantic search. | law_index, citations, semantic |
@@ -121,7 +121,7 @@ fake model clients and small temporary databases.
 | To change… | Look in |
 |---|---|
 | What a model is told to write | `prompts.py` |
-| How law is searched or ranked | `law_index.py` (`search`, `STATE_BOOST`), `grounding.py` (`STANDARD_QUERIES`, `RESULTS_PER_QUERY`, `MAX_CANDIDATES`), `semantic.py` (`EMBED_CHARS`, the model prefixes) |
+| How law is searched or ranked | `law_index.py` (`search`, `STATE_BOOST`), `grounding.py` (`STANDARD_QUERIES`, `RESULTS_PER_QUERY`), `semantic.py` (`EMBED_CHARS`, `STATE_BOOST`, the model prefixes) |
 | How many sections a model gets, or how much of each | `grounding.py` (`MAX_AUTHORITIES`, `EXCERPT_CHARS`), `pipeline.py` (`MAX_COMBINED_AUTHORITIES`) |
 | A citation form the checker doesn't recognise | `citations.py` (`_PATTERNS`), with a test in `test_citations.py` |
 | The order of documents, or adding a step | `pipeline.py` |

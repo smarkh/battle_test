@@ -20,6 +20,7 @@ import os
 import sqlite3
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from functools import lru_cache
@@ -43,6 +44,13 @@ SCORE_BLOCK = 16384
 # free socket for its internal call). Without a retry, that stops an
 # hours-long build.
 ATTEMPTS = 3
+# How much to favour the selected state's law over federal law, as
+# law_index.STATE_BOOST does for keyword search. Unboosted, federal sections
+# were 37% of the top 8 results for the three sample cases' queries, all
+# state-law contract disputes (2026-10-09, nomic-embed-text). At 1.04 they
+# are 12%, at 1.06 6%, at 1.12 under 1%. It didn't change how many expected
+# authorities were found, so it's set low enough to leave federal law in.
+STATE_BOOST = 1.04
 RETRY_WAIT_SECONDS = 5
 
 # What each model family wants in front of a (document, query). The models
@@ -99,6 +107,12 @@ class Embedder:
     """Turns text into unit-length vectors with an Ollama embedding model."""
 
     def __init__(self, url: str, model: str, timeout_seconds: int = 600):
+        # On Windows "localhost" is tried over IPv6 first, where Ollama isn't
+        # listening, and falling back costs 2 seconds a request. Measured
+        # 2026-10-09: 2.5 s a batch against 0.4 s, a 9-hour build against 1.5.
+        parts = urllib.parse.urlsplit(url)
+        if parts.hostname == "localhost":
+            url = parts._replace(netloc=parts.netloc.replace("localhost", "127.0.0.1")).geturl()
         self.url = url
         self.model = model
         self.timeout_seconds = timeout_seconds
@@ -233,21 +247,24 @@ class VectorIndex:
         self._vectors = np.load(path, mmap_mode="r")
         self._ids = np.load(_ids_path(path))
 
-    def nearest(self, queries, jurisdictions: list[str], limit: int) -> list[list[int]]:
+    def nearest(self, queries, jurisdictions: list[str], limit: int,
+                boost: dict[str, float] | None = None) -> list[list[int]]:
         """For each query vector, the ids of the `limit` closest sections in
-        those jurisdictions, closest first."""
+        those jurisdictions, closest first. `boost` multiplies a
+        jurisdiction's scores, to favour it."""
         import numpy as np
-        spans = [self.meta["jurisdictions"][j] for j in jurisdictions if j in self.meta["jurisdictions"]]
-        rows = sum(end - start for start, end in spans)
+        spans = [(self.meta["jurisdictions"][j], (boost or {}).get(j, 1.0))
+                 for j in jurisdictions if j in self.meta["jurisdictions"]]
+        rows = sum(end - start for (start, end), _ in spans)
         if not rows:
             return [[] for _ in queries]
         scores = np.empty((rows, len(queries)), dtype=np.float32)
-        ids = np.concatenate([self._ids[start:end] for start, end in spans])
+        ids = np.concatenate([self._ids[start:end] for (start, end), _ in spans])
         at = 0
-        for start, end in spans:
+        for (start, end), factor in spans:
             for a in range(start, end, SCORE_BLOCK):
                 block = np.asarray(self._vectors[a:min(a + SCORE_BLOCK, end)], dtype=np.float32)
-                scores[at:at + len(block)] = block @ queries.T
+                scores[at:at + len(block)] = block @ queries.T * factor
                 at += len(block)
         limit = min(limit, rows)
         results = []
@@ -281,7 +298,9 @@ class SemanticLaw:
         """For each query, the sections of `state` and federal law closest to it in meaning."""
         if not queries:
             return []
-        nearest = self._vectors.nearest(self._embedder.queries(queries), [state.lower(), "federal"], limit)
+        state = state.lower()
+        nearest = self._vectors.nearest(self._embedder.queries(queries), [state, "federal"], limit,
+                                        boost={state: STATE_BOOST})
         return [self._law.by_ids(ids) for ids in nearest]
 
 

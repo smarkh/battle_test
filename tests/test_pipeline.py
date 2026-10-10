@@ -64,7 +64,7 @@ class FakeClient:
         if json_mode:
             if '"queries"' in user:
                 return json.dumps({"queries": ["action upon instrument in writing"]})
-            return json.dumps({"selected": [1, 2]})
+            return json.dumps({"selected": [2]})  # LIMITS; the summary judgment rule is supplied anyway
         n = sum(not c["json"] for c in self.calls)
         return self.drafts.pop(0) if self.drafts else f"DOC-{n}"
 
@@ -133,7 +133,8 @@ class PipelineTest(unittest.TestCase):
         run = self.run_case(client, facts="f")
         for call in client.drafting_calls():
             self.assertIn("=== AUTHORITIES ===", call["user"])
-            self.assertIn("Utah R. Civ. P. 56", call["user"])
+            self.assertIn("Text of Utah Code § 78B-2-309.", call["user"])  # the one the model selected
+        for call in client.drafting_calls()[1:]:  # the motion and after also get the summary judgment rule
             self.assertIn("Text of Utah R. Civ. P. 56.", call["user"])
         self.assertEqual(run.documents[1].authorities, (SJ_RULE, LIMITS))
 

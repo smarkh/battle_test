@@ -66,18 +66,50 @@ class ResearchAndSelectionTest(unittest.TestCase):
         # Query a: keyword K1, BOTH; semantic S1, BOTH, S2. Query b: keyword K2 only.
         self.assertEqual(grounding.gather_candidates(law, ["a", "b"], "ut"), [k1, k2, s1, both, s2])
 
-    def test_candidates_are_capped_keeping_the_best_ranked(self):
-        results = {f"q{n}": [section(f"Q{n}-{rank}") for rank in range(grounding.RESULTS_PER_QUERY)]
-                   for n in range(20)}
-        candidates = grounding.gather_candidates(FakeLaw(results), list(results), "ut")
-        self.assertEqual(len(candidates), grounding.MAX_CANDIDATES)
-        self.assertEqual([c.citation for c in candidates[:20]], [f"Q{n}-0" for n in range(20)])
+    def test_a_section_stays_with_the_topic_that_ranked_it_highest(self):
+        a1, a2, b1, shared = section("A1"), section("A2"), section("B1"), section("SHARED")
+        law = FakeLaw({"a": [a1, shared, a2], "b": [shared, b1], "c": [a1]})
+        self.assertEqual(grounding.gather_by_topic(law, ["a", "b", "c"], "ut"),
+                         [("a", [a1, a2]), ("b", [shared, b1]), ("c", [])])
 
-    def test_select_uses_valid_picks_and_falls_back(self):
-        cands = [section("A"), section("B"), section("C")]
-        pick = lambda reply: grounding.select(lambda task: reply, "task", cands, 2)  # noqa: E731
-        self.assertEqual(pick('{"selected": [3, 3, 99, "1", 1]}'), [cands[2], cands[0]])
-        self.assertEqual(pick("garbage"), cands[:2])
+    def test_candidate_lines_are_numbered_and_cut_short(self):
+        text = grounding.candidate_list([section("A"), section("B")])
+        self.assertIn("[1] A — Title of A\n", text)
+        self.assertIn("[2] B — Title of B\n", text)
+        self.assertEqual(text.count("word"), 2 * grounding.CANDIDATE_WORDS)
+
+    def select(self, topics, replies, limit=10):
+        """Run select() with the model answering each topic from `replies`. Returns (picks, prompts)."""
+        asked = []
+
+        def ask(task):
+            asked.append(task)
+            return replies[task.split("|")[0]]
+        picks = grounding.select(ask, lambda topic, candidates: f"{topic}|{candidates}", topics, limit)
+        return picks, asked
+
+    def test_select_asks_once_per_topic_and_takes_one_pick_each(self):
+        a1, a2, b1, c1 = section("A1"), section("A2"), section("B1"), section("C1")
+        topics = [("a", [a1, a2]), ("b", [b1]), ("empty", []), ("c", [c1])]
+        picks, asked = self.select(topics, {"a": '{"selected": [2, 1]}', "b": '{"selected": []}',
+                                            "c": '{"selected": [99, "1", true, 1]}'})
+        self.assertEqual(picks, [a2, c1])                # one each, none for b, c's first valid number
+        self.assertEqual(len(asked), 3)                  # a topic with no candidates isn't asked about
+        self.assertIn("[2] A2", asked[0])
+        self.assertNotIn("B1", asked[0])                 # each prompt lists only its own topic's candidates
+
+    def test_select_cut_alternates_the_models_topics_and_the_standard_ones(self):
+        own = [(f"own {n}", [section(f"OWN{n}")]) for n in range(3)]
+        standard = [(q, [section(f"STD{n}")]) for n, q in enumerate(grounding.STANDARD_QUERIES[:3])]
+        replies = {q: '{"selected": [1]}' for q, _ in own + standard}
+        picks, _ = self.select(own + standard, replies, limit=4)
+        self.assertEqual([s.citation for s in picks], ["OWN0", "STD0", "OWN1", "STD1"])
+
+    def test_select_falls_back_to_the_top_ranked_when_nothing_is_picked(self):
+        a1, a2, b1 = section("A1"), section("A2"), section("B1")
+        topics = [("a", [a1, a2]), ("b", [b1])]
+        picks, _ = self.select(topics, {"a": "garbage", "b": '{"selected": [0]}'}, limit=2)
+        self.assertEqual(picks, [a1, b1])
 
     def test_format_authorities_trims_long_text(self):
         text = grounding.format_authorities([section("Utah Code § 1-1-1")])
