@@ -180,16 +180,19 @@ def merge(*groups: list[LawSection], limit: int = MAX_AUTHORITIES) -> list[LawSe
     return list(seen.values())[:limit]
 
 
+def excerpt(text: str, limit: int = EXCERPT_CHARS, more: str = " …[excerpt]") -> str:
+    """The start of a section's text on one line, cut at a word, with `more`
+    added when something was left off."""
+    text = " ".join(text.split())
+    if len(text) > limit:
+        text = text[:limit].rsplit(" ", 1)[0] + more
+    return text
+
+
 def format_authorities(sections: list[LawSection]) -> str:
     if not sections:
         return "(none found — use [CITATION NEEDED: …] placeholders for all legal authority)"
-    blocks = []
-    for s in sections:
-        text = " ".join(s.text.split())
-        if len(text) > EXCERPT_CHARS:
-            text = text[:EXCERPT_CHARS].rsplit(" ", 1)[0] + " …[excerpt]"
-        blocks.append(f"{s.citation} — {s.section_title}\n{text}")
-    return "\n\n".join(blocks)
+    return "\n\n".join(f"{s.citation} — {s.section_title}\n{excerpt(s.text)}" for s in sections)
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +207,7 @@ WRONG_JURISDICTION = "wrong_jurisdiction"
 AMBIGUOUS = "ambiguous"
 
 PROBLEM_STATUSES = {NOT_IN_FORCE, NOT_FOUND, WRONG_JURISDICTION}
+CITED_STATUSES = (VERIFIED, IN_FORCE_NOT_PROVIDED)  # a draft cites a real, in-force section
 
 
 @dataclass(frozen=True)
@@ -273,6 +277,6 @@ def check_citations(text: str, index: LawSearch, state: str, state_name: str,
 def cited_sections(checked: CheckedText) -> list[LawSection]:
     """In-force sections a draft cites, so the other side can see their text."""
     return merge([c.section for c in checked.checks
-                  if c.section is not None and c.status in (VERIFIED, IN_FORCE_NOT_PROVIDED)],
+                  if c.section is not None and c.status in CITED_STATUSES],
                  limit=MAX_AUTHORITIES)
 

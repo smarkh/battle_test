@@ -73,6 +73,16 @@ Useful options:
 
 - `--repeats 3` runs each case three times and adds a total row.
 - `--model NAME` uses one model for both roles.
+- `--config config.tunnel.toml` runs the models on the server while the
+  search stays on the laptop. It is faster, and the laptop needs little
+  memory, which matters for `--repeats 3`: a long full run on the laptop's
+  own model can run Windows out of memory. Open the tunnel first, in its
+  own window, and leave it open:
+
+  ```powershell
+  ssh -N -L 11435:127.0.0.1:11434 smark@smark-iq
+  ```
+
 - `--config config.bedrock.toml` runs the models on Amazon Bedrock. This
   costs money (cents per case) and sends the case text to AWS, so use the
   fictional sample cases only. See [running-on-bedrock.md](running-on-bedrock.md).

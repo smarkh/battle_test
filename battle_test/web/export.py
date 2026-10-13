@@ -102,6 +102,15 @@ def blocks(result: dict, title: str, generated: str) -> list[Block]:
                 Block("note", f"{doc['role'].title()} · {source}")]
         out += [Block("para", p.strip("\n")) for p in re.split(r"\n\s*\n", doc["text"]) if p.strip()]
 
+    possible = render.possible_references(result)
+    if possible:
+        out += [Block("pagebreak"), Block("heading", "Possible references"),
+                Block("note", report.POSSIBLE_REFERENCES_NOTE)]
+        out.append(Block("bullets", items=tuple(
+            (f"**{a['citation']}** {a['section_title']} — {a['excerpt']}"
+             + ("" if a.get("source_url") else " ⚠ no official source URL"), a.get("source_url") or "")
+            for a in possible)))
+
     out += [Block("pagebreak"), Block("heading", "Appendix: authorities and research")]
     for role, queries in result.get("research", {}).items():
         out.append(Block("para", f"**{role.title()} research queries:** " + "; ".join(queries)))

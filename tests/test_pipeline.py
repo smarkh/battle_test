@@ -9,7 +9,7 @@ from battle_test.config import Config
 from battle_test.law_index import LawSection
 from battle_test.models import Usage
 from battle_test.pipeline import run_case
-from battle_test.report import render_markdown
+from battle_test.report import possible_references, render_markdown
 
 CFG = Config(
     ollama_url="http://unused",
@@ -235,6 +235,23 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("⚠ not checked", md)  # the case citation
         self.assertIn("[source](https://example.gov)", md)
         self.assertIn("*Defendant · LLM-generated*", md)
+
+    def test_report_lists_uncited_authorities_as_possible_references(self):
+        drafts = ["complaint", "See Utah R. Civ. P. 56."]  # the limitations statute is given and never cited
+        run = self.run_case(FakeClient(drafts), facts="f", rounds=1)
+        self.assertEqual(possible_references(run), [LIMITS])
+        md = render_markdown(run, datetime(2026, 10, 12))
+        section = md.split("## Possible references")[1].split("## Appendix")[0]
+        self.assertIn("`Utah Code § 78B-2-309` Within six years — [source](https://example.gov)", section)
+        self.assertIn("Text of Utah Code § 78B-2-309.", section)
+        self.assertIn("has not been checked", section)
+        self.assertNotIn("Utah R. Civ. P. 56", section)
+
+    def test_no_possible_references_when_everything_given_is_cited(self):
+        drafts = ["Under Utah Code § 78B-2-309.", "See Utah R. Civ. P. 56."]
+        run = self.run_case(FakeClient(drafts), facts="f", rounds=1)
+        self.assertEqual(possible_references(run), [])
+        self.assertNotIn("Possible references", render_markdown(run, datetime(2026, 10, 12)))
 
 
 if __name__ == "__main__":

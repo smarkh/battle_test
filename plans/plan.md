@@ -32,8 +32,17 @@ guardrails-style network isolation and data handling).
   (3 → 6 of 16) and halved off-topic citations (4 → 2). California and
   Utah improved, Texas didn't: keyword search can't cope with each state's
   different statute wording. See 3b.
+- **Direction change (2026-10-12): correct references over complete
+  ones.** The output is a starting point for a lawyer, not a file to
+  submit. A reference the model isn't sure of is left out of the draft.
+  The 3b work on finding more authorities is paused, and 3a (the "does
+  it say that?" check) moves up. See "Decisions made".
+- **To prepare, not scheduled:** a presentation for beta testers and
+  prospective users. See "Presentation for beta testers and prospective
+  users".
 - **Next up:**
-  - 3b, as of 2026-10-09:
+  - 3b, as of 2026-10-09 (paused 2026-10-12, see the direction change
+    above):
     - **Semantic search is built, the vectors are built, and it's off.**
       The first evaluation with it on showed no gain (4/16 core cited
       against 6/16), because selection couldn't cope with the longer
@@ -41,9 +50,20 @@ guardrails-style network isolation and data handling).
     - **Selection was rebuilt:** one short call per query. In a
       selection-only benchmark it kept 21 of 24 expected authorities
       where the old method kept 6.
-    - **A full evaluation with the new selection was started and hasn't
-      been read.** Then: semantic search back on, the research prompt,
-      and re-evaluating on 14B / ~30B.
+    - **Full evaluation with the new selection (2026-10-10, 3 runs per
+      case, on the server's 7B):** 17/48 core cited, the same rate as
+      before (6/16). Selection now passes on everything search finds,
+      so search is the limit: 30 of the 48 misses were never found.
+    - **Semantic search back on, same evaluation (2026-10-10):** search
+      found more (25/48 against 18/48, all of it Texas), but the briefs
+      cited no more (15/48). The new finds mostly lost at selection,
+      and the case-specific law was never found either way. It stays
+      off in `config.toml`. Next: selection with both lists, the
+      research prompt, and 14B / ~30B.
+    - **`config.tunnel.toml` (2026-10-10):** runs the evaluation on the
+      laptop with the model calls sent to the server. Three cases take
+      about 3 minutes instead of 40, and the laptop doesn't run out of
+      memory.
 
     See "Semantic search: pilot and build" and "Selection: one call per
     query" in 3b.
@@ -843,20 +863,98 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
        40,000 more input tokens a case, which matters only on an
        expensive Bedrock model. The case text is the same in every call,
        so Bedrock prompt caching would cut it; not built.
-     - **Full evaluation with it: started 2026-10-09 23:47, keyword
-       search, 7B, label `per-topic-selection`. Not read yet.** The
-       result is in `output/eval/` under that label. Compare with 6/16
-       core cited on 2026-09-25.
-     - **Next:**
-       1. Read that evaluation. If it holds up, run it with
-          `--repeats 3`.
-       2. Turn semantic search back on and evaluate again. The benchmark
-          says it should now help.
-       3. The research prompt: the case-specific law (Texas RCLA and
+     - **Full evaluation with it: not finished.** Started 2026-10-09
+       23:47 (keyword search, 7B, label `per-topic-selection`), and
+       stopped during the third case by Claude Code's low-memory
+       safeguard. Two cases finished: California 2/6 core cited with no
+       off-topic citations, Texas 1/6 with one. On 2026-09-25 those
+       were 3/6 and 1/6. No summary was written, and the two case files
+       are in `output/eval/20261009-234651-per-topic-selection/`. So
+       far the benchmark's gain in selection has NOT shown up in what
+       the briefs cite. Not yet looked into why.
+     - **Full evaluation, finished (2026-10-10).** Keyword search, the
+       server's `qwen2.5:7b` through the tunnel
+       (`--config config.tunnel.toml`), three runs per case, 10 minutes
+       in all. Folder
+       `output/eval/20261010-110229-per-topic-selection-server-7b/`.
+
+       | | 2026-09-25, old selection, 1 run | 2026-10-10, per-query, 3 runs |
+       |---|---|---|
+       | Core found by search | 6/16 (38%) | 18/48 (38%) |
+       | Core given to the models | 7/16 (44%) | 25/48 (52%) |
+       | Core cited | 6/16 (38%) | 17/48 (35%) |
+       | Off-topic cited | 2 | 5 (1.7 per three cases) |
+       | ❌ citation problems | 0 | 0 |
+
+       Core cited per run: California 3, 1, 1 of 6. Texas 2, 1, 3 of 6.
+       Utah 2, 2, 2 of 4.
+       - **Selection is no longer what loses authorities.** In every run
+         the models were given at least as many core authorities as
+         search found. Only one expected authority in nine runs was found
+         and not selected (Utah § 78B-5-826, twice, a "useful" one).
+       - **It didn't raise what the briefs cite.** 35% against 38% is
+         the same within the noise: runs of one case differ by up to two
+         authorities.
+       - **Search is the limit.** 30 of the 48 core misses were "never
+         found by search". California contractor licensing (BPC §§ 7031,
+         7159.5), the Texas RCLA, limitations and venue sections, and
+         both venue sections elsewhere were not found in any run.
+       - **The 7B leaves some of what it's given uncited:** 8 of 25.
+         The limitations period every time it was given (Cal. CCP § 337
+         twice, Utah § 78B-2-309 three times), Cal. Civ. Code § 3300
+         twice, Tex. Gov't Code § 24.007 once. Limitations is the
+         defendant's point and isn't in dispute on these facts, so some
+         of this may be right; a lawyer's call.
+       - **Off-topic citations are unchanged.** All five are
+         sales-of-goods sections (UCC Article 2), four of them in Utah.
+     - **Semantic search back on, same evaluation (2026-10-10). More
+       found, no more cited.** `semantic = true` in
+       `config.tunnel.toml`, the embedding model on the laptop,
+       everything else as above. Folder
+       `output/eval/20261010-111424-per-topic-selection-semantic-server-7b/`.
+
+       | 3 runs per case, per-query selection | Keyword | Keyword + semantic |
+       |---|---|---|
+       | Core found by search | 18/48 | 25/48 |
+       | Core given to the models | 25/48 | 27/48 |
+       | Core cited | 17/48 | 15/48 |
+       | Useful cited | 3/27 | 5/27 |
+       | Off-topic cited | 5 | 7 |
+       | ❌ citation problems | 0 | 3 (one Texas run) |
+
+       - **The gain in search is all Texas:** 12/18 core found against
+         4/18. California went 8/18 → 6/18 and Utah 6/12 → 7/12.
+       - **Most of it stopped at selection.** In two Texas runs the
+         limitations sections (§§ 16.004 / 16.051) and § 38.001 were
+         found and not selected. In the first, the fee topic's one pick
+         went to § 38.0015, the section next to § 38.001. With keyword
+         and semantic lists a topic has up to 16 candidates and still
+         gets one pick.
+       - **What was given still isn't all cited:** 12 of 27. Tex. Gov't
+         Code § 24.007 and Utah § 78B-2-309 in all three runs each, Cal.
+         CCP § 337 in all three.
+       - **Never found in any run, either way:** California BPC
+         §§ 7031, 7159.5 and CCP § 395, the Texas RCLA and DTPA, Utah
+         § 78B-3a-201. These need better queries, not better search.
+       - 15 against 17 of 48 is within the noise, so semantic search
+         isn't shown to hurt. It isn't shown to help the briefs either.
+       - **Left:** `semantic = true` in `config.tunnel.toml`, `false`
+         in `config.toml` and on the server (no vectors there).
+     - **Paused 2026-10-12.** The list below aims at citing more of the
+       expected authorities. The direction is now correct references
+       over complete ones (see "Decisions made"), so none of it is next.
+     - **Next (as of 2026-10-10, paused):**
+       1. Selection with semantic on: why found Texas sections lose
+          their topic's pick. Try two picks for a topic with both
+          lists, or a pick from each list.
+       2. The research prompt: the case-specific law (Texas RCLA and
           DTPA, California contractor licensing) is still never found,
           because the model's queries are too vague.
-       4. `qwen3-embedding:0.6b` against `nomic-embed-text`, if semantic
+       3. `qwen3-embedding:0.6b` against `nomic-embed-text`, if semantic
           search earns its place. Needs a full rebuild.
+       4. The same evaluation on the server's 14B
+          (`--model qwen2.5:14b`), to see whether it cites more of what
+          it's given.
    - **Needs the lawyer:**
      - **The lists are drafts** (`lawyer_reviewed = false`). Choosing the
        right law is the judgement being measured, so the lists should be
@@ -1395,8 +1493,96 @@ Access. Access can't sit in front of a public intake form, so the intake
 endpoint would need to sit outside the Access-protected app, with its own
 protections (item 2 above).
 
+## Presentation for beta testers and prospective users (to do, not scheduled)
+
+**Status: registered 2026-10-12. Nothing is built.** Return to this when
+beta testing is close.
+
+- **Two audiences, likely two versions of one deck:**
+  - **Beta testers:** what it does, how to use it, what it can't do
+    yet, what feedback is wanted, and how their case material is
+    handled.
+  - **Prospective users:** the problem it solves, what a result looks
+    like, how it fits beside the research tool they already have, and
+    pricing.
+- **Likely contents:**
+  - What it is: a starting point for a lawsuit position, with the
+    opponent's best response, for a lawyer to build on. Not a file to
+    submit.
+  - A walk-through of one fictional sample case: the form, live
+    progress, the documents, the citation check, the downloads.
+  - What it can honestly claim: every statute and rule cited exists and
+    is in force as of the stated law date. What it can't: that nothing
+    is missing, or (once case law is added) that a case is still good
+    law.
+  - Data handling: where case text goes, who can see it, 3-month
+    retention and deletion.
+  - Coverage: Utah, California and Texas, plus federal law.
+  - Prospects only: plans and prices
+    (`plans/profitability-plan.md`).
+- **Needed before it can be finished:**
+  - The hosting decision (local or AWS), since it changes the data
+    handling slide. Waits on the lawyer.
+  - Cloudflare Access, which is required before any beta tester signs
+    in.
+  - Results worth showing under the 2026-10-12 direction: correct
+    references, with the 3a check in place.
+  - A price, for the prospects' version.
+- **Open questions:**
+  - Format: slides, a live demo, a recorded walk-through, or a mix.
+  - Who presents, and where: one-to-one, a bar association or CLE talk,
+    or sent as a link.
+  - Whether the lawyer should review the claims and disclaimers in it
+    first. Recommended.
+- **Related:** the go-to-market steps in `plans/profitability-plan.md`
+  (show the output to 10–20 litigators, then a paid pilot of 5–10).
+
 ## Decisions made
 
+- **Correct references over complete ones (2026-10-12).** The output is
+  a starting point for a lawyer to build on, not a finished file to
+  submit. A draft with fewer references, all of them right, is better
+  than one with more and some wrong.
+  - **Decided:** when the model isn't sure a law belongs, it's left out
+    of the draft.
+  - **Changes the earlier aim.** 3b measured how many of the expected
+    authorities a brief cites, and tried to raise it. That work is
+    paused: semantic search, selection with both lists, and the
+    research prompt.
+  - **What now matters most:**
+    - Wrong law cited (sales-of-goods law for a construction contract).
+    - Real law cited for something it doesn't say. That's the 3a check,
+      which moves up. It needs a stronger model than the 7B.
+  - **"Possible references" section: built 2026-10-12.** It lists the
+    sections the research picked and quoted to the models that no
+    draft cited, each with the first 300 characters of its text and
+    its source link. It's on the results page and in the Markdown, Word
+    and PDF downloads, between the documents and the appendix, and is
+    left out when there's nothing to list.
+    - It holds only real, in-force sections from the law index, never
+      anything from a model's memory.
+    - Nothing about the drafting changed: the prompts and what the
+      models are given are as before.
+    - **Found: on real runs the list is long and mixed.** Replayed
+      over the nine 7B runs of 2026-10-10: 6 to 16 entries a run. The
+      good ones are there (Cal. CCP § 337 and Civ. Code § 3300, Utah
+      § 78B-2-309 and § 15-1-1, Tex. Gov't Code § 24.007), beside
+      plainly off-topic ones (a Texas Family Code damages cap, Utah
+      probate venue, sales-of-goods sections). Its note says some
+      won't apply.
+    - **Not done:** any filter on the list, moving citations the 3a
+      check doubts into it (3a isn't built), a fresh run on a real
+      model, and a look at the page in a browser. Checked with the demo
+      model on the real law index and by reading the page's HTML.
+    - **Tested:** 3 new tests (243 in all).
+  - **Proposed, not decided: how the evaluation scores.** The headline
+    becomes how many cited references are right, and off-topic
+    citations, not core authorities cited. "Cited on-target" today
+    counts only what's on the expected list, so it marks down a valid
+    reference the list left out. The lawyer's review of the lists
+    matters more for this.
+  - **Unchanged:** nonexistent or out-of-force citations are already
+    caught in code and flagged ❌.
 - **Web UI sign-in:** the app's own accounts, with no self-signup. Each user
   sees only their own cases. Accounts are managed by an admin, from the
   admin pages (since 2026-10-04) or the command line. See step 5, part 2.
@@ -1517,7 +1703,7 @@ protections (item 2 above).
 ## Restart prompt
 
 Paste this into a new Claude Code session, opened in the `battle_test`
-folder, to pick up where the 2026-10-09 session left off:
+folder, to pick up where the 2026-10-10 session left off:
 
 ```
 We're continuing work on battle_test, the legal adversarial argument system.
@@ -1531,9 +1717,12 @@ battle_test/ (including battle_test/web/) and tests/.
 
 Next up, two tracks:
 1. Search and selection quality (plan.md, build step 3b), which needs no
-   AWS. Read the evaluation started on 2026-10-09 with the new per-query
-   selection, then turn semantic search back on and evaluate it, then
-   work on the research prompt. See "Changed 2026-10-09" below.
+   AWS. The new per-query selection was evaluated on 2026-10-10 and
+   so was semantic search: it finds more Texas law, but the briefs cite
+   no more. PAUSED 2026-10-12: the direction is now correct references
+   over complete ones (plan.md, "Decisions made"), so 3a and a
+   "possible references" section come before finding more. Evaluate
+   through config.tunnel.toml. See "Changed 2026-10-09" and "Added 2026-10-10" below.
 2. The first real Bedrock runs (plans/aws-bedrock-plan.md, Phase 1 then
    Phase 2 step 2). The code is built and the laptop is set up, but AWS
    is BLOCKING Bedrock for my account, so no model has answered yet. It
@@ -1602,13 +1791,24 @@ Where things stand:
   to at random from about 100 candidates.
   - Selection-only benchmark, expected authorities kept: 21/24 against
     6/24 on the 7B, 24/24 against 7/24 on the 14B.
-  - A full evaluation with it (keyword search, 7B, label
-    per-topic-selection) was started at 23:47 and NOT READ. Find it in
-    output/eval/ and record the result in plan.md first thing. If the
-    folder has no summary.md, the run didn't finish: ask me before
-    re-running it.
-  - Then: semantic search back on and evaluated, then the research
-    prompt (case-specific law is still never found).
+  - Full evaluation with it, 2026-10-10 (keyword, server's 7B, 3 runs
+    per case): 17/48 core cited, the same rate as 6/16 on 2026-09-25.
+    Selection now passes on everything search finds (25/48 given, 18/48
+    found), so SEARCH is the limit: 30 of the 48 misses were never
+    found. The 7B also left 8 of the 25 it was given uncited.
+  - Semantic back on, same evaluation, 2026-10-10: found 25/48 (all the
+    gain in Texas), given 27/48, cited 15/48, off-topic 7 against 5. No
+    gain in the briefs. The Texas finds mostly lost their topic's one
+    pick at selection (§ 38.0015 picked over § 38.001).
+  - semantic = true in config.tunnel.toml ONLY. config.toml is false.
+  - Next: selection when a topic has both lists, then the research
+    prompt (case-specific law is never found either way), then the 14B.
+- Added 2026-10-10: config.tunnel.toml. The laptop does the search and
+  the server's Ollama runs the model, through an SSH tunnel:
+  `ssh -N -L 11435:127.0.0.1:11434 smark@smark-iq` in its own window,
+  then `python -m battle_test.evaluate --config config.tunnel.toml`.
+  About 1 minute a case run, and it avoids the laptop running out of
+  memory (Windows itself did on 2026-10-09). Use it for evaluations.
   - The benchmark scripts were in the session's scratch folder and are
     not in the repo.
 - Bedrock, 2026-10-06 (details in plans/aws-bedrock-plan.md, Phase 1):

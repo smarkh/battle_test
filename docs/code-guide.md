@@ -14,6 +14,7 @@ Read [how-it-works.md](how-it-works.md) first. This is the map.
 | `config.toml` | Laptop settings |
 | `config.server.toml` | Server settings, copied into the Docker image |
 | `config.bedrock.toml` | Settings for running the models on Amazon Bedrock, used only with `--config`. See [running-on-bedrock.md](running-on-bedrock.md) |
+| `config.tunnel.toml` | Settings for running on the laptop with the models on the server, through an SSH tunnel. Used only with `--config` |
 | `requirements.txt` | Python packages for the corpus build, the web UI and its tests |
 | `Dockerfile`, `.dockerignore` | The server image: code only, non-root user |
 | `docker-compose.yml` | The server's two containers and two volumes |
@@ -37,7 +38,7 @@ needed only to build the law index and to run the web UI.
 | `law_index.py` | `LawIndex`: reads `law.sqlite`. `search()` is the keyword search, `lookup()` finds an exact citation, and `resolve()` matches a parsed citation from a draft. | citations |
 | `corpus.py` | `python -m battle_test.corpus build / info / search / embed`. Downloads Open US Law, verifies checksums, builds the index. Needs `pyarrow`. `embed` builds the vectors for semantic search. | law_index, citations, semantic |
 | `semantic.py` | Semantic search. `Embedder` calls an Ollama embedding model, `build()` embeds every in-force section (resumable), `VectorIndex` finds the nearest sections, and `attach()` wraps a `LawIndex` as a `SemanticLaw` when `[search] semantic` is on. Needs `numpy`, imported only here. | law_index, models |
-| `report.py` | Turns a `CaseRun` into the Markdown document set: disclaimer, citation-check table, documents, appendix. | grounding |
+| `report.py` | Turns a `CaseRun` into the Markdown document set: disclaimer, citation-check table, documents, possible references, appendix. `possible_references()` is the authorities given to the models that no draft cited. | grounding |
 | `evaluate.py` | `python -m battle_test.evaluate`. Runs the sample cases and scores them against the expected authorities. | pipeline, report |
 | `models.py` | What the model clients share: `ModelError`, `Usage` (tokens one call used), and `make_client()`, which picks the client from `models.provider`. | none |
 | `ollama_client.py` | A minimal Ollama client: one `chat()` method, streaming, with a JSON mode. | models |

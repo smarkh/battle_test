@@ -1,0 +1,46 @@
+# battle_test configuration for running on the laptop with the models on the
+# smark_iq server. Used only with `--config config.tunnel.toml`. The law index
+# and the search stay on the laptop; only the model calls go to the server,
+# so the laptop needs little memory. Open the tunnel first, in its own window:
+#
+#   ssh -N -L 11435:127.0.0.1:11434 smark@smark-iq
+
+[ollama]
+# The laptop's end of the tunnel. 127.0.0.1, not localhost: Windows tries IPv6
+# first for localhost, and each call then waits about 2 s.
+url = "http://127.0.0.1:11435"
+timeout_seconds = 1800
+# The server's GPU is shared with smark_iq's Open WebUI, so unload the model
+# 30 s after the last request, as config.server.toml does.
+keep_alive = "30s"
+
+[models]
+provider = "ollama"
+# The laptop's model, so results compare with the laptop's. The server also has
+# qwen2.5:14b (`--model qwen2.5:14b`).
+plaintiff = "qwen2.5:7b"
+defendant = "qwen2.5:7b"
+
+[generation]
+num_ctx = 12288
+temperature = 0.4
+
+[pipeline]
+rounds = 2
+output_dir = "output"
+
+[corpus]
+snapshot = "v2026.08"
+base_url = "https://oss-data-us.vaquill.ai"
+data_dir = "data"
+jurisdictions = ["ut", "ca", "tx", "federal"]
+document_types = ["statutes", "constitutions", "court_rules"]
+
+[search]
+# On here and off in config.toml: evaluated 2026-10-10, it finds more law but
+# the briefs cite no more yet (plans/plan.md, 3b). The embedding model is on
+# the laptop (the vectors were built with it there), so it keeps the laptop's
+# Ollama.
+semantic = true
+embedding_model = "nomic-embed-text"
+embedding_url = "http://127.0.0.1:11434"

@@ -78,6 +78,21 @@
 </section>
 {% endfor %}
 
+{% if possible %}
+<h2>Possible references</h2>
+<p class="muted">{{ possible_note }}</p>
+<ul class="authorities">
+  {% for a in possible %}
+  <li>
+    {% if a.source_url %}<a href="{{ a.source_url }}" target="_blank" rel="noopener noreferrer"><code>{{ a.citation }}</code></a>
+    {% else %}<code>{{ a.citation }}</code> <span class="warn">⚠ no official source URL</span>{% endif %}
+    {{ a.section_title }}
+    <span class="excerpt">{{ a.excerpt }}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+
 <h2>Authorities quoted to the models</h2>
 <ul class="authorities">
   {% for a in authorities %}

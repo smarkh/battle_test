@@ -31,8 +31,9 @@ them:
 2. The case joins a queue. A progress page shows each stage and streams
    the draft text as it's written.
 3. The results page shows the documents in tabs, a citation-check table,
-   the authorities quoted to the models, and a download menu (Word, PDF
-   or Markdown).
+   possible references (sections the research picked that no draft
+   cited), the authorities quoted to the models, and a download menu
+   (Word, PDF or Markdown).
 4. Every case page, and the new-case form, lists the user's cases down
    the left, newest first, so they can switch from one case to another.
 
@@ -238,6 +239,7 @@ Settings live in a TOML file. `battle_test/config.py` loads it.
 | `config.toml` | The laptop (the default) | Local Ollama, `qwen2.5:7b`, `127.0.0.1` |
 | `config.server.toml` | The server's container | Host Ollama, `qwen2.5:14b`, `keep_alive = "30s"`, `/data/...` paths, `0.0.0.0` with `behind_proxy` and `secure_cookies` |
 | `config.bedrock.toml` | Nothing, unless passed with `--config` | Hosted models on Amazon Bedrock, with each model's ID and price |
+| `config.tunnel.toml` | Nothing, unless passed with `--config` | The laptop's law index and search, with the model calls sent to the server's Ollama through an SSH tunnel (`127.0.0.1:11435`) |
 
 The `BATTLE_TEST_CONFIG` environment variable picks the file. The Docker
 image sets it to the server config. Most commands also take `--config`.

@@ -146,6 +146,7 @@ a.cite.ok-unseen::after { content: " ☑"; font-size: 0.75em; }
 .case-nav-meta { display: block; font-size: 0.8rem; font-weight: 400; color: var(--muted); }
 
 .authorities li { margin: 0.35rem 0; }
+.authorities .excerpt { display: block; color: var(--muted); font-size: 0.9rem; }
 .query { display: inline-block; background: var(--surface); border: 1px solid var(--border); border-radius: 99px;
   padding: 0.05rem 0.6rem; margin: 0.15rem; font-size: 0.85rem; }
 .empty { color: var(--muted); }

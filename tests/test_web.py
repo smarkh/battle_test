@@ -13,7 +13,7 @@ try:
     from battle_test.corpus import build_index
     from battle_test.web.app import case_title, create_app, facts_text, safe_next
     from battle_test.web.demo import DemoClient
-    from battle_test.web import export
+    from battle_test.web import export, render
     from battle_test.web.render import document_html
 except ImportError:  # web and corpus-build dependencies are optional
     TestClient = None
@@ -808,3 +808,28 @@ class ExportTest(unittest.TestCase):
         self.assertIn("&lt;b&gt;&amp;amp;&lt;/b&gt;", export._markup("Line two <b>&amp;</b>"))
         self.assertTrue(export.to_pdf(self.RESULT, "A v. B <i>", "now").startswith(b"%PDF-"))
         self.assertTrue(export.to_docx(self.RESULT, "A v. B <i>", "now").startswith(b"PK"))
+
+    def test_possible_references_are_the_uncited_authorities(self):
+        cited = {"citation": "Utah R. Civ. P. 56", "section_title": "Rule 56", "text": "A party may move.",
+                 "source_url": "https://x.gov/56"}
+        spare = {"citation": "Utah Code § 78B-2-309", "section_title": "Within six years",
+                 "text": "An action  may be\nbrought " * 40, "source_url": ""}
+        doc = {**self.RESULT["documents"][0], "authorities": [cited, spare],
+               "checks": [{"text": "Rule 56", "status": "verified", "section": cited}]}
+        result = {**self.RESULT, "documents": [doc, {**doc, "title": "Motion", "checks": []}]}
+
+        (possible,) = render.possible_references(result)
+        self.assertEqual(possible["citation"], "Utah Code § 78B-2-309")
+        self.assertTrue(possible["excerpt"].startswith("An action may be brought An action"))
+        self.assertTrue(possible["excerpt"].endswith(" …"))
+        self.assertLess(len(possible["excerpt"]), 310)
+
+        blocks = export.blocks(result, "A v. B", "now")
+        at = [b.text for b in blocks].index("Possible references")
+        (bullet,) = blocks[at + 2].items
+        self.assertTrue(bullet[0].startswith("**Utah Code § 78B-2-309** Within six years — An action"))
+        self.assertTrue(bullet[0].endswith("⚠ no official source URL"))
+        self.assertTrue(export.to_pdf(result, "A v. B", "now").startswith(b"%PDF-"))
+        self.assertTrue(export.to_docx(result, "A v. B", "now").startswith(b"PK"))
+        # Nothing given and uncited: no section at all.
+        self.assertNotIn("Possible references", [b.text for b in export.blocks(self.RESULT, "A v. B", "now")])

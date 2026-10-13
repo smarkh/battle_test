@@ -65,6 +65,9 @@ Each output file contains:
   each citation that needs attention.
 - The documents themselves (complaint, motion, opposition, reply), with
   problem citations marked inline.
+- **Possible references:** sections the research picked that no draft
+  cited, each with the start of its text and a source link, for the
+  attorney to consider. Left out when there are none.
 - **Appendix:** each side's research queries, and every authority quoted to
   the models, with a link to its official source.
 
@@ -190,7 +193,8 @@ python -m battle_test.web --demo-model    # canned drafts, no GPU needed
   document in a tab:
   - ✅ citations link to their official source.
   - ❌/⚠ marks and `[CITATION NEEDED]` placeholders are highlighted.
-  - Below the documents: the authorities appendix and the research queries.
+  - Below the documents: possible references (picked by the research,
+    cited by no draft), the authorities appendix and the research queries.
   - A **Download** menu: Word (`.docx`), PDF, or Markdown. Each holds the
     whole set: the disclaimer, the citation check, every document, and
     the authorities. The PDF uses plain fonts, so its warning marks read

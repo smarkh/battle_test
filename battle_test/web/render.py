@@ -5,9 +5,9 @@ from collections import Counter
 
 from markupsafe import Markup, escape
 
-from battle_test import grounding
+from battle_test import grounding, report
 
-_CITED = (grounding.VERIFIED, grounding.IN_FORCE_NOT_PROVIDED)
+_CITED = grounding.CITED_STATUSES
 _FLAG = re.compile(r"\[⚠ [^\]]*\]")
 _PLACEHOLDER = re.compile(r"\[(?:CITATION|FACT) NEEDED:[^\]]*\]")
 _BOLD = re.compile(r"\*\*(.+?)\*\*")
@@ -81,3 +81,11 @@ def authorities(result: dict) -> list[dict]:
             entry = seen.setdefault(s["citation"], {**s, "given_for": []})
             entry["given_for"].append(doc["title"])
     return list(seen.values())
+
+
+def possible_references(result: dict) -> list[dict]:
+    """The authorities no document cites, each with the start of its text."""
+    cited = {c["section"]["citation"] for doc in result["documents"] for c in doc["checks"]
+             if c.get("section") and c["status"] in _CITED}
+    return [{**a, "excerpt": grounding.excerpt(a["text"], report.POSSIBLE_EXCERPT_CHARS, " …")}
+            for a in authorities(result) if a["citation"] not in cited]

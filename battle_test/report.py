@@ -5,6 +5,7 @@ from datetime import datetime
 
 from battle_test import grounding
 from battle_test.citations import PLACEHOLDER
+from battle_test.law_index import LawSection
 from battle_test.pipeline import CaseRun, Document
 
 DISCLAIMER = (
@@ -16,6 +17,15 @@ DISCLAIMER = (
     "**not** been checked. Every `[CITATION NEEDED: …]` placeholder and ⚠ mark "
     "needs attention before any of this is relied on."
 )
+
+POSSIBLE_REFERENCES_NOTE = (
+    "Sections the research found and picked as relevant, which no draft went "
+    "on to cite. Each one exists and is in force in the law index. Whether it "
+    "applies to this case has not been checked, and some will not: these are "
+    "for the attorney to consider, not conclusions."
+)
+# Enough to see what a section is about. The source link has the rest.
+POSSIBLE_EXCERPT_CHARS = 300
 
 _STATUS_LABELS = {
     grounding.VERIFIED: "✅ in force",
@@ -49,6 +59,7 @@ def render_markdown(run: CaseRun, generated_at: datetime) -> str:
     for doc in run.documents:
         source = "LLM-generated" if doc.generated else "user-supplied"
         lines += ["", "---", "", f"## {doc.title}", "", f"*{doc.role.title()} · {source}*", "", doc.text]
+    lines += _possible_references(run)
     lines += _appendix(run)
     return "\n".join(lines) + "\n"
 
@@ -93,6 +104,30 @@ def _document_details(doc: Document) -> list[str]:
     return lines
 
 
+def _source(s: LawSection) -> str:
+    return f" — [source]({s.source_url})" if s.source_url else " — ⚠ no official source URL"
+
+
+def possible_references(run: CaseRun) -> list[LawSection]:
+    """Sections quoted to the models that no document cites. They come from
+    the law index, never from a model's memory."""
+    cited = {c.section.citation for doc in run.documents for c in doc.checks
+             if c.section is not None and c.status in grounding.CITED_STATUSES}
+    return list({s.citation: s for doc in run.documents for s in doc.authorities
+                 if s.citation not in cited}.values())
+
+
+def _possible_references(run: CaseRun) -> list[str]:
+    possible = possible_references(run)
+    if not possible:
+        return []
+    lines = ["", "---", "", "## Possible references", "", f"*{POSSIBLE_REFERENCES_NOTE}*", ""]
+    for s in possible:
+        lines.append(f"- `{s.citation}` {s.section_title}{_source(s)}  \n"
+                     f"  {grounding.excerpt(s.text, POSSIBLE_EXCERPT_CHARS, ' …')}")
+    return lines
+
+
 def _appendix(run: CaseRun) -> list[str]:
     lines = ["", "---", "", "## Appendix: authorities and research", ""]
     for role, queries in run.research.items():
@@ -108,6 +143,5 @@ def _appendix(run: CaseRun) -> list[str]:
         lines += ["**Authorities quoted to the models:**", ""]
         for citation, titles in seen.items():
             s = sections[citation]
-            link = f" — [source]({s.source_url})" if s.source_url else " — ⚠ no official source URL"
-            lines.append(f"- `{citation}` {s.section_title}{link}  \n  *given for: {', '.join(titles)}*")
+            lines.append(f"- `{citation}` {s.section_title}{_source(s)}  \n  *given for: {', '.join(titles)}*")
     return lines

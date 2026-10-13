@@ -28,7 +28,7 @@ from battle_test.law_index import LawIndex
 from battle_test.models import make_client
 from battle_test.pipeline import ChatClient, run_case
 from battle_test.prompts import SUPPORTED_STATES
-from battle_test.report import render_markdown
+from battle_test.report import POSSIBLE_REFERENCES_NOTE, render_markdown
 from battle_test.web import admin, export, render
 from battle_test.web.auth import SETUP_LINK_INVALID, AuthError, AuthStore, Session, User
 from battle_test.web.jobs import DONE, FAILED, QUEUED, RUNNING, Job, JobStore, QueueFull, QuotaExceeded, Worker
@@ -510,7 +510,8 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
             for doc in result["documents"]
         ]
         return page(request, "result.html", session, job=job, result=result, documents=documents,
-                    authorities=render.authorities(result), nav_jobs=nav_jobs)
+                    authorities=render.authorities(result), possible=render.possible_references(result),
+                    possible_note=POSSIBLE_REFERENCES_NOTE, nav_jobs=nav_jobs)
 
     @app.get("/cases/{job_id}/events")
     async def events(request: Request, job_id: str):
