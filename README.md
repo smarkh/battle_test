@@ -64,7 +64,8 @@ Each output file contains:
 - **Citation check:** a table per document of ✅ / ☑ / ❌ / ⚠ counts, plus
   each citation that needs attention. When `[models] checker` names a
   model, it also reads each cited section beside the paragraph citing it,
-  and marks the citations it doubts (`[⚠ MAY NOT SUPPORT THIS]`). The
+  marks the ones the section doesn't support (`[⚠ MAY NOT SUPPORT
+  THIS]`), and lists the ones it only partly supports. The
   same model is asked, before drafting, whether each selected section
   fits the case at all, and the ones that don't are kept out of the
   drafts.

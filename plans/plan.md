@@ -569,10 +569,16 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
        *partly* or *does not support* with one sentence of reasoning.
        - The paragraph, not the sentence: the periods in "Utah Code
          Ann." and "R. Civ. P." make sentences hard to find.
-       - *Partly* and *does not support* are marked inline
-         (`[⚠ MAY ONLY PARTLY SUPPORT THIS]`, `[⚠ MAY NOT SUPPORT
-         THIS]`) and listed in the citation check with the checker's
-         note. The citation stays in the draft.
+       - *Does not support* is marked inline (`[⚠ MAY NOT SUPPORT
+         THIS]`). *Partly* isn't. Both are listed in the citation check
+         with the checker's note, and the citation stays in the draft.
+       - **Decided 2026-10-12: only *does not support* is marked
+         inline.** As first built, *partly* was marked too
+         (`[⚠ MAY ONLY PARTLY SUPPORT THIS]`). Once the fit check kept
+         the wrong law out, nearly every *partly* was a quibble about a
+         good citation. The cost: a real *partly* (a limitations
+         section cited for jurisdiction, seen twice) now shows only in
+         the citation check.
        - The next model to read the draft sees the marks, as it
          already did for `[⚠ NOT FOUND]`.
        - A citation alone on its line isn't judged, and at most 40 are
@@ -637,8 +643,6 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
        - A stronger checker. The plan's estimate that this needs about
          70B looks right: the 14B can't tell a nitpick from a real
          problem. Waits on Bedrock.
-       - Anything about *partly*: marking only *does not support*
-         inline, or asking again before marking.
        - Taking a doubted citation out of the draft, or moving it to
          "Possible references".
        - Using the check to trim "Possible references".

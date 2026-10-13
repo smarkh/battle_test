@@ -229,10 +229,11 @@ SUPPORT_LABELS = {
     PARTLY: "may only partly support what it's cited for",
     DOES_NOT_SUPPORT: "may not support what it's cited for",
 }
-_SUPPORT_MARKS = {
-    PARTLY: "[⚠ MAY ONLY PARTLY SUPPORT THIS]",
-    DOES_NOT_SUPPORT: "[⚠ MAY NOT SUPPORT THIS]",
-}
+# Only "does not support" is marked in the draft. "Partly" is listed in the
+# citation check and left unmarked: on qwen2.5:14b, once the fit check had
+# kept the wrong law out, nearly every "partly" was a quibble about a good
+# citation (evaluation of 2026-10-12).
+_SUPPORT_MARKS = {DOES_NOT_SUPPORT: "[⚠ MAY NOT SUPPORT THIS]"}
 # How much of the draft around a citation, and how much of the section, the
 # checker reads. The drafting model saw only EXCERPT_CHARS of the section.
 PASSAGE_CHARS = 600

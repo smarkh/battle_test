@@ -30,7 +30,8 @@
   <strong>{{ result.law_meta.get("snapshot_date", "?") }}</strong>
   ({{ result.law_meta.get("attribution", "Open US Law") }}),
   {% if support_checked %}for whether they exist and are in force. A model also compared each one with the passage
-  citing it and marked those it doubts: that is a warning, not a guarantee, and an unmarked citation can still be wrong.
+  citing it and marked those it found the section doesn't support: that is a warning, not a guarantee, and an unmarked
+  citation can still be wrong.
   {% else %}but only for whether they exist and are in force, not for whether they say what the brief claims.
   {% endif %}Case law has <strong>not</strong> been checked.
 </div>

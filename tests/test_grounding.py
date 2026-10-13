@@ -215,8 +215,9 @@ class SupportCheckTest(unittest.TestCase):
         self.assertIn("§ 78B-2-309.\n", checked.text)  # supported: no mark
         self.assertIn("§ 5-5-5 [⚠ MAY NOT SUPPORT THIS].", checked.text)
 
-        partly, _ = self.check(text, {"Utah Code § 5-5-5": (grounding.PARTLY, "")})
-        self.assertIn("§ 5-5-5 [⚠ MAY ONLY PARTLY SUPPORT THIS].", partly.text)
+        partly, _ = self.check(text, {"Utah Code § 5-5-5": (grounding.PARTLY, "Overstated.")})
+        self.assertEqual(partly.text, text)  # "partly" is recorded for the citation check, not marked
+        self.assertEqual(partly.checks[1].support, grounding.PARTLY)
         self.assertIsNone(partly.checks[0].support)  # an unusable reply leaves the citation unjudged
 
     def test_only_in_force_citations_with_something_to_judge_are_asked_about(self):

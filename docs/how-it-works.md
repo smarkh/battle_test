@@ -182,10 +182,10 @@ reads the paragraph citing it beside the section's text (the first 3,000
 characters) and answers *supports*, *partly* or *does not support*, with
 one sentence of reasoning.
 
-- *Partly* and *does not support* are marked inline, `[⚠ MAY ONLY PARTLY
-  SUPPORT THIS]` and `[⚠ MAY NOT SUPPORT THIS]`, and listed in the
-  citation check with the checker's note. The next model to read the
-  draft sees the marks too.
+- *Does not support* is marked inline, `[⚠ MAY NOT SUPPORT THIS]`. The
+  next model to read the draft sees the mark too.
+- *Partly* isn't marked in the draft. Both are listed in the citation
+  check with the checker's note.
 - A citation alone on its line isn't judged: it's cited for nothing in
   particular. At most 40 are judged per document.
 - With no checker set, the check doesn't run, and the report says so.

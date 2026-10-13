@@ -13,8 +13,9 @@ def disclaimer(support_checked: bool = False) -> str:
     """`support_checked`: the "does it say that?" check ran on this case."""
     scope = (
         "for whether they exist and are in force. A model also compared each "
-        "one with the passage citing it and marked those it doubts: that is a "
-        "warning, not a guarantee, and an unmarked citation can still be wrong."
+        "one with the passage citing it and marked those it found the section "
+        "doesn't support: that is a warning, not a guarantee, and an unmarked "
+        "citation can still be wrong."
         if support_checked else
         "but only for whether they exist and are in force, not for whether "
         "they say what the brief claims."
