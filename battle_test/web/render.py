@@ -96,9 +96,27 @@ def authorities(result: dict) -> list[dict]:
     return list(seen.values())
 
 
+def set_aside(result: dict, verdict: str = grounding.DOES_NOT_APPLY) -> list[dict]:
+    """The sections the fit check kept out of the drafts with this verdict,
+    each once, with the checker's reason. Results saved before the fit check
+    existed have none."""
+    seen: dict[str, dict] = {}
+    for checks in result.get("fit", {}).values():
+        for c in checks:
+            if c["verdict"] == verdict:
+                seen.setdefault(c["section"]["citation"], {**c["section"], "reason": c["reason"] or "none given"})
+    return list(seen.values())
+
+
 def possible_references(result: dict) -> list[dict]:
-    """The authorities no document cites, each with the start of its text."""
+    """The authorities no document cites, then those the fit check wasn't
+    sure of and held back (`held_back` is the checker's reason), each with
+    the start of its text."""
     cited = {c["section"]["citation"] for doc in result["documents"] for c in doc["checks"]
              if c.get("section") and c["status"] in _CITED}
+    given = authorities(result)
+    known = {a["citation"] for a in given}
+    held = [{**s, "held_back": s["reason"]} for s in set_aside(result, grounding.UNSURE)
+            if s["citation"] not in known]
     return [{**a, "excerpt": grounding.excerpt(a["text"], report.POSSIBLE_EXCERPT_CHARS, " …")}
-            for a in authorities(result) if a["citation"] not in cited]
+            for a in given + held if a["citation"] not in cited]

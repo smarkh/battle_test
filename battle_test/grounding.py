@@ -258,14 +258,51 @@ class CitationCheck:
 Judge = Callable[[str, LawSection], tuple[str, str] | None]
 
 
-def parse_verdict(reply: str) -> tuple[str, str] | None:
+def parse_verdict(reply: str, allowed: tuple[str, ...] = (SUPPORTS, PARTLY, DOES_NOT_SUPPORT)
+                  ) -> tuple[str, str] | None:
     data = parse_json_object(reply)
     verdict, reason = data.get("verdict"), data.get("reason")
     if isinstance(verdict, str):
         verdict = verdict.strip().lower().replace(" ", "_")
-    if verdict not in (SUPPORTS, PARTLY, DOES_NOT_SUPPORT):
+    if verdict not in allowed:
         return None
     return verdict, " ".join(reason.split())[:300] if isinstance(reason, str) else ""
+
+
+# The fit check: before drafting, a model's verdict on whether each selected
+# section applies to this kind of case at all. The 7B and 14B cite whatever
+# they're given (sale-of-goods sections for a roofing contract, a theft
+# statute for jurisdiction), so a section that doesn't fit is kept out of
+# the drafting prompt instead of being caught afterwards.
+APPLIES = "applies"
+UNSURE = "unsure"
+DOES_NOT_APPLY = "does_not_apply"
+FIT_VERDICTS = (APPLIES, UNSURE, DOES_NOT_APPLY)
+
+
+@dataclass(frozen=True)
+class FitCheck:
+    section: LawSection
+    verdict: str | None  # APPLIES, UNSURE or DOES_NOT_APPLY. None = the reply wasn't usable.
+    reason: str = ""
+
+    @property
+    def kept(self) -> bool:
+        """Whether the section goes to the drafting model. An unusable reply
+        keeps it: a checker that fails shouldn't empty every prompt."""
+        return self.verdict in (APPLIES, None)
+
+
+def fit_filter(judge: Callable[[LawSection], tuple[str, str] | None],
+               sections: list[LawSection]) -> tuple[list[LawSection], list[FitCheck]]:
+    """Ask `judge` about each section. Returns (the sections to draft with,
+    every verdict). Only "applies" is kept: when the model isn't sure a
+    section belongs, it's left out of the draft."""
+    checks = []
+    for s in sections:
+        verdict, reason = judge(s) or (None, "")
+        checks.append(FitCheck(s, verdict, reason))
+    return [c.section for c in checks if c.kept], checks
 
 
 def passage_around(text: str, start: int, end: int) -> str:

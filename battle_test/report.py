@@ -5,6 +5,7 @@ from datetime import datetime
 
 from battle_test import grounding
 from battle_test.citations import PLACEHOLDER
+from battle_test.grounding import FitCheck
 from battle_test.law_index import LawSection
 from battle_test.pipeline import CaseRun, Document
 
@@ -38,6 +39,12 @@ POSSIBLE_REFERENCES_NOTE = (
 )
 # Enough to see what a section is about. The source link has the rest.
 POSSIBLE_EXCERPT_CHARS = 300
+# The fit check's two outcomes for a section it kept out of the drafts.
+HELD_BACK = "Not given to the drafting models: the checker wasn't sure it applies to this case."
+SET_ASIDE_NOTE = (
+    "Set aside before drafting: the research picked these, and the checker "
+    "judged that they don't apply to this kind of case. It can be wrong."
+)
 
 _STATUS_LABELS = {
     grounding.VERIFIED: "✅ in force",
@@ -127,23 +134,36 @@ def _source(s: LawSection) -> str:
     return f" — [source]({s.source_url})" if s.source_url else " — ⚠ no official source URL"
 
 
+def set_aside(run: CaseRun, verdict: str) -> list[FitCheck]:
+    """The sections the fit check kept out of the drafts with this verdict,
+    each once, whichever side it was selected for."""
+    return list({c.section.citation: c for checks in run.fit.values() for c in checks
+                 if c.verdict == verdict}.values())
+
+
 def possible_references(run: CaseRun) -> list[LawSection]:
-    """Sections quoted to the models that no document cites. They come from
-    the law index, never from a model's memory."""
+    """Sections quoted to the models that no document cites, then those the
+    fit check wasn't sure of and held back. They come from the law index,
+    never from a model's memory."""
     cited = {c.section.citation for doc in run.documents for c in doc.checks
              if c.section is not None and c.status in grounding.CITED_STATUSES}
-    return list({s.citation: s for doc in run.documents for s in doc.authorities
-                 if s.citation not in cited}.values())
+    given = [s for doc in run.documents for s in doc.authorities]
+    held_back = [c.section for c in set_aside(run, grounding.UNSURE)]
+    return list({s.citation: s for s in given + held_back if s.citation not in cited}.values())
 
 
 def _possible_references(run: CaseRun) -> list[str]:
     possible = possible_references(run)
     if not possible:
         return []
+    given = {s.citation for doc in run.documents for s in doc.authorities}
+    why = {c.section.citation: c.reason for c in set_aside(run, grounding.UNSURE)}
     lines = ["", "---", "", "## Possible references", "", f"*{POSSIBLE_REFERENCES_NOTE}*", ""]
     for s in possible:
         lines.append(f"- `{s.citation}` {s.section_title}{_source(s)}  \n"
                      f"  {grounding.excerpt(s.text, POSSIBLE_EXCERPT_CHARS, ' …')}")
+        if s.citation not in given:
+            lines.append(f"  *{HELD_BACK} Checker's note: {why[s.citation] or 'none given'}*")
     return lines
 
 
@@ -163,4 +183,9 @@ def _appendix(run: CaseRun) -> list[str]:
         for citation, titles in seen.items():
             s = sections[citation]
             lines.append(f"- `{citation}` {s.section_title}{_source(s)}  \n  *given for: {', '.join(titles)}*")
+    dropped = set_aside(run, grounding.DOES_NOT_APPLY)
+    if dropped:
+        lines += ["", f"**{SET_ASIDE_NOTE}**", ""]
+        lines += [f"- `{c.section.citation}` {c.section.section_title}{_source(c.section)}  \n"
+                  f"  *Checker's note: {c.reason or 'none given'}*" for c in dropped]
     return lines

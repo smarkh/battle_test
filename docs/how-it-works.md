@@ -154,6 +154,26 @@ what the model wrote.
 That check confirms a section exists and is in force. It doesn't confirm
 the section says what the brief claims.
 
+### Does the section fit the case? (optional)
+
+When `[models] checker` names a model, it's also asked a question
+*before* drafting: would a court apply this section in this kind of case?
+It's asked once for each section the selection step picked, with the case
+and the section's text in front of it.
+
+| Verdict | What happens to the section |
+|---|---|
+| *applies* | It goes to the drafting model, as before |
+| *unsure* | It's left out of the drafts, and listed under "Possible references" with the checker's note |
+| *does not apply* | It's left out, and listed in the appendix as set aside, with the note |
+
+- The summary judgment rule, and the sections the other side cited, are
+  never filtered.
+- An unusable reply keeps the section, so a failing checker can't empty
+  every prompt.
+- `[pipeline] fit_check = false` turns this off and leaves the check
+  below on.
+
 ### Does the section say that? (optional)
 
 When `[models] checker` names a model, a second check runs on each draft

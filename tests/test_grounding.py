@@ -227,6 +227,19 @@ class SupportCheckTest(unittest.TestCase):
         self.assertEqual(len(calls), 1)  # the last line, once for both of its citations
         self.assertEqual([c.support for c in checked.checks], [None, None, None, grounding.PARTLY, grounding.PARTLY])
 
+    def test_fit_filter_keeps_what_applies_and_what_got_no_usable_verdict(self):
+        a, b, c, d = (section(x) for x in "ABCD")
+        verdicts = {"A": (grounding.APPLIES, "fits"), "B": (grounding.UNSURE, "depends"),
+                    "C": (grounding.DOES_NOT_APPLY, "probate"), "D": None}
+        kept, checks = grounding.fit_filter(lambda s: verdicts[s.citation], [a, b, c, d])
+        self.assertEqual(kept, [a, d])
+        self.assertEqual([(x.verdict, x.reason, x.kept) for x in checks],
+                         [("applies", "fits", True), ("unsure", "depends", False),
+                          ("does_not_apply", "probate", False), (None, "", True)])
+        self.assertEqual(grounding.parse_verdict('{"verdict": "Does not apply"}', grounding.FIT_VERDICTS),
+                         (grounding.DOES_NOT_APPLY, ""))
+        self.assertIsNone(grounding.parse_verdict('{"verdict": "supports"}', grounding.FIT_VERDICTS))
+
     def test_no_judge_means_no_verdicts(self):
         checked = grounding.check_citations("Timely under Utah Code § 78B-2-309.", self.LAW, "ut", "Utah", None)
         self.assertIsNone(checked.checks[0].support)

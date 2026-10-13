@@ -107,6 +107,12 @@ guardrails-style network isolation and data handling).
     all the wrong law and also doubts most good citations. It needs a
     bigger model, and a decision on what to do with its "partly"
     verdicts. See 3a.
+  - **Fit check before drafting: built 2026-10-12**, on with the
+    checker. The checker keeps sections that don't fit the case out of
+    the drafting prompt. On the 14B, cited authorities on the expected
+    list went from 52% to 79%, off-topic citations from 3 to 0, and
+    core cited didn't fall (21/48 against 17/48). It wrongly drops two
+    Utah sections every run. See "Fit check before drafting" in 3a.
   - Step 4 (case law via CourtListener).
 - **Waiting on the lawyer:**
   - a review of the three expected-authority lists
@@ -639,6 +645,76 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
        - The live site, a look at the page in a browser, and a run with
          a pasted complaint.
      - **Tested:** 9 new tests (252 in all).
+   - **Fit check before drafting: built 2026-10-12.** The same checker
+     model is asked, for each section the selection step picked, whether
+     a court would apply it in this kind of case. It runs when a checker
+     is set, unless `[pipeline] fit_check = false`.
+     - **What happens to a section:** *applies* goes to the drafting
+       model. *Unsure* is left out and listed under "Possible
+       references" with the checker's note. *Does not apply* is left
+       out and listed in the appendix as set aside, with the note.
+     - The summary judgment rule and the sections the other side cited
+       are never filtered. An unusable reply keeps the section.
+     - **Why before, not after:** the models cite what they're given.
+       Catching a wrong citation afterwards leaves it in the draft,
+       marked. Keeping the section out means it's never written.
+     - **Benchmark first (2026-10-12, 14B).** The 97 sections that
+       saved runs had given the models, judged against each case's
+       facts: 11 of 13 expected authorities kept, 14 of 15 off-topic
+       ones set aside, and 56 of the other 69 kept out. A version of
+       the prompt that pressed harder to keep general rules still
+       dropped the same two and let more unrelated law in, so it was
+       dropped.
+     - **Full evaluation (2026-10-12).** 14B drafting, 14B checker,
+       semantic search on, three runs per case, through the tunnel.
+       Folders `output/eval/20261012-211800-support-check-14b-drafts-14b-checker/`
+       and `output/eval/20261012-214007-fit-check-14b-drafts-14b-checker/`.
+
+       | 9 runs each | No fit check | Fit check |
+       |---|---|---|
+       | Core given to the models | 23/48 | 21/48 |
+       | Core cited | 17/48 | 21/48 |
+       | Useful cited | 6/27 | 10/27 |
+       | Cited authorities on the expected list | 24/46 (52%) | 31/39 (79%) |
+       | Cited authorities not on the list | 22 | 8 |
+       | Off-topic cited | 3 | 0 |
+       | ❌ citation problems | 2 | 0 |
+       | *Does not support* verdicts | 7 | 1 |
+       | Citations the checker doubts | 76/106 | 56/89 |
+       | `[CITATION NEEDED]` placeholders | 3 | 5 |
+
+       - **Far less wrong law is cited, and no less of the right law.**
+         Citations off the expected list fell from 22 to 8, and the
+         off-topic ones to none. Core cited is 21 against 17, which is
+         within the noise, so it isn't shown to help there. It didn't
+         hurt.
+       - **It sets a lot aside:** 124 of the 180 sections selection
+         picked (16 of them *unsure*). Utah is left with 3 of 20.
+       - **It drops two good Utah sections every time:** § 78A-5-102
+         (district court jurisdiction, core) and § 15-1-1 (interest,
+         useful). It reads the first as a list of special proceedings
+         and the second as "not about damages". Texas § 16.051
+         (limitations) was held back as *unsure* once.
+       - **The 7B wasn't the problem.** With no fit check the 14B
+         drafts cite the same share of core authorities as the 7B
+         (17/48) and still cite law that doesn't fit.
+       - **What the "does it say that?" check now flags is mostly
+         noise.** With the wrong law gone, nearly all 56 doubts are
+         *partly* verdicts on good citations (the summary judgment
+         rules, Cal. Civ. § 3287, Utah § 78B-5-826). Two were real:
+         limitations sections cited for jurisdiction.
+       - **Cost:** no slower (2 minutes a case). About 18 more calls
+         and 22,000 more input tokens a case, which matters only on an
+         expensive Bedrock checker.
+       - **Caveats:** the prompt names sale-of-goods law as an example
+         of what doesn't apply to a services contract, and the three
+         sample cases are all of that kind. It's tuned on the cases
+         it's scored on. Whether sale-of-goods law never applies to a
+         roofing or foundation contract is a lawyer's question.
+     - **Not done:** fixing the two Utah misses, the 7B as drafter with
+       the fit check, the live site, and a look at the page in a
+       browser.
+     - **Tested:** 6 new tests (258 in all).
    - **3b. Better selection of authorities (to evaluate).** In the first
      grounded Utah run, the model chose mostly UCC Article 2 (sales of
      goods) for a roof replacement, which is a construction/services
@@ -1813,7 +1889,12 @@ Next up, two tracks:
    `evaluate --checker NAME`). On the 14B the check catches nearly all
    the wrong law but also doubts most good citations, so next is my
    decision on its "partly" verdicts, and a stronger checker once
-   Bedrock works (plan.md, 3a). Evaluate through config.tunnel.toml. See "Changed 2026-10-09" and "Added 2026-10-10" below.
+   Bedrock works (plan.md, 3a). Also built: a fit check before
+   drafting (the checker keeps sections that don't fit the case out of
+   the drafts; `evaluate --no-fit-check` to compare). It cut wrong-law
+   citations sharply on the 14B without losing right ones, but drops
+   Utah § 78A-5-102 and § 15-1-1 every run. Evaluate through
+   config.tunnel.toml. See "Changed 2026-10-09" and "Added 2026-10-10" below.
 2. The first real Bedrock runs (plans/aws-bedrock-plan.md, Phase 1 then
    Phase 2 step 2). The code is built and the laptop is set up, but AWS
    is BLOCKING Bedrock for my account, so no model has answered yet. It

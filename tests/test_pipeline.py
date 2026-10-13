@@ -52,8 +52,9 @@ class FakeClient:
     """Records each call. JSON calls get research/selection answers; drafts
     get a numbered stub, or whatever `drafts` supplies."""
 
-    def __init__(self, drafts=None, usage=None):
+    def __init__(self, drafts=None, usage=None, fit="applies"):
         self.usage = usage  # (input tokens, output tokens) reported for every call
+        self.fit = fit  # the checker's verdict on every selected section
         self.calls = []
         self.drafts = list(drafts or [])
 
@@ -62,6 +63,8 @@ class FakeClient:
             on_usage(Usage(model, *self.usage))
         self.calls.append({"model": model, "system": system, "user": user, "json": json_mode})
         if json_mode:
+            if '"applies"' in user:  # the fit check, before drafting
+                return json.dumps({"verdict": self.fit, "reason": "Because."})
             if '"verdict"' in user:  # asked only when the config has a checker model
                 return json.dumps({"verdict": "does_not_support", "reason": "It is about something else."})
             if '"queries"' in user:
@@ -250,7 +253,7 @@ class PipelineTest(unittest.TestCase):
         self.assertNotIn("Utah R. Civ. P. 56", section)
 
     def test_checker_model_judges_what_each_citation_is_cited_for(self):
-        cfg = dataclasses.replace(CFG, checker_model="c-model")
+        cfg = dataclasses.replace(CFG, checker_model="c-model", fit_check=False)
         drafts = ["Venue is proper under Utah Code § 78B-2-309.", "no citations here"]
         client = FakeClient(drafts)
         stages = []
@@ -275,6 +278,57 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("| Complaint | 1 | 0 | 0 | 1 |", md)
         self.assertIn("- ⚠ may not support what it's cited for: `Utah Code § 78B-2-309`. "
                       "Checker's note: It is about something else.", md)
+
+    def fit_run(self, verdict):
+        client = FakeClient(fit=verdict)
+        stages = []
+        run = run_case(dataclasses.replace(CFG, checker_model="c-model"), client, FakeLaw(), "UT",
+                       facts="the facts", rounds=1, on_stage=lambda title, role: stages.append(title))
+        return run, client, stages
+
+    def test_fit_check_keeps_sections_that_apply(self):
+        run, client, stages = self.fit_run("applies")
+        self.assertEqual(stages[:4], ["Legal research", "Selecting authorities",
+                                      "Checking the authorities fit the case", "Complaint"])
+        asked = next(c for c in client.calls if '"applies"' in c["user"])
+        self.assertEqual(asked["model"], "c-model")
+        self.assertIn("the facts", asked["user"])
+        self.assertIn("Text of Utah Code § 78B-2-309.", asked["user"])
+        self.assertEqual(run.documents[0].authorities, (LIMITS,))
+        self.assertEqual([(c.section, c.verdict) for c in run.fit["plaintiff"]], [(LIMITS, "applies")])
+        self.assertNotIn("Set aside before drafting", render_markdown(run, datetime(2026, 10, 12)))
+
+    def test_fit_check_sets_aside_sections_that_do_not_apply(self):
+        run, client, _ = self.fit_run("does_not_apply")
+        self.assertEqual(run.documents[0].authorities, ())           # the complaint drafts with none
+        self.assertEqual(run.documents[1].authorities, (SJ_RULE,))   # the rule is supplied, never judged
+        self.assertNotIn("Text of Utah Code § 78B-2-309.", client.drafting_calls()[0]["user"])
+        self.assertNotIn(LIMITS, possible_references(run))
+        appendix = render_markdown(run, datetime(2026, 10, 12)).split("## Appendix")[1]
+        self.assertIn("Set aside before drafting", appendix)
+        self.assertIn("- `Utah Code § 78B-2-309` Within six years — [source](https://example.gov)  \n"
+                      "  *Checker's note: Because.*", appendix)
+
+    def test_fit_check_holds_back_sections_it_is_unsure_of_as_possible_references(self):
+        run, _, _ = self.fit_run("unsure")
+        self.assertEqual(run.documents[0].authorities, ())
+        self.assertIn(LIMITS, possible_references(run))
+        md = render_markdown(run, datetime(2026, 10, 12))
+        section = md.split("## Possible references")[1].split("## Appendix")[0]
+        self.assertIn("`Utah Code § 78B-2-309`", section)
+        self.assertIn("Not given to the drafting models: the checker wasn't sure it applies to this case. "
+                      "Checker's note: Because.", section)
+        self.assertNotIn("Set aside before drafting", md)
+
+    def test_fit_check_keeps_a_section_when_the_reply_is_unusable_or_it_is_switched_off(self):
+        run, _, _ = self.fit_run("maybe")
+        self.assertEqual(run.documents[0].authorities, (LIMITS,))
+        self.assertIsNone(run.fit["plaintiff"][0].verdict)
+
+        client = FakeClient(fit="does_not_apply")
+        off = run_case(dataclasses.replace(CFG, checker_model="c-model", fit_check=False), client, FakeLaw(),
+                       "UT", facts="f", rounds=1)
+        self.assertEqual((off.documents[0].authorities, off.fit), ((LIMITS,), {}))
 
     def test_without_a_checker_model_nothing_is_judged(self):
         client = FakeClient(["Venue is proper under Utah Code § 78B-2-309."])

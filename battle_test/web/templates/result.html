@@ -94,6 +94,7 @@
     {% else %}<code>{{ a.citation }}</code> <span class="warn">⚠ no official source URL</span>{% endif %}
     {{ a.section_title }}
     <span class="excerpt">{{ a.excerpt }}</span>
+    {% if a.held_back %}<span class="excerpt">{{ held_back }} Checker's note: {{ a.held_back }}</span>{% endif %}
   </li>
   {% endfor %}
 </ul>
@@ -109,6 +110,23 @@
   </li>
   {% endfor %}
 </ul>
+
+{% if set_aside %}
+<details class="notable">
+  <summary>{{ set_aside|length }} set aside before drafting</summary>
+  <p class="muted">{{ set_aside_note }}</p>
+  <ul class="authorities">
+    {% for a in set_aside %}
+    <li>
+      {% if a.source_url %}<a href="{{ a.source_url }}" target="_blank" rel="noopener noreferrer"><code>{{ a.citation }}</code></a>
+      {% else %}<code>{{ a.citation }}</code>{% endif %}
+      {{ a.section_title }}
+      <span class="excerpt">Checker's note: {{ a.reason }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
 
 {% if result.research %}
 <h2>Research queries</h2>

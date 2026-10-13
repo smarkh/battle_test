@@ -51,6 +51,10 @@ class Config:
     # at least as strong as the drafting models: a small model judging its
     # own citations isn't reliable.
     checker_model: str = ""
+    # With a checker model: also ask it, before drafting, whether each
+    # selected section applies to this kind of case, and draft only with
+    # those that do. False leaves every selected section in.
+    fit_check: bool = True
 
     def cost(self, usage: dict[str, dict[str, int]]) -> float | None:
         """Estimated US dollars for a run's token usage (model -> counts), or
@@ -102,6 +106,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
             for name, m in bedrock.get("models", {}).items()
         },
         checker_model=raw["models"].get("checker", ""),
+        fit_check=raw["pipeline"].get("fit_check", True),
     )
 
 

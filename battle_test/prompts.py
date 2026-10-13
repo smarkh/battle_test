@@ -166,6 +166,38 @@ filing. You take no side in the case. You judge only from the text you are \
 shown, never from memory."""
 
 
+# The instructions and the case come first and are the same for every
+# section, so Ollama reuses its work on them from one call to the next.
+# Benchmarked 2026-10-12 on the 97 sections that saved runs of the three
+# sample cases gave the models (qwen2.5:14b): it kept 11 of 13 expected
+# authorities and set aside 14 of 15 off-topic ones. A version that pressed
+# harder to keep general rules still dropped the same two (Utah's interest
+# and district court jurisdiction sections) and let more unrelated law in.
+def fit_task(state: str, materials_title: str, materials: str, citation: str, section_title: str,
+             law_text: str) -> str:
+    return f"""\
+Below is a case, and then the text of one section of {state} or federal law \
+that a search suggested for it. Decide whether a court would apply this \
+section in THIS case.
+- "applies": the section covers this kind of dispute, between these kinds of \
+parties, over this kind of transaction. General rules of procedure, \
+jurisdiction, venue, limitation periods, damages, interest and attorney fees \
+apply if they cover a case like this one.
+- "does_not_apply": the section is about a different kind of transaction, \
+party or proceeding than this case (for example sales of goods when the \
+contract is for services or construction; or banks, public agencies, \
+landlords, family or probate matters when the case is a private contract \
+dispute), even if it shares words with the case.
+- "unsure": it could apply, but that depends on facts the case does not state.
+If the quoted text ends with "[excerpt]", the section continues beyond it. \
+Respond with JSON only, in exactly this form:
+{{"verdict": "applies" or "unsure" or "does_not_apply", "reason": "<one sentence>"}}
+
+{wrap(materials_title, materials)}
+
+{wrap("Section of law", f"{citation} — {section_title}{chr(10)}{law_text}")}"""
+
+
 def support_task(citation: str, section_title: str, law_text: str, passage: str) -> str:
     return f"""\
 Below is the text of one section of law, and a passage from a draft filing \

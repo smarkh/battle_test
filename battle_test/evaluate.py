@@ -122,6 +122,7 @@ class ExpectedResult:
     found: bool  # returned by the law-index search for either side
     provided: bool  # given to the models in any drafting prompt
     cited: bool  # cited (and verified in force) in any document
+    set_aside: bool = False  # selected, then kept out of the drafts by the fit check
 
 
 @dataclass
@@ -146,6 +147,9 @@ class Score:
     doubted: list[str] = field(default_factory=list)  # one line per doubted citation, with the reason
     doubted_citations: list[str] = field(default_factory=list)  # distinct sections doubted anywhere
     support_checked: bool = False
+    # The fit check, before drafting. One line per section it kept out of the drafts.
+    fit_set_aside: list[str] = field(default_factory=list)
+    fit_judged: int = 0
 
     @property
     def may_not_support(self) -> tuple[int, int]:
@@ -208,11 +212,14 @@ def score(run: CaseRun, case: EvalCase, seconds: float = 0.0, repeat: int = 1) -
                 if check.section.citation not in doubted_citations:
                     doubted_citations.append(check.section.citation)
 
+    fit = [(role, c) for role, checks in run.fit.items() for c in checks]
+    dropped = {c.section.citation for _, c in fit if not c.kept}
     expected = [
         ExpectedResult(e.importance, list(e.citations), e.why,
                        found=any(c in found for c in e.citations),
                        provided=any(c in provided for c in e.citations),
-                       cited=any(c in cited for c in e.citations))
+                       cited=any(c in cited for c in e.citations),
+                       set_aside=any(c in dropped for c in e.citations))
         for e in case.expected
     ]
     return Score(
@@ -235,6 +242,9 @@ def score(run: CaseRun, case: EvalCase, seconds: float = 0.0, repeat: int = 1) -
         doubted=doubted,
         doubted_citations=doubted_citations,
         support_checked=bool(run.checker_model),
+        fit_set_aside=[f"`{c.section.citation}` ({role}): {c.verdict.replace('_', ' ')}. {c.reason}"
+                       for role, c in fit if not c.kept],
+        fit_judged=len(fit),
     )
 
 
@@ -317,6 +327,7 @@ def render_summary(scores: list[Score], label: str, setup: dict[str, str]) -> st
         lines += ["", f"## {s.label} ({s.state})", ""]
         for e in s.expected:
             mark = ("✅ cited" if e.cited else "➖ given, not cited" if e.provided
+                    else "🚫 selected, then set aside by the fit check" if e.set_aside
                     else "🔍 found by search, not selected" if e.found else "❌ never found by search")
             lines.append(f"- {mark} · *{e.importance}* · `{' / '.join(e.citations)}`: {e.why}")
         if s.off_topic_cited:
@@ -324,6 +335,10 @@ def render_summary(scores: list[Score], label: str, setup: dict[str, str]) -> st
             lines += [f"- `{c}`" + (" (⚠ doubted by the checker)" if c in s.doubted_citations else
                                     " (not doubted by the checker)" if s.support_checked else "")
                       for c in s.off_topic_cited]
+        if s.fit_judged:
+            lines += ["", f"**Fit check:** {len(s.fit_set_aside)} of {s.fit_judged} selected sections "
+                          "kept out of the drafts.", ""]
+            lines += [f"- {d}" for d in s.fit_set_aside]
         if s.doubted:
             lines += ["", "**Citations the checker doubts:**", ""]
             lines += [f"- {d}" for d in s.doubted]
@@ -405,6 +420,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", help="Use this model for both roles, instead of the config's [models].")
     parser.add_argument("--checker", help="Check what each citation is cited for with this model, "
                                           "instead of the config's [models] checker.")
+    parser.add_argument("--no-fit-check", action="store_true",
+                        help="With a checker: don't ask it whether each selected section fits the case "
+                             "before drafting.")
     parser.add_argument("--repeats", type=int, default=1,
                         help="Run each case this many times. One run is noisy: a change of one "
                              "authority either way means nothing.")
@@ -417,6 +435,8 @@ def main(argv: list[str] | None = None) -> int:
         cfg = dataclasses.replace(cfg, plaintiff_model=args.model, defendant_model=args.model)
     if args.checker:
         cfg = dataclasses.replace(cfg, checker_model=args.checker)
+    if args.no_fit_check:
+        cfg = dataclasses.replace(cfg, fit_check=False)
     cases = load_cases(args.case)
     search_cfg = semantic.load_search_config(args.config)
     db_path = load_corpus_config(args.config).db_path
@@ -464,6 +484,7 @@ def main(argv: list[str] | None = None) -> int:
             "plaintiff model": cfg.plaintiff_model,
             "defendant model": cfg.defendant_model,
             "citation checker model": cfg.checker_model or "none",
+            "fit check before drafting": "on" if cfg.checker_model and cfg.fit_check else "off",
             "rounds": str(args.rounds or cfg.rounds),
             "search": f"keyword + semantic ({search_cfg.embedding_model})" if search_cfg.semantic else "keyword",
             "runs per case": str(args.repeats),

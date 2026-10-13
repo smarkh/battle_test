@@ -173,6 +173,20 @@ class EvaluateTest(unittest.TestCase):
         self.assertRegex(plain, r"\| t \|.*\| 0 \| – \| 0 \|")
         self.assertIn("- `Utah Code § 70A-2-715`\n", plain)
 
+    def test_fit_check_set_asides_are_scored_and_listed(self):
+        run = self.run_with(Document("Motion", "plaintiff", "", True, checks=(check(SJ),), authorities=(SJ,)))
+        run.candidates = {"plaintiff": [LIMITS.citation, UCC.citation, INTEREST.citation]}
+        run.fit = {"plaintiff": [grounding.FitCheck(LIMITS, grounding.DOES_NOT_APPLY, "Wrong kind of case."),
+                                 grounding.FitCheck(UCC, grounding.UNSURE, "Depends."),
+                                 grounding.FitCheck(INTEREST, grounding.APPLIES, "Fits.")]}
+        md = render_summary([score(run, self.case)], "test", {})
+        self.assertIn("🚫 selected, then set aside by the fit check · *core* · `Utah Code § 78B-2-309", md)
+        self.assertIn("🔍 found by search, not selected · *useful* · `Utah Code § 15-1-1`", md)  # kept, not given
+        self.assertIn("**Fit check:** 2 of 3 selected sections kept out of the drafts.", md)
+        self.assertIn("- `Utah Code § 78B-2-309` (plaintiff): does not apply. Wrong kind of case.", md)
+        self.assertIn("- `Utah Code § 70A-2-715` (plaintiff): unsure. Depends.", md)
+        self.assertNotIn("Fit check", render_summary([score(self.run_with(), self.case)], "test", {}))
+
     def test_validate_flags_missing_and_inactive_authorities(self):
         class Law:
             def lookup(self, citation):

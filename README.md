@@ -64,7 +64,10 @@ Each output file contains:
 - **Citation check:** a table per document of ✅ / ☑ / ❌ / ⚠ counts, plus
   each citation that needs attention. When `[models] checker` names a
   model, it also reads each cited section beside the paragraph citing it,
-  and marks the citations it doubts (`[⚠ MAY NOT SUPPORT THIS]`).
+  and marks the citations it doubts (`[⚠ MAY NOT SUPPORT THIS]`). The
+  same model is asked, before drafting, whether each selected section
+  fits the case at all, and the ones that don't are kept out of the
+  drafts.
 - The documents themselves (complaint, motion, opposition, reply), with
   problem citations marked inline.
 - **Possible references:** sections the research picked that no draft
@@ -315,6 +318,8 @@ local vs. Bedrock.
 - `--checker NAME` checks what each citation is cited for with that model,
   whatever the config says. The summary gains a "may not support" column
   and lists each doubted citation with the checker's reason.
+- `--no-fit-check` leaves out the checker's other job: deciding, before
+  drafting, whether each selected section fits the case.
 - The summary shows each run's token usage, and its estimated cost when the
   config has a price for the model.
 

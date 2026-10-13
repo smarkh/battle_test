@@ -6,7 +6,7 @@ from typing import Callable, Protocol
 from battle_test import grounding, prompts
 from battle_test.citations import strip_echoed_markers
 from battle_test.config import Config
-from battle_test.grounding import CitationCheck, CheckedText, LawSearch
+from battle_test.grounding import CitationCheck, CheckedText, FitCheck, LawSearch
 from battle_test.law_index import LawSection
 from battle_test.models import Usage, add_usage
 
@@ -58,6 +58,9 @@ class CaseRun:
     usage: dict[str, dict[str, int]] = field(default_factory=dict)
     cost_usd: float | None = None  # estimated from the config's prices. None = no price known.
     checker_model: str = ""  # "" = the "does it say that?" check didn't run
+    # role -> the checker's verdict on each section selected for that side,
+    # before drafting. Empty when the fit check didn't run.
+    fit: dict[str, list[FitCheck]] = field(default_factory=dict)
 
     @property
     def state(self) -> str:
@@ -119,10 +122,23 @@ def run_case(
         if not run.candidates[role]:
             return []
         stage("Selecting authorities", role)
-        return grounding.select(
+        selected = grounding.select(
             asker(role),
             lambda topic, candidates: prompts.select_task(role, materials_title, materials, topic, candidates),
             topics, grounding.MAX_AUTHORITIES)
+        if not (cfg.checker_model and cfg.fit_check):
+            return selected
+        stage("Checking the authorities fit the case", role)
+
+        def fits(section: LawSection) -> tuple[str, str] | None:
+            task = prompts.fit_task(state, materials_title, materials, section.citation, section.section_title,
+                                    grounding.excerpt(section.text, grounding.SUPPORT_EXCERPT_CHARS))
+            return grounding.parse_verdict(
+                client.chat(cfg.checker_model, prompts.SUPPORT_SYSTEM, task, json_mode=True, on_usage=record),
+                grounding.FIT_VERDICTS)
+
+        selected, run.fit[role] = grounding.fit_filter(fits, selected)
+        return selected
 
     def judge(passage: str, section: LawSection) -> tuple[str, str] | None:
         task = prompts.support_task(section.citation, section.section_title,

@@ -22,7 +22,9 @@ plaintiff = "qwen2.5:7b"
 defendant = "qwen2.5:7b"
 # Checks whether each cited section says what the draft cites it for
 # (plans/plan.md, 3a). The server's larger model: a 7B judging its own
-# citations isn't reliable. Leave it out to skip the check.
+# citations isn't reliable. Leave it out to skip the check. It's also asked,
+# before drafting, whether each selected section fits the case at all
+# (`fit_check = false` under [pipeline] turns that part off).
 checker = "qwen2.5:14b"
 
 [generation]

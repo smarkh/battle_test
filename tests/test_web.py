@@ -859,5 +859,21 @@ class ExportTest(unittest.TestCase):
         self.assertTrue(bullet[0].endswith("⚠ no official source URL"))
         self.assertTrue(export.to_pdf(result, "A v. B", "now").startswith(b"%PDF-"))
         self.assertTrue(export.to_docx(result, "A v. B", "now").startswith(b"PK"))
+        # The fit check's verdicts: unsure joins the possible references, does-not-apply the appendix.
+        maybe = {**spare, "citation": "Utah Code § 15-1-1", "text": "Interest."}
+        wrong = {**spare, "citation": "Utah Code § 75-1-303", "section_title": "Venue", "text": "Probate."}
+        fitted = {**result, "fit": {"plaintiff": [
+            {"section": cited, "verdict": "applies", "reason": "fits"},
+            {"section": maybe, "verdict": "unsure", "reason": "Depends on the contract."},
+            {"section": wrong, "verdict": "does_not_apply", "reason": ""}]}}
+        held = render.possible_references(fitted)[1]
+        self.assertEqual((held["citation"], held["held_back"], held["excerpt"]),
+                         ("Utah Code § 15-1-1", "Depends on the contract.", "Interest."))
+        self.assertEqual([(a["citation"], a["reason"]) for a in render.set_aside(fitted)],
+                         [("Utah Code § 75-1-303", "none given")])
+        texts = [i[0] for b in export.blocks(fitted, "A v. B", "now") if b.kind == "bullets" for i in b.items]
+        self.assertTrue(any("§ 15-1-1" in t and "Checker's note: Depends on the contract." in t for t in texts))
+        self.assertIn("Utah Code § 75-1-303 Venue. Checker's note: none given", texts)
+        self.assertEqual(render.set_aside(result), [])  # saved before the fit check existed
         # Nothing given and uncited: no section at all.
         self.assertNotIn("Possible references", [b.text for b in export.blocks(self.RESULT, "A v. B", "now")])

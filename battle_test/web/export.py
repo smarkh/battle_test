@@ -115,6 +115,7 @@ def blocks(result: dict, title: str, generated: str) -> list[Block]:
                 Block("note", report.POSSIBLE_REFERENCES_NOTE)]
         out.append(Block("bullets", items=tuple(
             (f"**{a['citation']}** {a['section_title']} — {a['excerpt']}"
+             + (f" {report.HELD_BACK} Checker's note: {a['held_back']}" if a.get("held_back") else "")
              + ("" if a.get("source_url") else " ⚠ no official source URL"), a.get("source_url") or "")
             for a in possible)))
 
@@ -128,6 +129,12 @@ def blocks(result: dict, title: str, generated: str) -> list[Block]:
             (f"{a['citation']} {a['section_title']} (given for: {', '.join(a['given_for'])})"
              + ("" if a.get("source_url") else " ⚠ no official source URL"), a.get("source_url") or "")
             for a in authorities)))
+    dropped = render.set_aside(result)
+    if dropped:
+        out.append(Block("para", f"**{report.SET_ASIDE_NOTE}**"))
+        out.append(Block("bullets", items=tuple(
+            (f"{a['citation']} {a['section_title']}. Checker's note: {a['reason']}", a.get("source_url") or "")
+            for a in dropped)))
     return out
 
 
