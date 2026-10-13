@@ -171,5 +171,66 @@ class CheckCitationsTest(unittest.TestCase):
                          ["Utah Code § 78B-2-309", "Utah Code § 5-5-5"])
 
 
+class SupportCheckTest(unittest.TestCase):
+    """The "does it say that?" check: a judge's verdict on each in-force citation."""
+
+    LAW = CheckCitationsTest.LAW
+
+    def check(self, text, verdicts):
+        """Check `text`, with the judge answering from `verdicts` by section. Returns (result, calls)."""
+        calls = []
+
+        def judge(passage, section):
+            calls.append((passage, section.citation))
+            return verdicts.get(section.citation)
+        return grounding.check_citations(text, self.LAW, "ut", "Utah", {"Utah Code § 78B-2-309"}, judge), calls
+
+    def test_parse_verdict(self):
+        self.assertEqual(grounding.parse_verdict('{"verdict": "partly", "reason": " Overstates\\n it. "}'),
+                         (grounding.PARTLY, "Overstates it."))
+        self.assertEqual(grounding.parse_verdict('Sure: {"verdict": "Does Not Support"}'),
+                         (grounding.DOES_NOT_SUPPORT, ""))
+        for bad in ('{"verdict": "maybe"}', '{"verdict": 1}', "not json", '["supports"]'):
+            self.assertIsNone(grounding.parse_verdict(bad))
+
+    def test_passage_is_the_citing_paragraph_cut_around_the_citation(self):
+        text = "Heading\n" + "before " * 100 + "CITE" + " after" * 100 + "\nNext paragraph."
+        start = text.index("CITE")
+        passage = grounding.passage_around(text, start, start + 4)
+        self.assertTrue(passage.startswith("…before"))
+        self.assertTrue(passage.endswith("after…"))
+        self.assertIn(" CITE ", passage)
+        self.assertLess(len(passage), grounding.PASSAGE_CHARS + 10)
+        self.assertEqual(grounding.passage_around("One.\nThe CITE here.\nThree.", 9, 13), "The CITE here.")
+
+    def test_doubted_citations_are_marked_and_carry_the_reason(self):
+        text = ("1. The claim is timely under Utah Code § 78B-2-309.\n"
+                "2. This court has jurisdiction under Utah Code § 5-5-5.")
+        checked, calls = self.check(text, {"Utah Code § 78B-2-309": (grounding.SUPPORTS, "It says so."),
+                                           "Utah Code § 5-5-5": (grounding.DOES_NOT_SUPPORT, "About fees.")})
+        self.assertEqual([(c.support, c.support_reason) for c in checked.checks],
+                         [(grounding.SUPPORTS, "It says so."), (grounding.DOES_NOT_SUPPORT, "About fees.")])
+        self.assertEqual(calls, [("1. The claim is timely under Utah Code § 78B-2-309.", "Utah Code § 78B-2-309"),
+                                 ("2. This court has jurisdiction under Utah Code § 5-5-5.", "Utah Code § 5-5-5")])
+        self.assertIn("§ 78B-2-309.\n", checked.text)  # supported: no mark
+        self.assertIn("§ 5-5-5 [⚠ MAY NOT SUPPORT THIS].", checked.text)
+
+        partly, _ = self.check(text, {"Utah Code § 5-5-5": (grounding.PARTLY, "")})
+        self.assertIn("§ 5-5-5 [⚠ MAY ONLY PARTLY SUPPORT THIS].", partly.text)
+        self.assertIsNone(partly.checks[0].support)  # an unusable reply leaves the citation unjudged
+
+    def test_only_in_force_citations_with_something_to_judge_are_asked_about(self):
+        text = ("The claim fails under Utah Code § 9-9-9 and Utah Code § 1-1-1.\n"  # not found, repealed
+                "Utah Code § 78B-2-309\n"                                           # a bare citation
+                "It is timely under Utah Code § 78B-2-309, see Utah Code § 78B-2-309.")
+        checked, calls = self.check(text, {"Utah Code § 78B-2-309": (grounding.PARTLY, "r")})
+        self.assertEqual(len(calls), 1)  # the last line, once for both of its citations
+        self.assertEqual([c.support for c in checked.checks], [None, None, None, grounding.PARTLY, grounding.PARTLY])
+
+    def test_no_judge_means_no_verdicts(self):
+        checked = grounding.check_citations("Timely under Utah Code § 78B-2-309.", self.LAW, "ut", "Utah", None)
+        self.assertIsNone(checked.checks[0].support)
+
+
 if __name__ == "__main__":
     unittest.main()

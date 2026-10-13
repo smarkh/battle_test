@@ -13,6 +13,10 @@ provider = "ollama"
 # once on the server.
 plaintiff = "qwen2.5:7b"
 defendant = "qwen2.5:7b"
+# A model that checks whether each cited section says what the draft cites it
+# for (plans/plan.md, 3a). Left out here: the laptop has only the 7B, which
+# isn't reliable judging its own citations.
+# checker = "qwen2.5:14b"
 
 [generation]
 # Ollama's default context is too small to hold complaint + motion +

@@ -28,14 +28,18 @@ FORMATS = {
     "pdf": "application/pdf",
 }
 
-# The Markdown report's disclaimer, as plain text.
-DISCLAIMER = re.sub(r"^> |\*\*|`", "", report.DISCLAIMER).replace("⚠ mark", "[⚠ …] mark")
+def disclaimer(support_checked: bool = False) -> str:
+    """The Markdown report's disclaimer, as plain text."""
+    return re.sub(r"^> |\*\*|`", "", report.disclaimer(support_checked)).replace("⚠ mark", "[⚠ …] mark")
+
+
+DISCLAIMER = disclaimer()
 FOOTER = "Draft for attorney review. Not legal advice."
 
 _FLAG_COLOUR = "B3261E"
 _PLACEHOLDER_COLOUR = "FFF2C7"
-_CHECK_COLUMNS = ["Document", "In force", "In force, not shown to model", "Problems", "Ambiguous",
-                  "Unchecked", "Citation needed"]
+_CHECK_COLUMNS = ["Document", "In force", "In force, not shown to model", "Problems", "May not support",
+                  "Ambiguous", "Unchecked", "Citation needed"]
 
 # Pieces of a draft that are styled: the checker's inline marks, the
 # models' placeholders, and Markdown bold.
@@ -67,9 +71,10 @@ def spans(text: str) -> list[tuple[str, str]]:
 def blocks(result: dict, title: str, generated: str) -> list[Block]:
     """The whole document set, in reading order, for either format."""
     meta = result.get("law_meta", {})
+    checked = render.support_checked(result)
     out = [
         Block("title", f"Battle test: {title}"),
-        Block("note", DISCLAIMER),
+        Block("note", disclaimer(checked)),
         Block("bullets", items=tuple((line, "") for line in (
             f"Jurisdiction: {result['state']} and federal law",
             f"Law checked against: statutes, court rules and constitutions current as of "
@@ -79,17 +84,19 @@ def blocks(result: dict, title: str, generated: str) -> list[Block]:
             f"Rounds: {result['rounds']}",
             f"Plaintiff model: {result['plaintiff_model']}",
             f"Defendant model: {result['defendant_model']}",
+            *([f"Citation checker model: {result['checker_model']}"] if checked else []),
         ))),
         Block("heading", "Citation check"),
     ]
     rows = [tuple(_CHECK_COLUMNS)]
     for doc in result["documents"]:
-        s = render.check_summary(doc)
-        rows.append((doc["title"], *(str(s[k]) for k in ("verified", "unseen", "problems", "ambiguous",
+        s = render.check_summary(doc, checked)
+        rows.append((doc["title"], *(str(s[k]) for k in ("verified", "unseen", "problems", "doubted", "ambiguous",
                                                          "unchecked", "placeholders"))))
     out.append(Block("table", items=tuple(rows)))
     for doc in result["documents"]:
-        notable = [(f"{n['label']}: {n['text']}" + (f" (matched {n['matched']})" if n["matched"] else ""), "")
+        notable = [(f"{n['label']}: {n['text']}" + (f" (matched {n['matched']})" if n["matched"] else "")
+                    + (f". Checker's note: {n['reason']}" if n["reason"] else ""), "")
                    for n in render.notable_checks(doc)]
         notable += [(f"⚠ not checked (case law, or a format the checker can't read): {line}", "")
                     for line in doc["unchecked"]]
@@ -234,7 +241,7 @@ def to_pdf(result: dict, title: str, generated: str) -> bytes:
             story.append(Spacer(1, 6))
         elif block.kind == "table":
             width = 6.5 * inch
-            first = 1.7 * inch  # leaves each count column wide enough for "Ambiguous" on one line
+            first = 1.4 * inch  # leaves each count column wide enough for "Ambiguous" on one line
             rest = (width - first) / (len(block.items[0]) - 1)
             cells = [[Paragraph(_markup(f"**{v}**" if n == 0 else v), styles["cell"]) for v in row]
                      for n, row in enumerate(block.items)]

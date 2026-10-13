@@ -157,6 +157,36 @@ Topic: {topic}
 
 
 # ---------------------------------------------------------------------------
+# The "does it say that?" check (JSON reply)
+# ---------------------------------------------------------------------------
+
+SUPPORT_SYSTEM = """\
+You are a careful legal editor checking the citations in a draft court \
+filing. You take no side in the case. You judge only from the text you are \
+shown, never from memory."""
+
+
+def support_task(citation: str, section_title: str, law_text: str, passage: str) -> str:
+    return f"""\
+Below is the text of one section of law, and a passage from a draft filing \
+that cites it. Decide whether the section's text supports what the passage \
+cites it for.
+- "supports": the text says what the passage relies on it for.
+- "partly": the text is on the same subject, but the passage overstates it or \
+relies on something the text does not say.
+- "does_not_support": the text is about a different subject, or a different \
+kind of case or party, or says the opposite.
+If the passage cites several authorities, judge only {citation}. If the \
+quoted text ends with "[excerpt]", the section continues beyond it. Respond \
+with JSON only, in exactly this form:
+{{"verdict": "supports" or "partly" or "does_not_support", "reason": "<one sentence>"}}
+
+{wrap("Section of law", f"{citation} — {section_title}{chr(10)}{law_text}")}
+
+{wrap("Passage from the draft", passage)}"""
+
+
+# ---------------------------------------------------------------------------
 # Drafting
 # ---------------------------------------------------------------------------
 

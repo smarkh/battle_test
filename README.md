@@ -62,7 +62,9 @@ which is also gitignored.
 Each output file contains:
 - The disclaimer, and the date the law is current as of.
 - **Citation check:** a table per document of ✅ / ☑ / ❌ / ⚠ counts, plus
-  each citation that needs attention.
+  each citation that needs attention. When `[models] checker` names a
+  model, it also reads each cited section beside the paragraph citing it,
+  and marks the citations it doubts (`[⚠ MAY NOT SUPPORT THIS]`).
 - The documents themselves (complaint, motion, opposition, reply), with
   problem citations marked inline.
 - **Possible references:** sections the research picked that no draft
@@ -310,6 +312,9 @@ local vs. Bedrock.
   of one authority either way means nothing. The summary gets a row per
   run and a total.
 - `--model NAME` uses one model for both roles, whatever the config says.
+- `--checker NAME` checks what each citation is cited for with that model,
+  whatever the config says. The summary gains a "may not support" column
+  and lists each doubted citation with the checker's reason.
 - The summary shows each run's token usage, and its estimated cost when the
   config has a price for the model.
 

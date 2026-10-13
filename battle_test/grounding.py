@@ -8,7 +8,7 @@ every citation in the draft is checked against the index in code.
 """
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import zip_longest
 from typing import Callable, Protocol
 
@@ -64,12 +64,18 @@ def parse_json_list(reply: str, key: str) -> list:
     it, and often wrap it in a code fence or a sentence, so anything outside
     the outermost braces is ignored.
     """
+    value = parse_json_object(reply).get(key, [])
+    return value if isinstance(value, list) else []
+
+
+def parse_json_object(reply: str) -> dict:
+    """The JSON object in a reply, or {} if there isn't a usable one."""
     start, end = reply.find("{"), reply.rfind("}")
     try:
-        value = json.loads(reply[start:end + 1]).get(key, [])
-    except (json.JSONDecodeError, AttributeError):
-        return []
-    return value if isinstance(value, list) else []
+        value = json.loads(reply[start:end + 1])
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 # Procedural topics every civil contract suit needs, whatever the facts, in
@@ -210,11 +216,72 @@ PROBLEM_STATUSES = {NOT_IN_FORCE, NOT_FOUND, WRONG_JURISDICTION}
 CITED_STATUSES = (VERIFIED, IN_FORCE_NOT_PROVIDED)  # a draft cites a real, in-force section
 
 
+# The "does it say that?" check (plan step 3a): a model's verdict on whether
+# a cited section's text supports the passage citing it. Existence checks
+# can't catch a real statute cited for something it doesn't say: the first
+# grounded Utah run cited an attorney-fee statute as the source of the
+# court's jurisdiction.
+SUPPORTS = "supports"
+PARTLY = "partly"
+DOES_NOT_SUPPORT = "does_not_support"
+DOUBTED = (PARTLY, DOES_NOT_SUPPORT)
+SUPPORT_LABELS = {
+    PARTLY: "may only partly support what it's cited for",
+    DOES_NOT_SUPPORT: "may not support what it's cited for",
+}
+_SUPPORT_MARKS = {
+    PARTLY: "[⚠ MAY ONLY PARTLY SUPPORT THIS]",
+    DOES_NOT_SUPPORT: "[⚠ MAY NOT SUPPORT THIS]",
+}
+# How much of the draft around a citation, and how much of the section, the
+# checker reads. The drafting model saw only EXCERPT_CHARS of the section.
+PASSAGE_CHARS = 600
+SUPPORT_EXCERPT_CHARS = 3000
+# A citation on a line of its own (a heading, a list of authorities) is cited
+# for nothing in particular, so there's nothing to judge.
+MIN_PASSAGE_WORDS = 4
+# A pasted complaint can cite far more than a draft does.
+MAX_SUPPORT_CHECKS = 40
+
+
 @dataclass(frozen=True)
 class CitationCheck:
     text: str  # as written in the draft
     status: str
     section: LawSection | None  # the matched section, if exactly one
+    support: str | None = None  # SUPPORTS, PARTLY or DOES_NOT_SUPPORT. None = not judged.
+    support_reason: str = ""  # the checker's one line of reasoning
+
+
+# (passage citing the section, the section) -> (verdict, reason), or None if
+# the model's reply wasn't usable.
+Judge = Callable[[str, LawSection], tuple[str, str] | None]
+
+
+def parse_verdict(reply: str) -> tuple[str, str] | None:
+    data = parse_json_object(reply)
+    verdict, reason = data.get("verdict"), data.get("reason")
+    if isinstance(verdict, str):
+        verdict = verdict.strip().lower().replace(" ", "_")
+    if verdict not in (SUPPORTS, PARTLY, DOES_NOT_SUPPORT):
+        return None
+    return verdict, " ".join(reason.split())[:300] if isinstance(reason, str) else ""
+
+
+def passage_around(text: str, start: int, end: int) -> str:
+    """The paragraph holding the citation at text[start:end], cut to about
+    PASSAGE_CHARS around it. Paragraphs, not sentences: the periods in
+    "Utah Code Ann." and "R. Civ. P." make sentences hard to find."""
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", end)
+    line_end = len(text) if line_end == -1 else line_end
+    lo, hi = max(line_start, start - PASSAGE_CHARS // 2), min(line_end, end + PASSAGE_CHARS // 2)
+    before, after = text[lo:start], text[end:hi]
+    if lo > line_start:
+        before = "…" + before.partition(" ")[2]
+    if hi < line_end:
+        after = after.rpartition(" ")[0] + "…"
+    return (before + text[start:end] + after).strip()
 
 
 @dataclass(frozen=True)
@@ -250,19 +317,40 @@ def _inline_mark(check: CitationCheck, state_name: str) -> str | None:
         return f"[⚠ NOT IN FORCE: {check.section.act_status.replace('_', ' ')}]"
     if check.status == WRONG_JURISDICTION:
         return f"[⚠ NOT {state_name.upper()} OR FEDERAL LAW]"
-    return None
+    return _SUPPORT_MARKS.get(check.support)
+
+
+def _judge_support(text: str, refs: list[CitationRef], checks: list[CitationCheck],
+                   judge: Judge) -> list[CitationCheck]:
+    """Ask `judge` about each in-force citation and the passage citing it."""
+    verdicts: dict[tuple[str, str], tuple[str, str] | None] = {}
+    judged = []
+    for ref, check in zip(refs, checks):
+        if check.section is not None and check.status in CITED_STATUSES:
+            passage = passage_around(text, ref.start, ref.end)
+            key = (check.section.citation, passage)
+            if key not in verdicts and len(verdicts) < MAX_SUPPORT_CHECKS \
+                    and len(passage.replace(text[ref.start:ref.end], "").split()) >= MIN_PASSAGE_WORDS:
+                verdicts[key] = judge(passage, check.section)
+            if verdicts.get(key):
+                check = replace(check, support=verdicts[key][0], support_reason=verdicts[key][1])
+        judged.append(check)
+    return judged
 
 
 def check_citations(text: str, index: LawSearch, state: str, state_name: str,
-                    provided: set[str] | None) -> CheckedText:
+                    provided: set[str] | None, judge: Judge | None = None) -> CheckedText:
     """Check every parseable citation in `text` against the index.
 
     `provided` is the set of citations whose text the model was given, or
-    None for user-written text.
+    None for user-written text. With a `judge`, each citation that's in
+    force is also checked against the passage citing it.
     """
     text = unwrap_citation_placeholders(text)
     refs = find_citation_refs(text)
     checks = [_classify(ref, index.resolve(ref, state), state, provided) for ref in refs]
+    if judge:
+        checks = _judge_support(text, refs, checks, judge)
     unchecked = find_unverified_citations(text, skip=refs)
 
     # Insert marks from the end so earlier offsets stay valid.

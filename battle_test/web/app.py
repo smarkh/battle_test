@@ -178,7 +178,8 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
     each run, so demo output isn't labelled as a real model's."""
     cfg = load_config(config_path)
     if model_label:
-        cfg = dataclasses.replace(cfg, plaintiff_model=model_label, defendant_model=model_label)
+        cfg = dataclasses.replace(cfg, plaintiff_model=model_label, defendant_model=model_label,
+                                  checker_model=model_label if cfg.checker_model else "")
     corpus = load_corpus_config(config_path)
     web = load_web_config(config_path)
     plans = plans or load_plans(config_path)
@@ -504,14 +505,15 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
         if job.status == FAILED:
             return page(request, "failed.html", session, job=job, nav_jobs=nav_jobs)
         result = store.result(job_id)
+        checked = render.support_checked(result)
         documents = [
-            {**doc, "html": render.document_html(doc), "summary": render.check_summary(doc),
+            {**doc, "html": render.document_html(doc), "summary": render.check_summary(doc, checked),
              "notable": render.notable_checks(doc)}
             for doc in result["documents"]
         ]
         return page(request, "result.html", session, job=job, result=result, documents=documents,
                     authorities=render.authorities(result), possible=render.possible_references(result),
-                    possible_note=POSSIBLE_REFERENCES_NOTE, nav_jobs=nav_jobs)
+                    possible_note=POSSIBLE_REFERENCES_NOTE, support_checked=checked, nav_jobs=nav_jobs)
 
     @app.get("/cases/{job_id}/events")
     async def events(request: Request, job_id: str):

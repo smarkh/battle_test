@@ -760,6 +760,34 @@ class RenderTest(unittest.TestCase):
         self.assertIn('href="https://x.gov/-1"', html)
         self.assertEqual(html.count("<a "), 2)
 
+    def test_doubted_citations_are_listed_with_the_checkers_note(self):
+        section = {"citation": "Utah Code § 1-1-1", "source_url": "https://x.gov/1"}
+        doc = self.doc("Venue lies under § 1-1-1 [⚠ MAY NOT SUPPORT THIS].", [
+            {"text": "§ 1-1-1", "status": "verified", "section": section, "support": "does_not_support",
+             "support_reason": "It is about <fees>."},
+            {"text": "§ 1-1-1", "status": "in_force_not_provided", "section": section, "support": "supports",
+             "support_reason": "ok"}])
+        self.assertEqual(render.check_summary(doc, checked=True)["doubted"], 1)
+        self.assertEqual(render.check_summary(doc)["doubted"], "–")
+        doubt, unseen = render.notable_checks(doc)
+        self.assertEqual((doubt["label"], doubt["reason"], doubt["css"]),
+                         ("⚠ may not support what it's cited for", "It is about <fees>.", "warn"))
+        self.assertEqual(unseen["reason"], "")
+        self.assertIn('<mark class="flag">[⚠ MAY NOT SUPPORT THIS]</mark>', document_html(doc))
+        # Results saved before the check existed have no verdicts and no checker model.
+        old = self.doc("x", [{"text": "§ 1-1-1", "status": "verified", "section": section}])
+        self.assertEqual(render.notable_checks(old), [])
+        self.assertFalse(render.support_checked({"documents": [old]}))
+
+        result = {**ExportTest.RESULT, "checker_model": "c", "documents": [
+            {**ExportTest.RESULT["documents"][0], **doc}]}
+        blocks = export.blocks(result, "A v. B", "now")
+        texts = [t for b in blocks for t in [b.text, *(i[0] for i in b.items if b.kind == "bullets")]]
+        self.assertIn("Citation checker model: c", texts)
+        self.assertIn("⚠ may not support what it's cited for: § 1-1-1. Checker's note: It is about <fees>.", texts)
+        self.assertTrue(any("A model also compared each one" in t for t in texts))
+        self.assertTrue(export.to_pdf(result, "A v. B", "now").startswith(b"%PDF-"))
+
     def test_case_title_uses_names_only(self):
         self.assertEqual(case_title({"plaintiff": "Dana Whitfield, homeowner in Provo",
                                      "defendant": "Summit Peak Roofing LLC (Orem)"}),

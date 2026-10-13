@@ -141,6 +141,16 @@ class Score:
     repeat: int = 1  # which run of this case, when --repeats is used
     usage: dict[str, dict[str, int]] = field(default_factory=dict)  # model -> calls and tokens
     cost_usd: float | None = None  # None = the config has no price for a model used
+    # The "does it say that?" check. Empty when no checker model ran.
+    support: dict[str, int] = field(default_factory=dict)  # verdict -> citations given it
+    doubted: list[str] = field(default_factory=list)  # one line per doubted citation, with the reason
+    doubted_citations: list[str] = field(default_factory=list)  # distinct sections doubted anywhere
+    support_checked: bool = False
+
+    @property
+    def may_not_support(self) -> tuple[int, int]:
+        """Of the citations the checker judged, how many it doubts."""
+        return sum(self.support.get(v, 0) for v in grounding.DOUBTED), sum(self.support.values())
 
     @property
     def label(self) -> str:
@@ -182,11 +192,21 @@ def score(run: CaseRun, case: EvalCase, seconds: float = 0.0, repeat: int = 1) -
     provided = {s.citation for doc in run.documents for s in doc.authorities}
     cited: list[str] = []
     statuses: Counter = Counter()
+    support: Counter = Counter()
+    doubted: list[str] = []
+    doubted_citations: list[str] = []
     for doc in run.documents:
         for check in doc.checks:
             statuses[check.status] += 1
             if check.status in _CITED and check.section and check.section.citation not in cited:
                 cited.append(check.section.citation)
+            if check.support:
+                support[check.support] += 1
+            if check.support in grounding.DOUBTED:
+                doubted.append(f"`{check.section.citation}` in the {doc.title}: "
+                               f"{check.support.replace('_', ' ')}. {check.support_reason}")
+                if check.section.citation not in doubted_citations:
+                    doubted_citations.append(check.section.citation)
 
     expected = [
         ExpectedResult(e.importance, list(e.citations), e.why,
@@ -211,6 +231,10 @@ def score(run: CaseRun, case: EvalCase, seconds: float = 0.0, repeat: int = 1) -
         repeat=repeat,
         usage=run.usage,
         cost_usd=run.cost_usd,
+        support=dict(support),
+        doubted=doubted,
+        doubted_citations=doubted_citations,
+        support_checked=bool(run.checker_model),
     )
 
 
@@ -259,22 +283,23 @@ def render_summary(scores: list[Score], label: str, setup: dict[str, str]) -> st
     lines += [
         "",
         "| Case | Core found by search | Core given to models | Core cited | Useful cited | Cited on-target "
-        "| Off-topic cited | ❌ problems | `[CITATION NEEDED]` | Minutes | Cost |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "| Off-topic cited | ❌ problems | ⚠ may not support | `[CITATION NEEDED]` | Minutes | Cost |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for s in scores:
         lines.append(
             f"| {s.label} | {_frac(s.core_found)} | {_frac(s.core_provided)} | {_frac(s.core_cited)} "
             f"| {_frac(s.useful_cited)} "
-            f"| {_frac(s.on_target)} | {len(s.off_topic_cited)} | {s.problems} | {s.placeholders} "
-            f"| {s.seconds / 60:.0f} | {_cost([s])} |"
+            f"| {_frac(s.on_target)} | {len(s.off_topic_cited)} | {s.problems} | {_frac(s.may_not_support)} "
+            f"| {s.placeholders} | {s.seconds / 60:.0f} | {_cost([s])} |"
         )
     if len(scores) > 1:
         lines.append(
             f"| **Total** | {_frac(_total(scores, 'core_found'))} | {_frac(_total(scores, 'core_provided'))} "
             f"| **{_frac(_total(scores, 'core_cited'))}** | {_frac(_total(scores, 'useful_cited'))} "
             f"| {_frac(_total(scores, 'on_target'))} | {sum(len(s.off_topic_cited) for s in scores)} "
-            f"| {sum(s.problems for s in scores)} | {sum(s.placeholders for s in scores)} "
+            f"| {sum(s.problems for s in scores)} | {_frac(_total(scores, 'may_not_support'))} "
+            f"| {sum(s.placeholders for s in scores)} "
             f"| {sum(s.seconds for s in scores) / 60:.0f} | {_cost(scores)} |"
         )
     for model, counts in _usage_totals(scores).items():
@@ -285,7 +310,8 @@ def render_summary(scores: list[Score], label: str, setup: dict[str, str]) -> st
         "*Core found by search / given to models / cited:* expected authorities that the law-index "
         "search returned as candidates, that were then quoted in a drafting prompt, and that were "
         "actually cited (verified in force). *Cited on-target:* of the distinct authorities cited, "
-        "how many are on the expected list.",
+        "how many are on the expected list. *May not support:* of the citations the checker model "
+        "judged, how many it thinks the cited section doesn't support, or only partly (– = no checker ran).",
     ]
     for s in scores:
         lines += ["", f"## {s.label} ({s.state})", ""]
@@ -295,8 +321,13 @@ def render_summary(scores: list[Score], label: str, setup: dict[str, str]) -> st
             lines.append(f"- {mark} · *{e.importance}* · `{' / '.join(e.citations)}`: {e.why}")
         if s.off_topic_cited:
             lines += ["", "**Off-topic authorities cited:**", ""]
-            lines += [f"- `{c}`" for c in s.off_topic_cited]
-        others = [c for c in s.distinct_cited
+            lines += [f"- `{c}`" + (" (⚠ doubted by the checker)" if c in s.doubted_citations else
+                                    " (not doubted by the checker)" if s.support_checked else "")
+                      for c in s.off_topic_cited]
+        if s.doubted:
+            lines += ["", "**Citations the checker doubts:**", ""]
+            lines += [f"- {d}" for d in s.doubted]
+        others =[c for c in s.distinct_cited
                   if c not in {x for e in s.expected for x in e.citations} and c not in s.off_topic_cited]
         if others:
             lines += ["", "**Other authorities cited** (not on either list, so worth a look):", ""]
@@ -309,7 +340,7 @@ def render_summary(scores: list[Score], label: str, setup: dict[str, str]) -> st
 def _score_dict(s: Score) -> dict:
     d = asdict(s)
     d.update(core_found=s.core_found, core_provided=s.core_provided, core_cited=s.core_cited, useful_cited=s.useful_cited,
-             on_target=s.on_target, problems=s.problems)
+             on_target=s.on_target, problems=s.problems, may_not_support=s.may_not_support)
     return d
 
 
@@ -372,6 +403,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--research-only", action="store_true",
                         help="Only run the plaintiff's research step and score the search (fast).")
     parser.add_argument("--model", help="Use this model for both roles, instead of the config's [models].")
+    parser.add_argument("--checker", help="Check what each citation is cited for with this model, "
+                                          "instead of the config's [models] checker.")
     parser.add_argument("--repeats", type=int, default=1,
                         help="Run each case this many times. One run is noisy: a change of one "
                              "authority either way means nothing.")
@@ -382,6 +415,8 @@ def main(argv: list[str] | None = None) -> int:
     cfg = load_config(args.config)
     if args.model:
         cfg = dataclasses.replace(cfg, plaintiff_model=args.model, defendant_model=args.model)
+    if args.checker:
+        cfg = dataclasses.replace(cfg, checker_model=args.checker)
     cases = load_cases(args.case)
     search_cfg = semantic.load_search_config(args.config)
     db_path = load_corpus_config(args.config).db_path
@@ -428,6 +463,7 @@ def main(argv: list[str] | None = None) -> int:
             "provider": cfg.provider,
             "plaintiff model": cfg.plaintiff_model,
             "defendant model": cfg.defendant_model,
+            "citation checker model": cfg.checker_model or "none",
             "rounds": str(args.rounds or cfg.rounds),
             "search": f"keyword + semantic ({search_cfg.embedding_model})" if search_cfg.semantic else "keyword",
             "runs per case": str(args.repeats),

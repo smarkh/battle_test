@@ -151,9 +151,28 @@ Procedure section 437c") and resolves each against the index.
 Problem citations are marked, not removed, so the reviewer sees exactly
 what the model wrote.
 
-**What the check doesn't do:** it confirms a section exists and is in
-force. It doesn't confirm the section says what the brief claims. That
-check is planned ("3a" in `plans/plan.md`).
+That check confirms a section exists and is in force. It doesn't confirm
+the section says what the brief claims.
+
+### Does the section say that? (optional)
+
+When `[models] checker` names a model, a second check runs on each draft
+("3a" in `plans/plan.md`). For every ✅ or ☑ citation, the checker model
+reads the paragraph citing it beside the section's text (the first 3,000
+characters) and answers *supports*, *partly* or *does not support*, with
+one sentence of reasoning.
+
+- *Partly* and *does not support* are marked inline, `[⚠ MAY ONLY PARTLY
+  SUPPORT THIS]` and `[⚠ MAY NOT SUPPORT THIS]`, and listed in the
+  citation check with the checker's note. The next model to read the
+  draft sees the marks too.
+- A citation alone on its line isn't judged: it's cited for nothing in
+  particular. At most 40 are judged per document.
+- With no checker set, the check doesn't run, and the report says so.
+- It's a warning, not a guarantee. On the server's 14B (2026-10-12) a
+  *does not support* was right every time, by our own reading. *Partly*
+  caught most of the wrong law, and also flagged about two in three
+  citations that were fine. See `plans/plan.md`, 3a.
 
 ## Known weaknesses
 

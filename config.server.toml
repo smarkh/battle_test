@@ -20,6 +20,10 @@ provider = "ollama"
 # 12k context), then compare ~30B options with the evaluation.
 plaintiff = "qwen2.5:14b"
 defendant = "qwen2.5:14b"
+# A model that checks whether each cited section says what the draft cites it
+# for (plans/plan.md, 3a). Off on the live site until it's been decided:
+# on 2026-10-12 the 14B flagged most citations, right and wrong.
+# checker = "qwen2.5:14b"
 
 [generation]
 num_ctx = 12288

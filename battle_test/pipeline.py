@@ -57,6 +57,7 @@ class CaseRun:
     # reported them. Empty when the client reports nothing (the demo model).
     usage: dict[str, dict[str, int]] = field(default_factory=dict)
     cost_usd: float | None = None  # estimated from the config's prices. None = no price known.
+    checker_model: str = ""  # "" = the "does it say that?" check didn't run
 
     @property
     def state(self) -> str:
@@ -89,7 +90,8 @@ def run_case(
     if rounds not in (1, 2):
         raise ValueError(f"rounds must be 1 or 2, got {rounds}")
 
-    run = CaseRun(state_code, rounds, cfg.plaintiff_model, cfg.defendant_model, law.meta())
+    run = CaseRun(state_code, rounds, cfg.plaintiff_model, cfg.defendant_model, law.meta(),
+                  checker_model=cfg.checker_model)
     state, sc = run.state, state_code.lower()
     roles = {
         "plaintiff": (cfg.plaintiff_model, prompts.plaintiff_system(state)),
@@ -122,15 +124,24 @@ def run_case(
             lambda topic, candidates: prompts.select_task(role, materials_title, materials, topic, candidates),
             topics, grounding.MAX_AUTHORITIES)
 
-    def check(text: str, provided: list[LawSection] | None) -> CheckedText:
+    def judge(passage: str, section: LawSection) -> tuple[str, str] | None:
+        task = prompts.support_task(section.citation, section.section_title,
+                                    grounding.excerpt(section.text, grounding.SUPPORT_EXCERPT_CHARS), passage)
+        return grounding.parse_verdict(
+            client.chat(cfg.checker_model, prompts.SUPPORT_SYSTEM, task, json_mode=True, on_usage=record))
+
+    def check(title: str, role: str, text: str, provided: list[LawSection] | None) -> CheckedText:
         cites = None if provided is None else {s.citation for s in provided}
-        return grounding.check_citations(text, law, sc, state, cites)
+        if not cfg.checker_model:
+            return grounding.check_citations(text, law, sc, state, cites)
+        stage(f"Checking citations: {title}", role)
+        return grounding.check_citations(text, law, sc, state, cites, judge)
 
     def draft(title: str, role: str, task: str, authorities: list[LawSection]) -> CheckedText:
         stage(title, role)
         model, system = roles[role]
         raw = client.chat(model, system, task, on_token=on_token, on_usage=record)
-        checked = check(strip_echoed_markers(raw).strip(), authorities)
+        checked = check(title, role, strip_echoed_markers(raw).strip(), authorities)
         run.documents.append(Document(title, role, checked.text, True, checked.checks,
                                       checked.unchecked, tuple(authorities)))
         return checked
@@ -145,7 +156,7 @@ def run_case(
         court = prompts.TRIAL_COURTS[state_code]
         complaint_doc = draft("Complaint", "plaintiff", prompts.complaint_task(court, facts, p_text), p_auth)
     else:
-        complaint_doc = check(complaint.strip(), None)
+        complaint_doc = check("Complaint", "plaintiff", complaint.strip(), None)
         run.documents.append(Document("Complaint", "plaintiff", complaint_doc.text, False,
                                       complaint_doc.checks, complaint_doc.unchecked))
     complaint = complaint_doc.text

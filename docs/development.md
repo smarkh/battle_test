@@ -73,6 +73,9 @@ Useful options:
 
 - `--repeats 3` runs each case three times and adds a total row.
 - `--model NAME` uses one model for both roles.
+- `--checker NAME` checks what each citation is cited for with that model
+  (the "does it say that?" check). `config.tunnel.toml` already sets the
+  server's 14B.
 - `--config config.tunnel.toml` runs the models on the server while the
   search stays on the laptop. It is faster, and the laptop needs little
   memory, which matters for `--repeats 3`: a long full run on the laptop's

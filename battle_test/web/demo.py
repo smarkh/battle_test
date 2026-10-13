@@ -23,6 +23,8 @@ class DemoClient:
              on_token: Callable[[str], None] | None = None, json_mode: bool = False,
              on_usage=None) -> str:  # canned text uses no tokens, so there's nothing to report
         if json_mode:
+            if '"verdict"' in user:  # the "does it say that?" check, when the config has a checker
+                return json.dumps({"verdict": "partly", "reason": "Demo verdict: no model read the section."})
             if '"queries"' in user:
                 return json.dumps({"queries": ["breach of contract damages", "limitation of actions contract"]})
             return json.dumps({"selected": [1, 2, 3]})

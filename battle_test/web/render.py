@@ -52,12 +52,20 @@ def document_html(doc: dict) -> Markup:
     return Markup(html)
 
 
-def check_summary(doc: dict) -> dict:
+def support_checked(result: dict) -> bool:
+    """Whether the "does it say that?" check ran. Results saved before it
+    existed have no checker model."""
+    return bool(result.get("checker_model"))
+
+
+def check_summary(doc: dict, checked: bool = False) -> dict:
+    """`checked`: the "does it say that?" check ran on this case."""
     counts = Counter(c["status"] for c in doc["checks"])
     return {
         "verified": counts[grounding.VERIFIED],
         "unseen": counts[grounding.IN_FORCE_NOT_PROVIDED],
         "problems": sum(counts[s] for s in grounding.PROBLEM_STATUSES),
+        "doubted": sum(c.get("support") in grounding.DOUBTED for c in doc["checks"]) if checked else "–",
         "ambiguous": counts[grounding.AMBIGUOUS],
         "unchecked": len(doc["unchecked"]),
         "placeholders": sum(1 for m in _PLACEHOLDER.finditer(doc["text"]) if m.group().startswith("[CITATION")),
@@ -66,11 +74,16 @@ def check_summary(doc: dict) -> dict:
 
 def notable_checks(doc: dict) -> list[dict]:
     """Citations needing attention, for the list under the summary table."""
-    return [
-        {"css": STATUS_LABELS[c["status"]][0], "label": STATUS_LABELS[c["status"]][1], "text": c["text"],
-         "matched": (c.get("section") or {}).get("citation")}
-        for c in doc["checks"] if c["status"] != grounding.VERIFIED
-    ]
+    notable = []
+    for c in doc["checks"]:
+        if c["status"] != grounding.VERIFIED:
+            notable.append({"css": STATUS_LABELS[c["status"]][0], "label": STATUS_LABELS[c["status"]][1],
+                            "text": c["text"], "matched": (c.get("section") or {}).get("citation"), "reason": ""})
+        if c.get("support") in grounding.DOUBTED:
+            notable.append({"css": "warn", "label": f"⚠ {grounding.SUPPORT_LABELS[c['support']]}",
+                            "text": c["text"], "matched": None,
+                            "reason": c.get("support_reason") or "none given"})
+    return notable
 
 
 def authorities(result: dict) -> list[dict]:

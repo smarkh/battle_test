@@ -46,6 +46,11 @@ class Config:
     bedrock_profile: str = ""  # an AWS profile name. "" = boto3's default credentials.
     max_tokens: int = 16000  # the most a Bedrock model may write in one reply
     bedrock_models: dict[str, BedrockModel] = field(default_factory=dict)
+    # The model that checks whether each cited section says what the draft
+    # cites it for (plan step 3a). "" = that check doesn't run. It should be
+    # at least as strong as the drafting models: a small model judging its
+    # own citations isn't reliable.
+    checker_model: str = ""
 
     def cost(self, usage: dict[str, dict[str, int]]) -> float | None:
         """Estimated US dollars for a run's token usage (model -> counts), or
@@ -96,6 +101,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
                                m.get("max_tokens"), m.get("temperature", True))
             for name, m in bedrock.get("models", {}).items()
         },
+        checker_model=raw["models"].get("checker", ""),
     )
 
 

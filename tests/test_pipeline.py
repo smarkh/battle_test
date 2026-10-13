@@ -62,6 +62,8 @@ class FakeClient:
             on_usage(Usage(model, *self.usage))
         self.calls.append({"model": model, "system": system, "user": user, "json": json_mode})
         if json_mode:
+            if '"verdict"' in user:  # asked only when the config has a checker model
+                return json.dumps({"verdict": "does_not_support", "reason": "It is about something else."})
             if '"queries"' in user:
                 return json.dumps({"queries": ["action upon instrument in writing"]})
             return json.dumps({"selected": [2]})  # LIMITS; the summary judgment rule is supplied anyway
@@ -246,6 +248,42 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("Text of Utah Code § 78B-2-309.", section)
         self.assertIn("has not been checked", section)
         self.assertNotIn("Utah R. Civ. P. 56", section)
+
+    def test_checker_model_judges_what_each_citation_is_cited_for(self):
+        cfg = dataclasses.replace(CFG, checker_model="c-model")
+        drafts = ["Venue is proper under Utah Code § 78B-2-309.", "no citations here"]
+        client = FakeClient(drafts)
+        stages = []
+        run = run_case(cfg, client, FakeLaw(), "UT", facts="f", rounds=1,
+                       on_stage=lambda title, role: stages.append(title))
+
+        (asked,) = [c for c in client.calls if c["model"] == "c-model"]
+        self.assertTrue(asked["json"])
+        self.assertIn("Text of Utah Code § 78B-2-309.", asked["user"])
+        self.assertIn("Venue is proper under Utah Code § 78B-2-309.", asked["user"])
+        self.assertIn("take no side", asked["system"])
+        self.assertEqual(stages[2:4], ["Complaint", "Checking citations: Complaint"])
+
+        complaint = run.documents[0]
+        self.assertEqual(complaint.checks[0].support, grounding.DOES_NOT_SUPPORT)
+        self.assertEqual(complaint.text, "Venue is proper under Utah Code § 78B-2-309 [⚠ MAY NOT SUPPORT THIS].")
+        self.assertIn("78B-2-309 [⚠ MAY NOT SUPPORT THIS]", client.drafting_calls()[1]["user"])  # the motion sees it
+
+        md = render_markdown(run, datetime(2026, 10, 12))
+        self.assertIn("- **Citation checker model:** `c-model`", md)
+        self.assertIn("A model also compared each one with the passage citing it", md)
+        self.assertIn("| Complaint | 1 | 0 | 0 | 1 |", md)
+        self.assertIn("- ⚠ may not support what it's cited for: `Utah Code § 78B-2-309`. "
+                      "Checker's note: It is about something else.", md)
+
+    def test_without_a_checker_model_nothing_is_judged(self):
+        client = FakeClient(["Venue is proper under Utah Code § 78B-2-309."])
+        run = self.run_case(client, facts="f", rounds=1)
+        self.assertFalse(any('"verdict"' in c["user"] for c in client.calls))
+        self.assertIsNone(run.documents[0].checks[0].support)
+        md = render_markdown(run, datetime(2026, 10, 12))
+        self.assertIn("| Complaint | 1 | 0 | 0 | – |", md)
+        self.assertIn("not for whether they say what the brief claims", md)
 
     def test_no_possible_references_when_everything_given_is_cited(self):
         drafts = ["Under Utah Code § 78B-2-309.", "See Utah R. Civ. P. 56."]

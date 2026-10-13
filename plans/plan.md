@@ -102,7 +102,11 @@ guardrails-style network isolation and data handling).
     is ~87–94%, and break-even is ~8 subscribers before marketing. Price,
     acquisition cost and churn matter far more than model cost. Product
     quality and the listed prerequisites come before charging anyone.
-  - 3a (the "does it say that?" check), which needs a bigger model.
+  - 3a (the "does it say that?" check): **built 2026-10-12**, and on
+    only in `config.tunnel.toml`. On the server's 14B it catches nearly
+    all the wrong law and also doubts most good citations. It needs a
+    bigger model, and a decision on what to do with its "partly"
+    verdicts. See 3a.
   - Step 4 (case law via CourtListener).
 - **Waiting on the lawyer:**
   - a review of the three expected-authority lists
@@ -552,6 +556,89 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
        judging its own citations isn't reliable, so build and evaluate
        this on the server.
      - The text comes from the local index, so this stays fully local.
+   - **3a: built 2026-10-12, off unless a checker model is set.**
+     - **How it works:** `[models] checker` names the model. For every
+       ✅ or ☑ citation it reads the paragraph citing it beside the
+       first 3,000 characters of the section, and answers *supports*,
+       *partly* or *does not support* with one sentence of reasoning.
+       - The paragraph, not the sentence: the periods in "Utah Code
+         Ann." and "R. Civ. P." make sentences hard to find.
+       - *Partly* and *does not support* are marked inline
+         (`[⚠ MAY ONLY PARTLY SUPPORT THIS]`, `[⚠ MAY NOT SUPPORT
+         THIS]`) and listed in the citation check with the checker's
+         note. The citation stays in the draft.
+       - The next model to read the draft sees the marks, as it
+         already did for `[⚠ NOT FOUND]`.
+       - A citation alone on its line isn't judged, and at most 40 are
+         judged per document.
+       - It's in the Markdown, the results page, Word and PDF, and the
+         disclaimer changes when it ran. `evaluate --checker NAME`
+         turns it on for a run, and the summary lists every doubted
+         citation with the reason.
+     - **Where it's on:** `config.tunnel.toml` (the server's 14B). Off in
+       `config.toml` (the laptop has only the 7B), `config.server.toml`
+       (the live site) and `config.bedrock.toml`.
+     - **First run (2026-10-12):** 7B drafts, 14B checker, through the
+       tunnel, semantic search on, one run per case. Folder
+       `output/eval/20261012-205525-support-check-7b-drafts-14b-checker/`.
+
+       | | California | Texas | Utah | Total |
+       |---|---|---|---|---|
+       | Citations judged | 13 | 27 | 21 | 61 |
+       | *Does not support* | 2 | 6 | 2 | 10 |
+       | *Partly* | 9 | 15 | 16 | 40 |
+       | *Supports* | 2 | 6 | 3 | 11 |
+
+       - **It doubts 50 of 61 citations.** Much of that is deserved:
+         the 7B's drafts cite a theft statute for jurisdiction (Tex.
+         CPRC § 134.005), the statute of frauds and an interest
+         section for unjust enrichment (Tex. B&C § 26.01, Cal. Civ.
+         § 3287), a nuisance fee statute for contract fees (Utah
+         § 78B-6a-103), and sales-of-goods sections for construction
+         work.
+       - **Both off-topic citations the evaluation lists were doubted**
+         (Tex. B&C § 2.725, Utah § 70A-2-615).
+       - **It also doubts good citations for small reasons:** the
+         summary judgment rules ("the passage is a reply, not a
+         response"), Tex. B&C § 17.50 ("the section is broader"), Utah
+         § 78A-5-102.
+       - Core cited 6/16, off-topic 2, ❌ 0: the drafting is unchanged.
+       - **Time:** 2 minutes a case, against about 1. Part of it is the
+         server swapping the 7B and the 14B on one card.
+       - **Tokens:** 61 checker calls, 41,482 in and 3,273 out, so
+         about 14,000 in and 1,100 out a case. The Bedrock plan's
+         estimate was 15,000 and 1,500.
+     - **Checker-only benchmark, same drafts (2026-10-12).** The
+       citations of that run re-judged by the 14B, 51 in all, and
+       sorted by hand into 12 cited for what they're about and 29 that
+       are the wrong law for a construction contract.
+
+       | Prompt | Good citations doubted | Wrong law doubted | *Does not support* given |
+       |---|---|---|---|
+       | As built | 8 of 12 | 27 of 29 | 10, none of them on a good citation |
+       | Stricter about *partly* | 6 of 12 | 21 of 29 | 9, none on a good citation |
+
+       - **A *does not support* was right every time. *Partly* is where
+         the noise is.**
+       - **The stricter prompt was dropped.** It let through 8 wrong-law
+         citations to spare 2 good ones, which is the wrong trade for
+         "correct over complete".
+       - **Caveats:** the sorting is Claude's, from the section titles
+         and the checker's reasons, not a lawyer's and not from reading
+         every section in full. One run, and the checker's answers vary
+         a little between runs (temperature 0.4, the drafting setting).
+     - **Not done:**
+       - A stronger checker. The plan's estimate that this needs about
+         70B looks right: the 14B can't tell a nitpick from a real
+         problem. Waits on Bedrock.
+       - Anything about *partly*: marking only *does not support*
+         inline, or asking again before marking.
+       - Taking a doubted citation out of the draft, or moving it to
+         "Possible references".
+       - Using the check to trim "Possible references".
+       - The live site, a look at the page in a browser, and a run with
+         a pasted complaint.
+     - **Tested:** 9 new tests (252 in all).
    - **3b. Better selection of authorities (to evaluate).** In the first
      grounded Utah run, the model chose mostly UCC Article 2 (sales of
      goods) for a roof replacement, which is a construction/services
@@ -1720,9 +1807,13 @@ Next up, two tracks:
    AWS. The new per-query selection was evaluated on 2026-10-10 and
    so was semantic search: it finds more Texas law, but the briefs cite
    no more. PAUSED 2026-10-12: the direction is now correct references
-   over complete ones (plan.md, "Decisions made"), so 3a and a
-   "possible references" section come before finding more. Evaluate
-   through config.tunnel.toml. See "Changed 2026-10-09" and "Added 2026-10-10" below.
+   over complete ones (plan.md, "Decisions made"). Built that day: a
+   "Possible references" section in every output, and 3a, the "does it
+   say that?" check ([models] checker, on only in config.tunnel.toml,
+   `evaluate --checker NAME`). On the 14B the check catches nearly all
+   the wrong law but also doubts most good citations, so next is my
+   decision on its "partly" verdicts, and a stronger checker once
+   Bedrock works (plan.md, 3a). Evaluate through config.tunnel.toml. See "Changed 2026-10-09" and "Added 2026-10-10" below.
 2. The first real Bedrock runs (plans/aws-bedrock-plan.md, Phase 1 then
    Phase 2 step 2). The code is built and the laptop is set up, but AWS
    is BLOCKING Bedrock for my account, so no model has answered yet. It

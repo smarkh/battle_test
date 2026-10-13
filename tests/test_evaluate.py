@@ -152,6 +152,27 @@ class EvaluateTest(unittest.TestCase):
         self.assertIn("provisional", md)  # not lawyer-reviewed
         self.assertIn("- `Utah Code § 1-1-1`", md)  # listed under "other authorities"
 
+    def test_support_check_verdicts_are_scored_and_listed(self):
+        judged = lambda s, verdict, reason="": CitationCheck(  # noqa: E731
+            s.citation, grounding.VERIFIED, s, support=verdict, support_reason=reason)
+        run = self.run_with(Document("Motion", "plaintiff", "", True, checks=(
+            judged(SJ, grounding.SUPPORTS), judged(UCC, grounding.DOES_NOT_SUPPORT, "It covers goods."),
+            judged(UCC, grounding.PARTLY, "Overstated."), check(OTHER))))  # the last was never judged
+        run.checker_model = "c"
+        s = score(run, self.case)
+        self.assertEqual(s.may_not_support, (2, 3))
+        self.assertEqual(s.doubted_citations, ["Utah Code § 70A-2-715"])
+        md = render_summary([s], "test", {})
+        self.assertRegex(md, r"\| t \|.*\| 0 \| 2/3 \| 0 \|")
+        self.assertIn("- `Utah Code § 70A-2-715` (⚠ doubted by the checker)", md)
+        self.assertIn("- `Utah Code § 70A-2-715` in the Motion: does not support. It covers goods.", md)
+
+        # No checker: a dash, and nothing said about doubts.
+        plain = render_summary([score(self.run_with(Document("Motion", "plaintiff", "", True,
+                                                             checks=(check(UCC),))), self.case)], "test", {})
+        self.assertRegex(plain, r"\| t \|.*\| 0 \| – \| 0 \|")
+        self.assertIn("- `Utah Code § 70A-2-715`\n", plain)
+
     def test_validate_flags_missing_and_inactive_authorities(self):
         class Law:
             def lookup(self, citation):
