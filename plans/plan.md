@@ -1,3 +1,4 @@
+
 # Plan — Legal Adversarial Argument System (battle_test)
 
 Source: `../smark_iq/plans/ideation.md`, "Future Separate Projects" §B, revised
@@ -52,14 +53,43 @@ guardrails-style network isolation and data handling).
     opened on 2026-10-14. Planned runs once it lifts are in
     `plans/aws-bedrock-plan.md`.
   - **Agreed to pick up next, while the block lasts:**
-    1. Make the fit check consistent: set a section aside for both
-       sides when either side's check rejects it, and probably run the
-       checker at temperature 0. Then a 3-runs-per-case evaluation
-       through the tunnel, against
-       `output/eval/20261014-214207-fit-topic-14b-drafts-14b-checker/`.
+    1. ~~Make the fit check consistent.~~ **Done 2026-10-15** (not yet
+       deployed): one verdict per section for both sides, and the
+       checker at temperature 0. The conflicts are gone, and one
+       consistent wrong verdict remains (Tex. B&C § 2.725, 1 off-topic
+       citation in 9 runs). See "Consistent verdicts" in 3a.
     2. Get the checks ready for the live site: the local web UI on the
        server's 14B with both checks on and a throwaway account, so you
-       can look at a real results page. Then, if you're happy, set
+       can look at a real results page. **Set up 2026-10-15:**
+       `config.tunnel.toml` now drafts on the 14B and has a `[web]`
+       section (port 8001, the laptop's accounts). With the model tunnel
+       open, `.venv\Scripts\python -m battle_test.web --config
+       config.tunnel.toml`. The throwaway account is `checks-preview`
+       (disable it afterwards with `users disable checks-preview`).
+       Unlike the live site, semantic search is on there.
+       **First case looked at 2026-10-15** (the Utah sample facts, 2
+       rounds, about 2.5 minutes):
+       - The page works with both checks: the "may not support" column,
+         the checker's notes under "to look at", the held-back sections
+         under "Possible references", and 6 sections set aside (two
+         sale-of-goods sections, a nuisance fee statute, a lawyer
+         discipline rule among them).
+       - **Real catch:** the complaint cites the six-year limitations
+         statute (§ 78B-2-309) for venue, and it's marked inline.
+       - **Fixed:** the "Possible references" note said whether each
+         section applies "has not been checked". When the fit check
+         ran, it now says a model judged each one before drafting. In
+         the web page, the Markdown, Word and PDF.
+       - **For you to judge:** *unsure* sections are listed as possible
+         references even when they're clearly unrelated (here § 78B-6-706,
+         a two-year limitations period for a different part of the code).
+         The drafting is the model's, not the checks': the prayer asks
+         for the full $26,500 paid to the new roofer on top of the
+         $12,000 deposit.
+       - **`checker = "qwen2.5:14b"` set in `config.server.toml`
+         (2026-10-15),** with `checker_temperature = 0.0`. Not deployed
+         yet: the live site gets both checks at the next build and
+         restart. Then, if you're happy, set
        `checker` in `config.server.toml` and deploy (about a minute more
        per case on the server's GPU).
     3. Broaden the evaluation set beyond residential construction (an
@@ -635,7 +665,9 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
          citation with the reason.
      - **Where it's on:** `config.tunnel.toml` (the server's 14B). Off in
        `config.toml` (the laptop has only the 7B), `config.server.toml`
-       (the live site) and `config.bedrock.toml`.
+       (the live site) and `config.bedrock.toml`. *Since 2026-10-15 it's
+       set in `config.server.toml` and `config.bedrock.toml` too; the
+       live site gets it at the next deploy.*
      - **First run (2026-10-12):** 7B drafts, 14B checker, through the
        tunnel, semantic search on, one run per case. Folder
        `output/eval/20261012-205525-support-check-7b-drafts-14b-checker/`.
@@ -824,6 +856,68 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
            Bedrock.
        - **Tested:** 2 new tests (272 in all). The benchmark script was
          in the session's scratch folder, not the repo.
+     - **Consistent verdicts: built 2026-10-15.**
+       - **Which way the two leaks went** (from the 2026-10-14 run's
+         summary): Utah § 70A-2-718 was set aside by the plaintiff's
+         check, then kept by the defendant's and cited in the
+         opposition. Tex. B&C § 2.725 was kept by the plaintiff's check
+         and cited in the motion, and set aside by the defendant's only
+         afterwards.
+       - **One verdict for both sides:** a section either side's check
+         left out (*does not apply* or *unsure*) is left out for the
+         other side too, with the same verdict and note and no second
+         call. That covers the Utah pattern.
+       - **The reply drops what the defendant set aside:** a section the
+         plaintiff kept but the defendant's check set aside stays out of
+         the reply. The motion is already written by then, so the Texas
+         pattern is only partly covered.
+       - **The checker runs at temperature 0** (`[generation]
+         checker_temperature`, default 0), for both checks. It's set per
+         call, because in `config.tunnel.toml` the checker and the
+         drafting model are the same 14B, and the drafts stay at 0.4.
+         The evaluation summary shows the checker's temperature.
+       - **Tested:** 5 new tests (277 in all).
+       - **Full evaluation, same setup as 2026-10-14** (14B drafting and
+         checking, semantic search on, 3 runs per case, through the
+         tunnel). Folder
+         `output/eval/20261015-085541-fit-consistent-14b-drafts-14b-checker/`.
+
+         | 9 runs each | With the topic, 2026-10-14 | Consistent, 2026-10-15 |
+         |---|---|---|
+         | Core given to the models | 24/48 | 22/48 |
+         | Core cited | 22/48 | 21/48 |
+         | Useful cited | 11/27 | 9/27 |
+         | Cited authorities on the expected list | 34/45 (76%) | 30/40 (75%) |
+         | Off-topic cited | 2 | 1 |
+         | Sections set aside | 99 of 180 | 97 of 180 |
+         | *Does not support* verdicts | 2 | 2 |
+         | Citations the checker doubts | 47/90 | 52/91 |
+         | `[CITATION NEEDED]` placeholders | 55 | 28 |
+         | Model calls | 572 | 562 |
+
+         - **The side-to-side conflicts are gone:** 9 sections were set
+           aside for the defendant on the plaintiff's verdict, with no
+           second call. No section the defendant's check set aside had
+           been cited by the plaintiff, so the reply filter didn't come
+           into play.
+         - **The one off-topic citation is a consistent wrong verdict,
+           not a conflict:** Tex. B&C § 2.725 (limitations for sales of
+           goods), kept by the plaintiff's check and cited twice in one
+           complaint. The defendant's side never selected it. The topic
+           hint added on 2026-10-14 ("a search for … statute of
+           limitations found this section", and "any part applies")
+           probably makes the 14B accept it. The "does it say that?"
+           check didn't doubt it either.
+         - **Utah § 78A-5-102 cited 3 of 3, § 15-1-1 given 3 of 3** (not
+           cited): the 2026-10-14 fix holds at temperature 0.
+         - **Everything else is within the noise** of 9 runs. The
+           placeholder count halved, but one run can swing it by 17.
+         - **What's left for the fit check** is the 14B's judgement, which
+           consistency can't fix: a stronger checker (Bedrock), or a rule
+           in code that sets aside UCC Article 2 sections when the case
+           is about services. The second would be overfitting to the
+           three sample cases unless the broader evaluation set (item 3)
+           shows the same thing.
    - **3b. Better selection of authorities (to evaluate).** In the first
      grounded Utah run, the model chose mostly UCC Article 2 (sales of
      goods) for a roof replacement, which is a construction/services

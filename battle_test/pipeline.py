@@ -25,6 +25,7 @@ class ChatClient(Protocol):
         on_token: Callable[[str], None] | None = None,
         json_mode: bool = False,
         on_usage: Callable[[Usage], None] | None = None,
+        temperature: float | None = None,  # None = the client's own
     ) -> str: ...
 
 
@@ -112,6 +113,14 @@ def run_case(
         model, system = roles[role]
         return lambda task: client.chat(model, system, task, json_mode=True, on_usage=record)
 
+    def ask_checker(task: str) -> str:
+        return client.chat(cfg.checker_model, prompts.SUPPORT_SYSTEM, task, json_mode=True, on_usage=record,
+                           temperature=cfg.checker_temperature)
+
+    # The fit check's verdicts so far, by citation, from either side. A
+    # section one side's check left out is left out for the other side too.
+    set_aside: dict[str, FitCheck] = {}
+
     def gather_authorities(role: str, research_task: str, materials_title: str,
                            materials: str) -> list[LawSection]:
         stage("Legal research", role)
@@ -133,21 +142,22 @@ def run_case(
         topic_of = {s.citation: topic for topic, s in picked}
 
         def fits(section: LawSection) -> tuple[str, str] | None:
+            earlier = set_aside.get(section.citation)
+            if earlier:
+                return earlier.verdict, earlier.reason
             task = prompts.fit_task(state, materials_title, materials, section.citation, section.section_title,
                                     grounding.excerpt(section.text, grounding.SUPPORT_EXCERPT_CHARS),
                                     topic_of.get(section.citation))
-            return grounding.parse_verdict(
-                client.chat(cfg.checker_model, prompts.SUPPORT_SYSTEM, task, json_mode=True, on_usage=record),
-                grounding.FIT_VERDICTS)
+            return grounding.parse_verdict(ask_checker(task), grounding.FIT_VERDICTS)
 
         selected, run.fit[role] = grounding.fit_filter(fits, selected)
+        set_aside.update({c.section.citation: c for c in run.fit[role] if not c.kept})
         return selected
 
     def judge(passage: str, section: LawSection) -> tuple[str, str] | None:
         task = prompts.support_task(section.citation, section.section_title,
                                     grounding.excerpt(section.text, grounding.SUPPORT_EXCERPT_CHARS), passage)
-        return grounding.parse_verdict(
-            client.chat(cfg.checker_model, prompts.SUPPORT_SYSTEM, task, json_mode=True, on_usage=record))
+        return grounding.parse_verdict(ask_checker(task))
 
     def check(title: str, role: str, text: str, provided: list[LawSection] | None) -> CheckedText:
         cites = None if provided is None else {s.citation for s in provided}
@@ -199,6 +209,9 @@ def run_case(
     )
 
     if rounds == 2:
+        # The motion is already written, but a section the defendant's check
+        # set aside after the plaintiff's kept it stays out of the reply.
+        p_auth = [s for s in p_auth if s.citation not in set_aside]
         r_auth = grounding.merge(sj_rule, grounding.cited_sections(opposition_doc)[:MAX_OTHER_SIDE_CITED],
                                  p_auth, limit=MAX_COMBINED_AUTHORITIES)
         draft(

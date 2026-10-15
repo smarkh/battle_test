@@ -34,12 +34,14 @@ class OllamaClient:
         on_token: Callable[[str], None] | None = None,
         json_mode: bool = False,
         on_usage: Callable[[Usage], None] | None = None,
+        temperature: float | None = None,
     ) -> str:
         """Send one system+user exchange and return the full reply.
 
         Streams the response so long drafts show progress via on_token.
         json_mode constrains the reply to valid JSON. on_usage is told the
-        token counts Ollama reports.
+        token counts Ollama reports. temperature overrides the client's for
+        this call.
         """
         body = {
             "model": model,
@@ -48,7 +50,8 @@ class OllamaClient:
                 {"role": "user", "content": user},
             ],
             "stream": True,
-            "options": {"num_ctx": self.num_ctx, "temperature": self.temperature},
+            "options": {"num_ctx": self.num_ctx,
+                        "temperature": self.temperature if temperature is None else temperature},
         }
         if json_mode:
             body["format"] = "json"

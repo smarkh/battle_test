@@ -16,13 +16,12 @@ keep_alive = "30s"
 
 [models]
 provider = "ollama"
-# The laptop's model, so results compare with the laptop's. The server also has
-# qwen2.5:14b (`--model qwen2.5:14b`).
-plaintiff = "qwen2.5:7b"
-defendant = "qwen2.5:7b"
+# The live site's model. The server also has qwen2.5:7b (`--model qwen2.5:7b`).
+plaintiff = "qwen2.5:14b"
+defendant = "qwen2.5:14b"
 # Checks whether each cited section says what the draft cites it for
-# (plans/plan.md, 3a). The server's larger model: a 7B judging its own
-# citations isn't reliable. Leave it out to skip the check. It's also asked,
+# (plans/plan.md, 3a). A 7B judging its own citations isn't reliable, so
+# this is the 14B. Leave it out to skip the check. It's also asked,
 # before drafting, whether each selected section fits the case at all
 # (`fit_check = false` under [pipeline] turns that part off).
 checker = "qwen2.5:14b"
@@ -30,6 +29,9 @@ checker = "qwen2.5:14b"
 [generation]
 num_ctx = 12288
 temperature = 0.4
+# The checker's temperature, for both checks: 0 gives the same section the
+# same verdict every time it's asked (the default, if left out).
+checker_temperature = 0.0
 
 [pipeline]
 rounds = 2
@@ -50,3 +52,23 @@ document_types = ["statutes", "constitutions", "court_rules"]
 semantic = true
 embedding_model = "nomic-embed-text"
 embedding_url = "http://127.0.0.1:11434"
+
+[web]
+# The web UI on the laptop with the server's models, to see what the checks
+# look like on a results page before turning them on for the live site:
+#   .venv\Scripts\python -m battle_test.web --config config.tunnel.toml
+# The laptop's own accounts (same data_dir as config.toml). Port 8001, since
+# 8000 is the server tunnel's (plans/plan.md, mode B). Local only.
+host = "127.0.0.1"
+port = 8001
+data_dir = "cases/web"
+secure_cookies = false
+behind_proxy = false
+retention_days = 90
+max_active_cases = 3
+
+[plans]
+default = "unlimited"
+
+[plans.unlimited]
+label = "Unlimited"

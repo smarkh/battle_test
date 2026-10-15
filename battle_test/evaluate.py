@@ -491,8 +491,8 @@ def main(argv: list[str] | None = None) -> int:
             "provider": cfg.provider,
             "plaintiff model": cfg.plaintiff_model,
             "defendant model": cfg.defendant_model,
-            "citation checker model": (f"{cfg.checker_model} ({cfg.provider_of(cfg.checker_model)})"
-                                       if cfg.checker_model else "none"),
+            "citation checker model": (f"{cfg.checker_model} ({cfg.provider_of(cfg.checker_model)}, "
+                                       f"temperature {cfg.checker_temperature:g})" if cfg.checker_model else "none"),
             "fit check before drafting": "on" if cfg.checker_model and cfg.fit_check else "off",
             "rounds": str(args.rounds or cfg.rounds),
             "search": f"keyword + semantic ({search_cfg.embedding_model})" if search_cfg.semantic else "keyword",

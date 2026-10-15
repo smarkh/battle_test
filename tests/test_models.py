@@ -67,7 +67,13 @@ class BedrockClientTest(unittest.TestCase):
     def test_per_model_limit_and_no_temperature(self):
         runtime = FakeRuntime()
         client(runtime).chat("claude", "s", "u")
-        self.assertEqual(runtime.requests[0]["inferenceConfig"], {"maxTokens": 8000})
+        client(runtime).chat("claude", "s", "u", temperature=0.0)  # still none for a model that takes none
+        self.assertEqual([r["inferenceConfig"] for r in runtime.requests], [{"maxTokens": 8000}] * 2)
+
+    def test_a_call_can_set_its_own_temperature(self):
+        runtime = FakeRuntime()
+        client(runtime).chat("cheap", "s", "u", temperature=0.0)
+        self.assertEqual(runtime.requests[0]["inferenceConfig"], {"maxTokens": 16000, "temperature": 0.0})
 
     def test_a_name_not_in_the_table_is_used_as_the_id(self):
         runtime = FakeRuntime()
@@ -252,6 +258,16 @@ class ProviderConfigTest(unittest.TestCase):
         # Naming the drafting provider is the same as leaving it out.
         same = self._load('checker_provider = "ollama"\nchecker = "m"', ollama)
         self.assertFalse(same.split_providers)
+
+    def test_checker_temperature_defaults_to_zero(self):
+        ollama = '[ollama]\nurl = "http://o"\n'
+        self.assertEqual(self._load('checker = "m"', ollama).checker_temperature, 0.0)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "c.toml"
+            path.write_text('[models]\nplaintiff = "m"\ndefendant = "m"\nchecker = "m"\n'
+                            '[generation]\ntemperature = 0.4\nchecker_temperature = 0.2\n'
+                            '[pipeline]\nrounds = 1\noutput_dir = "o"\n' + ollama, encoding="utf-8")
+            self.assertEqual(load_config(path).checker_temperature, 0.2)
 
     def _load(self, models: str, extra: str = ""):
         with tempfile.TemporaryDirectory() as tmp:

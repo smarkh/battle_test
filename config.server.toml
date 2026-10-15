@@ -20,14 +20,19 @@ provider = "ollama"
 # 12k context), then compare ~30B options with the evaluation.
 plaintiff = "qwen2.5:14b"
 defendant = "qwen2.5:14b"
-# A model that checks whether each cited section says what the draft cites it
-# for (plans/plan.md, 3a). Off on the live site until it's been decided:
-# on 2026-10-12 the 14B flagged most citations, right and wrong.
-# checker = "qwen2.5:14b"
+# Checks, before drafting, whether each selected section fits the case, and
+# afterwards whether each cited section says what the draft cites it for
+# (plans/plan.md, 3a). On since 2026-10-15, after a look at a results page:
+# about a minute more per case. Only "does not support" is marked inline.
+# Leave it out to turn both checks off.
+checker = "qwen2.5:14b"
 
 [generation]
 num_ctx = 12288
 temperature = 0.4
+# The checker's temperature, for both checks: 0 gives the same section the
+# same verdict every time it's asked (the default, if left out).
+checker_temperature = 0.0
 
 [pipeline]
 rounds = 2

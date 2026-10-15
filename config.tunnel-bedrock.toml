@@ -30,6 +30,9 @@ checker = "qwen3-235b"
 [generation]
 num_ctx = 12288
 temperature = 0.4
+# The checker's temperature, for both checks: 0 gives the same section the
+# same verdict every time it's asked (the default, if left out).
+checker_temperature = 0.0
 
 [pipeline]
 rounds = 2

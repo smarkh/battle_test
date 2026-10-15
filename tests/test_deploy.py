@@ -154,8 +154,10 @@ class KeepAliveTest(unittest.TestCase):
         with mock.patch("urllib.request.urlopen", fake_urlopen):
             OllamaClient("http://x", 5, 100, 0.0, keep_alive="30s").chat("m", "s", "u")
             OllamaClient("http://x", 5, 100, 0.0).chat("m", "s", "u")
+            OllamaClient("http://x", 5, 100, 0.4).chat("m", "s", "u", temperature=0.0)
         self.assertEqual(sent[0]["keep_alive"], "30s")
         self.assertNotIn("keep_alive", sent[1])
+        self.assertEqual(sent[2]["options"]["temperature"], 0.0)  # a call can set its own
 
 
 @unittest.skipIf(TestClient is None, "web dependencies not installed")

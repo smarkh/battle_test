@@ -32,12 +32,18 @@ def disclaimer(support_checked: bool = False) -> str:
 
 DISCLAIMER = disclaimer()
 
-POSSIBLE_REFERENCES_NOTE = (
-    "Sections the research found and picked as relevant, which no draft went "
-    "on to cite. Each one exists and is in force in the law index. Whether it "
-    "applies to this case has not been checked, and some will not: these are "
-    "for the attorney to consider, not conclusions."
-)
+def possible_references_note(fit_checked: bool) -> str:
+    """The note above "Possible references". `fit_checked`: the fit check
+    ran on this case, so a model has judged whether each section fits."""
+    applies = (
+        "Before drafting, a model judged whether each fits this kind of case: "
+        "those it wasn't sure of are marked, and it can be wrong about the rest."
+        if fit_checked else
+        "Whether it applies to this case has not been checked, and some will not."
+    )
+    return ("Sections the research found and picked as relevant, which no draft went "
+            f"on to cite. Each one exists and is in force in the law index. {applies} "
+            "These are for the attorney to consider, not conclusions.")
 # Enough to see what a section is about. The source link has the rest.
 POSSIBLE_EXCERPT_CHARS = 300
 # The fit check's two outcomes for a section it kept out of the drafts.
@@ -159,7 +165,7 @@ def _possible_references(run: CaseRun) -> list[str]:
         return []
     given = {s.citation for doc in run.documents for s in doc.authorities}
     why = {c.section.citation: c.reason for c in set_aside(run, grounding.UNSURE)}
-    lines = ["", "---", "", "## Possible references", "", f"*{POSSIBLE_REFERENCES_NOTE}*", ""]
+    lines = ["", "---", "", "## Possible references", "", f"*{possible_references_note(bool(run.fit))}*", ""]
     for s in possible:
         lines.append(f"- `{s.citation}` {s.section_title}{_source(s)}  \n"
                      f"  {grounding.excerpt(s.text, POSSIBLE_EXCERPT_CHARS, ' …')}")

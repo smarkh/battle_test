@@ -112,7 +112,7 @@ def blocks(result: dict, title: str, generated: str) -> list[Block]:
     possible = render.possible_references(result)
     if possible:
         out += [Block("pagebreak"), Block("heading", "Possible references"),
-                Block("note", report.POSSIBLE_REFERENCES_NOTE)]
+                Block("note", report.possible_references_note(bool(result.get("fit"))))]
         out.append(Block("bullets", items=tuple(
             (f"**{a['citation']}** {a['section_title']} — {a['excerpt']}"
              + (f" {report.HELD_BACK} Checker's note: {a['held_back']}" if a.get("held_back") else "")

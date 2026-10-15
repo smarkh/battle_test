@@ -54,17 +54,21 @@ class FakeClient:
 
     def __init__(self, drafts=None, usage=None, fit="applies"):
         self.usage = usage  # (input tokens, output tokens) reported for every call
-        self.fit = fit  # the checker's verdict on every selected section
+        # The checker's verdict on every selected section, or a list of
+        # verdicts, one per fit call in order.
+        self.fit = fit
         self.calls = []
         self.drafts = list(drafts or [])
 
-    def chat(self, model, system, user, on_token=None, json_mode=False, on_usage=None):
+    def chat(self, model, system, user, on_token=None, json_mode=False, on_usage=None, temperature=None):
         if on_usage and self.usage:
             on_usage(Usage(model, *self.usage))
-        self.calls.append({"model": model, "system": system, "user": user, "json": json_mode})
+        self.calls.append({"model": model, "system": system, "user": user, "json": json_mode,
+                           "temperature": temperature})
         if json_mode:
             if '"applies"' in user:  # the fit check, before drafting
-                return json.dumps({"verdict": self.fit, "reason": "Because."})
+                verdict = self.fit.pop(0) if isinstance(self.fit, list) else self.fit
+                return json.dumps({"verdict": verdict, "reason": "Because."})
             if '"verdict"' in user:  # asked only when the config has a checker model
                 return json.dumps({"verdict": "does_not_support", "reason": "It is about something else."})
             if '"queries"' in user:
@@ -320,6 +324,9 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("`Utah Code § 78B-2-309`", section)
         self.assertIn("Not given to the drafting models: the checker wasn't sure it applies to this case. "
                       "Checker's note: Because.", section)
+        # The note above the list says the fit check ran, not that nothing was checked.
+        self.assertIn("a model judged whether each fits this kind of case", section)
+        self.assertNotIn("has not been checked", section)
         self.assertNotIn("Set aside before drafting", md)
 
     def test_fit_check_keeps_a_section_when_the_reply_is_unusable_or_it_is_switched_off(self):
@@ -331,6 +338,36 @@ class PipelineTest(unittest.TestCase):
         off = run_case(dataclasses.replace(CFG, checker_model="c-model", fit_check=False), client, FakeLaw(),
                        "UT", facts="f", rounds=1)
         self.assertEqual((off.documents[0].authorities, off.fit), ((LIMITS,), {}))
+
+    def two_round_fit_run(self, verdicts):
+        client = FakeClient(fit=list(verdicts))
+        run = run_case(dataclasses.replace(CFG, checker_model="c-model", temperature=0.4), client, FakeLaw(),
+                       "UT", facts="the facts", rounds=2)
+        return run, [c for c in client.calls if '"applies"' in c["user"]]
+
+    def test_checker_calls_run_at_the_checker_temperature(self):
+        client = FakeClient(["Venue is proper under Utah Code § 78B-2-309."])
+        run_case(dataclasses.replace(CFG, checker_model="c-model", temperature=0.4), client, FakeLaw(), "UT",
+                 facts="f", rounds=1)
+        checker = [c for c in client.calls if c["model"] == "c-model"]
+        self.assertTrue(any('"applies"' in c["user"] for c in checker))           # the fit check
+        self.assertTrue(any('"supports"' in c["user"] for c in checker))          # "does it say that?"
+        self.assertEqual({c["temperature"] for c in checker}, {0.0})
+        self.assertEqual({c["temperature"] for c in client.calls if c["model"] != "c-model"}, {None})
+
+    def test_a_section_set_aside_for_the_plaintiff_is_set_aside_for_the_defendant_without_asking(self):
+        run, asked = self.two_round_fit_run(["does_not_apply", "applies"])
+        self.assertEqual(len(asked), 1)  # only the plaintiff's check asked
+        self.assertEqual([(c.verdict, c.reason) for c in run.fit["defendant"]], [("does_not_apply", "Because.")])
+        self.assertNotIn(LIMITS, run.documents[2].authorities)  # the opposition
+
+    def test_a_section_the_defendant_sets_aside_is_kept_out_of_the_reply(self):
+        run, asked = self.two_round_fit_run(["applies", "does_not_apply"])
+        self.assertEqual(len(asked), 2)  # a kept section is asked about again, for the other side
+        self.assertIn(LIMITS, run.documents[1].authorities)     # the motion came before the defendant's check
+        self.assertNotIn(LIMITS, run.documents[3].authorities)  # the reply
+        appendix = render_markdown(run, datetime(2026, 10, 15)).split("## Appendix")[1]
+        self.assertIn("Set aside before drafting", appendix)
 
     def test_without_a_checker_model_nothing_is_judged(self):
         client = FakeClient(["Venue is proper under Utah Code § 78B-2-309."])

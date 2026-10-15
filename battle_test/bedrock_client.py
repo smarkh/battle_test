@@ -104,7 +104,8 @@ class BedrockClient:
                 raise BedrockError(_explain(e)) from e
         return self._runtime
 
-    def _request(self, model: str, system: str, user: str, json_mode: bool) -> dict:
+    def _request(self, model: str, system: str, user: str, json_mode: bool,
+                 temperature: float | None = None) -> dict:
         settings = self.models.get(model)
         model_id = settings.id if settings else model  # a name not in the table is used as the ID itself
         if not model_id:
@@ -112,7 +113,7 @@ class BedrockClient:
                                "profile ID) from the Bedrock console into the config.")
         inference = {"maxTokens": (settings and settings.max_tokens) or self.max_tokens}
         if settings is None or settings.temperature:
-            inference["temperature"] = self.temperature
+            inference["temperature"] = self.temperature if temperature is None else temperature
         return {
             "modelId": model_id,
             "system": [{"text": system}],
@@ -128,14 +129,16 @@ class BedrockClient:
         on_token: Callable[[str], None] | None = None,
         json_mode: bool = False,
         on_usage: Callable[[Usage], None] | None = None,
+        temperature: float | None = None,
     ) -> str:
         """Send one system+user exchange and return the full reply.
 
         Streams, so long drafts show progress via on_token. Bedrock has no
         JSON mode, so json_mode only asks for JSON: the caller must cope
-        with a reply that isn't (grounding.py does).
+        with a reply that isn't (grounding.py does). temperature overrides
+        the client's for this call, unless the model takes none.
         """
-        request = self._request(model, system, user, json_mode)
+        request = self._request(model, system, user, json_mode, temperature)
         parts: list[str] = []
         stop_reason = ""
         try:

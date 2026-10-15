@@ -400,6 +400,49 @@ on your own hardware.
   for Bedrock model invocation on account 548108386131, with the
   checks above. Waiting for AWS's reply. When it comes: `aws sso login
   --profile battle-test`, then the $0.002 research-only check.
+- **Other region tried (2026-10-15): also blocked.** One AWS CLI
+  `converse` call to Qwen3 32B (on demand) in `us-east-1` returned the
+  same Error 002, so nothing was billed. The block covers the account,
+  not one region. Worth adding to the Support case if AWS asks.
+- **Anthropic use-case form submitted 2026-10-15** (for Claude Sonnet
+  5). `get-use-case-for-model-access` returns it: company smark_iq,
+  industry Legal, 1 user, use case "a legal adversarial system to test
+  legal complaints against theoretical responses". **It isn't the cause
+  of Error 002:** the block started on 2026-10-06, nine days earlier.
+- **Decided 2026-10-15: no Ollama Cloud stopgap.** Wait for Bedrock
+  rather than split testing across two providers, which could cause
+  problems later. The lookup below is kept for reference only. Its one
+  lasting finding: **gpt-oss 120B is on Bedrock on demand in
+  `us-west-2` (`openai.gpt-oss-120b-1:0`) and is very cheap**. Added
+  to the candidates in Phase 2 below.
+- **Stopgap while blocked: a bigger checker on Ollama Cloud (looked up
+  2026-10-15, not used).** The server's or laptop's Ollama passes
+  the call on to Ollama's servers, so no local GPU or disk is needed and
+  `evaluate --checker <cloud tag>` runs it with no code or config change.
+  Sample cases only.
+  - **Pricing** (ollama.com/pricing): plans are Free ($0, starter
+    credits, 1 request at a time), Pro ($20/month, $60 credits, 3 at a
+    time) and Max ($100/month). Use is billed per million tokens, at half
+    price outside 12:00–18:00 UTC on weekdays and all weekend. The page
+    doesn't say which models the Free plan covers.
+  - **Data:** "Prompt or response data is never logged or trained on."
+    Hosted mainly in the US, with partners held to zero data retention.
+  - **No Qwen3 235B or DeepSeek v3.2** (Ollama retired v3.2 in July
+    2026). Models also offered on demand on Bedrock in `us-west-2`, so a
+    result carries over:
+
+    | Model | Ollama $/M in / out | Checker cost, 9 runs (est.) |
+    |---|---|---|
+    | gpt-oss 120B | 0.15 / 0.60 | ~$0.07 |
+    | Nemotron 3 Super 120B | 0.015 / 0.60 | ~$0.02 |
+    | Mistral Large 3 (675B) | 0.50 / 1.50 | ~$0.20 |
+
+    Estimates use the 14B checker's ~36,000 in / 3,000 out a case;
+    allow 2–3× for longer output. Ollama-only options include DeepSeek
+    v4 Pro ($1.32 / $3.96, ~$0.55) and GLM 5.3 (~$0.57; on Bedrock only
+    through an inference profile).
+  - **Caveat:** a host can serve the same model with different settings
+    or quantisation, so a Bedrock run still confirms the result.
 - **Two providers in one run: built 2026-10-14, at no cost.** The
   server's 14B drafts through the tunnel and a Bedrock model is the
   checker (`config.tunnel-bedrock.toml`, `[models] checker_provider =
@@ -441,7 +484,8 @@ on your own hardware.
 ### Phase 2 — Code, then evaluate from the laptop (hybrid B)
 1. Build the code changes above, with tests.
 2. Run the evaluation set on candidate models from the laptop, e.g.
-   Qwen3 235B, Llama 3.3 70B, DeepSeek v3.2 and Claude Sonnet 5, with
+   Qwen3 235B, Llama 3.3 70B, DeepSeek v3.2, gpt-oss 120B and Claude
+   Sonnet 5, with
    `--label bedrock-<model>`.
    - It should cost a few dollars in total (3 cases × ~$0.01–0.28 per run
      × a few models).
@@ -466,6 +510,10 @@ has been made yet: the client was tested against a stand-in.
     Phase 0 were sized for production).
   - Compare **Qwen3 32B, Qwen3 235B, Llama 3.3 70B, DeepSeek v3.2 and
     Claude Sonnet 5**, with **3 runs per case**.
+  - **Added 2026-10-15: gpt-oss 120B** (`openai.gpt-oss-120b-1:0`, on
+    demand in `us-west-2`). It's the cheapest candidate (about $0.013 a
+    case with the check) and a 120B checker is the size the 3a notes
+    call for. Not yet in `config.bedrock.toml`.
   - Region `us-west-2`.
   - Where to embed for semantic search (server GPU or Bedrock) waits
     until that step.

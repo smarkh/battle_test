@@ -21,7 +21,8 @@ class DemoClient:
 
     def chat(self, model: str, system: str, user: str,
              on_token: Callable[[str], None] | None = None, json_mode: bool = False,
-             on_usage=None) -> str:  # canned text uses no tokens, so there's nothing to report
+             on_usage=None,  # canned text uses no tokens, so there's nothing to report
+             temperature=None) -> str:
         if json_mode:
             if '"verdict"' in user:  # the "does it say that?" check, when the config has a checker
                 return json.dumps({"verdict": "partly", "reason": "Demo verdict: no model read the section."})

@@ -60,6 +60,11 @@ class Config:
     # means the same provider as the drafting models.
     checker_provider: str = ""
     checker_timeout_seconds: int = 0  # 0 = timeout_seconds
+    # The checker's temperature, for both checks. 0 so the same section gets
+    # the same verdict each time it's asked about (at the drafting
+    # temperature, the fit check kept a section for one side and set it
+    # aside for the other in the same run).
+    checker_temperature: float = 0.0
 
     @property
     def split_providers(self) -> bool:
@@ -145,6 +150,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
         fit_check=raw["pipeline"].get("fit_check", True),
         checker_provider=checker_provider,
         checker_timeout_seconds=sections[checker_provider].get("timeout_seconds", 1800) if checker_provider else 0,
+        checker_temperature=raw["generation"].get("checker_temperature", 0.0),
     )
 
 

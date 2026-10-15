@@ -28,7 +28,7 @@ from battle_test.law_index import LawIndex
 from battle_test.models import make_client
 from battle_test.pipeline import ChatClient, run_case
 from battle_test.prompts import SUPPORTED_STATES
-from battle_test.report import HELD_BACK, POSSIBLE_REFERENCES_NOTE, SET_ASIDE_NOTE, render_markdown
+from battle_test.report import HELD_BACK, SET_ASIDE_NOTE, possible_references_note, render_markdown
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from battle_test.web import admin, export, extract, render
@@ -541,7 +541,7 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
         ]
         return page(request, "result.html", session, job=job, result=result, documents=documents,
                     authorities=render.authorities(result), possible=render.possible_references(result),
-                    possible_note=POSSIBLE_REFERENCES_NOTE, held_back=HELD_BACK,
+                    possible_note=possible_references_note(bool(result.get("fit"))), held_back=HELD_BACK,
                     set_aside=render.set_aside(result), set_aside_note=SET_ASIDE_NOTE,
                     support_checked=checked, nav_jobs=nav_jobs)
 

@@ -173,6 +173,14 @@ front of it. A section applies if any part of it covers the case.
 
 - The summary judgment rule, and the sections the other side cited, are
   never filtered.
+- **One verdict for both sides.** A section the plaintiff's check left
+  out is left out for the defendant too, without asking again. A section
+  the plaintiff kept is asked about again for the defendant, and if it's
+  left out then, it's kept out of the reply as well. The complaint and
+  motion are already written by that point.
+- The checker runs at `[generation] checker_temperature` (0 unless set),
+  for both checks, so the same question gets the same answer. The
+  drafts keep `temperature`.
 - An unusable reply keeps the section, so a failing checker can't empty
   every prompt.
 - `[pipeline] fit_check = false` turns this off and leaves the check
