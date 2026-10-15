@@ -4,6 +4,16 @@ For development and testing on your own machine. Commands are for
 PowerShell on Windows, run from the project folder. On macOS or Linux, use
 `.venv/bin/python` in place of `.venv\Scripts\python`.
 
+> **The dev laptop no longer runs a drafting model (2026-10-14).** Its
+> 4 GB GPU is too small for useful results, so `qwen2.5:7b` was removed
+> to free disk space. Real runs and evaluations use the server's models
+> through the SSH tunnel (`--config config.tunnel.toml`, see
+> [development.md](development.md)). The laptop keeps only
+> `nomic-embed-text`, which semantic search needs. Unit tests and
+> `--demo-model` need no model at all. Running with the default
+> `config.toml` now fails with "model not found" unless you pull
+> `qwen2.5:7b` again.
+
 ## First-time setup
 
 You need Python 3.11 or newer, [Ollama](https://ollama.com), and about
@@ -40,8 +50,9 @@ You need Python 3.11 or newer, [Ollama](https://ollama.com), and about
 
 ## Before each session
 
-- **Ollama is running.** It starts with Windows. `ollama list` should show
-  `qwen2.5:7b`.
+- **Only for a real model or semantic search:** Ollama is running, and
+  `ollama list` shows the model you need. On the dev laptop that's only
+  `nomic-embed-text` now (see the note at the top).
 - **The law index exists:** `data\law.sqlite`. If it's missing, repeat
   step 3 above.
 

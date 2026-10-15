@@ -82,8 +82,8 @@ guardrails-style network isolation and data handling).
     query" in 3b.
   - Web UI part 3: **complete (2026-10-14).** Upload with text
     extraction was built that day, and `.docx`/PDF export on 2026-10-05.
-    Not on the server yet: it needs the image rebuilt, since
-    `requirements.txt` gained `pypdf`.
+    **Live on the server since 2026-10-14** (commit `14339ed`, see
+    `plans/server-migration-plan.md`, Phase 6).
   - Server deployment (web UI part 4): **done, and live** (see
     `plans/server-migration-plan.md`). Still open:
     - your signed-in checks (cookie flags, live progress through
@@ -1974,18 +1974,34 @@ Next up:
 2. Quality with the local models, through config.tunnel.toml (see
    "Added 2026-10-12" below): the fit check wrongly drops two Utah
    sections every run, and it hasn't been run with the 7B drafting.
-3. Not on the live site yet: everything from 2026-10-12. Both checks are
-   off in config.server.toml. Before turning them on I want to look at
-   a real results page, which nobody has done in a browser.
+3. The code from 2026-10-12 is deployed (2026-10-14), but both checks
+   are OFF on the live site: config.server.toml sets no checker. Before
+   turning them on I want to look at a real results page, which nobody
+   has done in a browser. "Possible references" IS live.
 4. Other open work: Cloudflare Access, and the presentation for beta
    testers and prospective users (plan.md has a section; not scheduled).
-   Web UI part 3 is complete: upload with text extraction was built on
-   2026-10-14 (plan.md, step 5, "Part 3"). It's NOT on the server, and
-   deploying it means building the image on the laptop and copying it,
-   since requirements.txt gained pypdf.
+   Web UI part 3 is complete: upload with text extraction was built and
+   deployed on 2026-10-14 (plan.md, step 5, "Part 3"). Nobody has tried
+   a signed-in upload on the live site yet.
 
 Where things stand:
-- Built on this dev laptop (RTX 3050 Ti, 4 GB VRAM, Ollama with qwen2.5:7b):
+- The dev laptop is NOT a model machine any more (2026-10-14). Its C: drive
+  filled up (under 50 MB free), so I removed its qwen2.5:7b, its old local
+  copy of the smark_iq stack (containers, images and the open-webui
+  volume) and the tax-trainer image. Only nomic-embed-text is left in its
+  Ollama, for semantic search. Use config.tunnel.toml for anything that
+  needs a real model. The default config.toml now fails with "model not
+  found". Keep an eye on C: free space before builds and evaluations.
+  - Docker Desktop on the laptop is only for building the server's image
+    at deploy time. Its 14 GB disk image wasn't shrunk by diskpart's
+    compact, and Docker Desktop's "Clean / Purge data" didn't take effect,
+    so with Docker quit and WSL shut down, docker_data.vhdx was deleted
+    and Docker made a fresh one. Docker on the laptop is EMPTY: the next
+    deploy rebuilds the battle-test image from scratch (base image
+    download included). C: went from under 50 MB to about 18 GB free.
+  - I was going to take Ollama and Docker Desktop off Windows startup
+    myself (Task Manager, Startup apps). Ask me if I did.
+- Built on this dev laptop (RTX 3050 Ti, 4 GB VRAM):
   - Pipeline, local Open US Law index for UT/CA/TX/federal
     (data/law.sqlite), grounded research -> selection -> drafting, and
     code-level citation checking.
@@ -2066,7 +2082,8 @@ Where things stand:
   - The benchmark scripts were in the session's scratch folder and are
     not in the repo.
 - Added 2026-10-12 (plan.md, "Decisions made" and build step 3a). All
-  committed and pushed. NONE of it is on the server.
+  committed and pushed, and deployed on 2026-10-14, but the checks are
+  off on the server (no checker in config.server.toml).
   - "Possible references" section in the Markdown, results page, Word
     and PDF: sections the research picked that no draft cited, plus
     those the fit check wasn't sure of. Only real sections from the law
@@ -2140,7 +2157,7 @@ Where things stand:
 - Server (plans/server-migration-plan.md):
   - Live at https://battle.smarkiq.us in Docker on the smark_iq server,
     fully independent of smark_iq. Only the GPU is shared. 90 s per case
-    on qwen2.5:14b. On commit 9e43916 as of 2026-10-05.
+    on qwen2.5:14b. On commit 14339ed as of 2026-10-14.
   - Deploying: git pull over SSH. Then BUILD ON THE LAPTOP AND COPY THE
     IMAGE (docker compose build, docker save, scp to the server's home
     folder, docker load over SSH, docker compose up -d). Building over

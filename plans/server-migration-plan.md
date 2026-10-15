@@ -702,6 +702,22 @@ how to run it". That replaces the separate `deploy.md` planned here.
     - Until that's deployed: purge the cache in the Cloudflare
       dashboard (Caching → Configuration → Purge Everything, which also
       affects `llm.smarkiq.us`), or wait 4 hours, and hard-refresh.
+  - **Last done 2026-10-14:** commit `14339ed`, nine commits on from
+    `9e43916`. It brought complaint upload with text extraction, the
+    "Possible references" section, and the queue-position fix. Bedrock,
+    semantic search and both checks came too, but stay off:
+    `config.server.toml` sets no checker model and no `[search]`.
+    - Built on the laptop and copied (`requirements.txt` gained `numpy`,
+      `boto3` and `pypdf`): 654 MB image, a 155 MB file, the same image
+      ID (`f004bffc5f05`) on both machines.
+    - No case was queued or running, and no database change was needed.
+    - Checked afterwards: container healthy, `/healthz` 200 through
+      Cloudflare, signed-out pages redirect, HSTS and CSP present, the
+      live form has the upload field, `llm.smarkiq.us` unaffected. Both
+      copies of the image file were deleted.
+    - **Not checked:** a signed-in upload on the live site, since that
+      needs your account. Laptop Docker Desktop was off and had to be
+      started first.
   - Running jobs are interrupted by a restart, and the app marks them
     failed with a message, so update between runs.
   - (`&&` doesn't work in the server's PowerShell 5.1, so run the steps
