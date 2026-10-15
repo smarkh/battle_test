@@ -37,19 +37,40 @@ guardrails-style network isolation and data handling).
   submit. A reference the model isn't sure of is left out of the draft.
   The 3b work on finding more authorities is paused, and 3a (the "does
   it say that?" check) moves up. See "Decisions made".
-- **Where the 2026-10-12 session stopped:**
-  - Built and pushed that day: the "Possible references" section, the
-    3a check, and the fit check before drafting. None of it is on the
-    server.
-  - **Next is trying larger models on Bedrock,** as the checker first.
-    It waits on you: the AWS sign-in had expired, and whether the AWS
-    Support case is filed or answered isn't known.
-  - Offered and not yet answered: letting one run use two providers, so
-    the server's 14B can draft while a Bedrock model checks. It costs
-    nothing to build.
-  - Expect $5 to $8 for a full model comparison, up from about $4,
-    because the two checks add tokens. An estimate comes before each
-    paid run.
+- **Where the 2026-10-14 session stopped:**
+  - **Done that day:**
+    - The server came back from a Windows Update restart (see the
+      incident in `plans/server-migration-plan.md`).
+    - Complaint upload was built and deployed: commit `14339ed` is live.
+      Both checks are deployed but off.
+    - The laptop's disk was cleared: it no longer runs a drafting model.
+    - Two providers in one run (a Bedrock checker with the server
+      drafting), and a checker named in `config.bedrock.toml`.
+    - The fit check's Utah misses were fixed.
+  - **Bedrock is still blocked** (Error 002). A payment method didn't
+    help, and every account setting checks out. The AWS Support case was
+    opened on 2026-10-14. Planned runs once it lifts are in
+    `plans/aws-bedrock-plan.md`.
+  - **Agreed to pick up next, while the block lasts:**
+    1. Make the fit check consistent: set a section aside for both
+       sides when either side's check rejects it, and probably run the
+       checker at temperature 0. Then a 3-runs-per-case evaluation
+       through the tunnel, against
+       `output/eval/20261014-214207-fit-topic-14b-drafts-14b-checker/`.
+    2. Get the checks ready for the live site: the local web UI on the
+       server's 14B with both checks on and a throwaway account, so you
+       can look at a real results page. Then, if you're happy, set
+       `checker` in `config.server.toml` and deploy (about a minute more
+       per case on the server's GPU).
+    3. Broaden the evaluation set beyond residential construction (an
+       unpaid invoice, a lease, a consumer dispute), to show whether the
+       fit check is overfitted to its three cases.
+    4. Finish the presentation decks (below).
+    5. Then case law (build step 4, CourtListener). It needs your free
+       CourtListener API token.
+  - **Waiting on you:** AWS's reply, Cloudflare Access, a real complaint
+    upload on the live site, the lawyer, and taking Docker Desktop and
+    Ollama off Windows startup.
 - **Presentations: drafted 2026-10-14, not finished.** Two decks, one
   for beta testers and one for prospective users, as Claude slide
   artifacts. Bracketed placeholders wait on hosting, Cloudflare Access,
@@ -2060,7 +2081,7 @@ its Share › Export menu. Both are private until shared from that menu.
 ## Restart prompt
 
 Paste this into a new Claude Code session, opened in the `battle_test`
-folder, to pick up where the 2026-10-12 session left off:
+folder, to pick up where the 2026-10-14 session left off:
 
 ```
 We're continuing work on battle_test, the legal adversarial argument system.
@@ -2078,11 +2099,29 @@ lawyer, not a file to submit. A reference the model isn't sure of is left
 out. The 3b work on finding MORE law (semantic search, selection with
 both lists, the research prompt) is PAUSED.
 
-Next up:
-1. Larger models on Bedrock, which is what I asked about last. Still
-   BLOCKED on me: on 2026-10-12 the AWS sign-in had expired, and I
-   hadn't said whether the AWS Support case is filed or answered. Ask
-   me. Whether REAL case material may go to AWS is still the lawyer's
+Next up. We agreed on 2026-10-14 to start with A, then B, while Bedrock
+is blocked:
+A. Make the fit check consistent. In two of nine runs on 2026-10-14 it
+   kept a sale-of-goods section for one side and set it aside for the
+   other, and the drafts cited it. Set a section aside for both sides
+   when either side's check rejects it, and probably run the checker at
+   temperature 0. Evaluate through config.tunnel.toml with
+   `--model qwen2.5:14b --repeats 3`, against
+   output/eval/20261014-214207-fit-topic-14b-drafts-14b-checker/.
+B. Get the checks ready for the live site. Run the local web UI with
+   both checks on the server's 14B (a scratch config like
+   config.tunnel.toml, a throwaway account), so I can look at a real
+   results page in my browser. If I'm happy, set `checker` in
+   config.server.toml and deploy, after asking me.
+C. Broaden the evaluation set beyond residential construction (unpaid
+   invoice, lease, consumer dispute). Drafted by you, ideally reviewed by
+   the lawyer.
+D. Finish the presentation decks (item 4 below).
+E. Case law (build step 4, CourtListener). It needs my free API token.
+
+1. Larger models on Bedrock. BLOCKED by AWS (Error 002) until AWS
+   answers the Support case I opened on 2026-10-14. Ask me whether they
+   have. Whether REAL case material may go to AWS is still the lawyer's
    call, so Bedrock runs fictional cases only.
    - BUILT 2026-10-14: one run can use two providers.
      config.tunnel-bedrock.toml drafts with the server's 14B through the
@@ -2106,11 +2145,11 @@ Next up:
 2. Quality with the local models, through config.tunnel.toml (see
    "Added 2026-10-12" below): the fit check's two Utah misses were fixed
    on 2026-10-14, at the cost of a little more wrong law getting
-   through. It hasn't been run with the 7B drafting.
+   through (item A above). It hasn't been run with the 7B drafting.
 3. The code from 2026-10-12 is deployed (2026-10-14), but both checks
    are OFF on the live site: config.server.toml sets no checker. Before
-   turning them on I want to look at a real results page, which nobody
-   has done in a browser. "Possible references" IS live.
+   turning them on I want to look at a real results page (item B
+   above). "Possible references" IS live.
 4. Other open work: Cloudflare Access, and finishing the two
    presentation decks drafted on 2026-10-14, one for beta testers and
    one for prospective users (plan.md has a section with their links
