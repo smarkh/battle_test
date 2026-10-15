@@ -5,6 +5,12 @@
 </div>
 {% endif %}
 
+{% if notes %}
+<div class="notice" role="status">
+  <ul>{% for n in notes %}<li>{{ n }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
 {% if allowance.left == 0 %}
 <div class="errors" role="alert"><p>{{ allowance.used_up }}</p></div>
 {% elif allowance.left is not none %}
@@ -13,7 +19,7 @@
   ({% if allowance.pool %}shared by your firm's {{ allowance.seats }} seats{% else %}{{ allowance.plan.label }}{% endif %}).</p>
 {% endif %}
 
-<form method="post" action="/cases" class="case-form">
+<form method="post" action="/cases" class="case-form" enctype="multipart/form-data">
   <input type="hidden" name="csrf" value="{{ session.csrf_token }}">
   <fieldset>
     <legend>1. State</legend>
@@ -37,8 +43,8 @@
       <label class="mode-card"><input type="radio" name="mode" value="complaint" data-mode
         {% if form.get("mode") == "complaint" %}checked{% endif %}>
         <span class="mode-title">Use my complaint, draft only the motion</span>
-        <span class="mode-desc">Paste a complaint you've written. It's used as written (its citations are
-          still checked), and only the motion for summary judgment is drafted.</span></label>
+        <span class="mode-desc">Paste or upload a complaint you've written. It's used as written (its citations
+          are still checked), and only the motion for summary judgment is drafted.</span></label>
     </div>
     <p class="hint">Either way, the defendant's opposition follows, and in round 2 the plaintiff's reply.</p>
 
@@ -54,8 +60,15 @@
 
     <div class="mode-panel" data-panel="complaint">
       <label class="field">
-        <span>Your complaint</span>
-        <small>Paste the full text.</small>
+        <span>Upload it</span>
+        <small>A Word (.docx), PDF or text file, up to {{ max_upload_mb }} MB. Its text is shown below for you
+          to check before anything runs. The file itself isn't kept. Scanned PDFs can't be read yet.</small>
+        <input type="file" name="complaint_file" accept=".docx,.pdf,.txt">
+      </label>
+      <p class="hint">Then press "Start the run": with a file chosen, that shows you its text first.</p>
+      <label class="field">
+        <span>Or paste it</span>
+        <small>The full text.</small>
         <textarea name="complaint" rows="16">{{ form.get("complaint", "") }}</textarea>
       </label>
     </div>

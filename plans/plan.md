@@ -37,6 +37,19 @@ guardrails-style network isolation and data handling).
   submit. A reference the model isn't sure of is left out of the draft.
   The 3b work on finding more authorities is paused, and 3a (the "does
   it say that?" check) moves up. See "Decisions made".
+- **Where the 2026-10-12 session stopped:**
+  - Built and pushed that day: the "Possible references" section, the
+    3a check, and the fit check before drafting. None of it is on the
+    server.
+  - **Next is trying larger models on Bedrock,** as the checker first.
+    It waits on you: the AWS sign-in had expired, and whether the AWS
+    Support case is filed or answered isn't known.
+  - Offered and not yet answered: letting one run use two providers, so
+    the server's 14B can draft while a Bedrock model checks. It costs
+    nothing to build.
+  - Expect $5 to $8 for a full model comparison, up from about $4,
+    because the two checks add tokens. An estimate comes before each
+    paid run.
 - **To prepare, not scheduled:** a presentation for beta testers and
   prospective users. See "Presentation for beta testers and prospective
   users".
@@ -67,8 +80,10 @@ guardrails-style network isolation and data handling).
 
     See "Semantic search: pilot and build" and "Selection: one call per
     query" in 3b.
-  - Web UI part 3: upload with text extraction. (`.docx`/PDF export was
-    built 2026-10-05.)
+  - Web UI part 3: **complete (2026-10-14).** Upload with text
+    extraction was built that day, and `.docx`/PDF export on 2026-10-05.
+    Not on the server yet: it needs the image rebuilt, since
+    `requirements.txt` gained `pypdf`.
   - Server deployment (web UI part 4): **done, and live** (see
     `plans/server-migration-plan.md`). Still open:
     - your signed-in checks (cookie flags, live progress through
@@ -276,7 +291,15 @@ Work through these in order:
    `chrome://net-internals/#dns` → **Clear host cache**.
    `curl -4 https://battle.smarkiq.us/healthz` returning `{"status":"ok"}`
    means the site is up and the problem is local.
-3. **Check the server** over SSH: `docker ps` should show `battle-test`
+3. **If SSH to `smark-iq` times out and Tailscale shows it offline,** the
+   server has probably restarted for Windows Update and is waiting for a
+   sign-in (2026-10-14). Its event log says so (ID 1074). From home,
+   SSH still works on the local network:
+   `ssh -o HostKeyAlias=smark-iq smark@10.0.0.219` (the address may
+   change). Sign in to Windows through Chrome Remote Desktop to bring
+   Tailscale and Docker back. See the 2026-10-14 incident in
+   `plans/server-migration-plan.md`.
+4. **Check the server** over SSH: `docker ps` should show `battle-test`
    (healthy) and `battle-test-cloudflared`, and `docker logs
    battle-test-cloudflared` should show "Registered tunnel connection".
    The migration plan's Phase 6 has more.
@@ -1391,6 +1414,52 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
      complaint and the motion" (from case information) or "Use my
      complaint, draft only the motion" (paste). The case list shows which
      was used.
+   - **Part 3, upload with text extraction: built (2026-10-14).** In "Use
+     my complaint", a complaint can be uploaded as Word (`.docx`), PDF or
+     text, up to 10 MB, as well as pasted.
+     - **Decided: an upload never starts a run by itself.** The server
+       pulls the text out (`web/extract.py`) and puts it in the complaint
+       box, with a note asking the user to check it. Pressing "Start the
+       run" again starts the case, exactly as for a paste. No case is
+       created and no allowance used until then.
+       - Why: PDF extraction can go wrong, and the lawyer should see what
+         the models will read.
+       - **The file is never stored.** Only the text the user then
+         submits becomes the case's input, so deletion and retention are
+         unchanged.
+     - **Word:** paragraphs and tables in document order (captions are
+       often tables). Word's automatic paragraph numbers aren't part of
+       the text, so they're rebuilt from the document's numbering
+       definitions: a complaint's numbered paragraphs are referred to by
+       number. Restarts and unusual numbering are approximate.
+     - **PDF (`pypdf`, new in `requirements.txt`):** headers and footers
+       that repeat on half the pages or more are dropped (digits ignored,
+       so "Page 2" and "Page 3" match), as are page numbers and pleading
+       line numbers. Words split at a line end are mended, and lines the
+       page width broke are joined back into paragraphs.
+     - **Refused, with a message saying why:** other file types (an
+       older `.doc` is told to save as `.docx`), empty files, files over
+       10 MB, a `.docx` that would expand past 50 MB (a "zip bomb"), PDFs
+       over 200 pages, password-protected PDFs, and PDFs with no text.
+       **Scanned PDFs can't be read:** that needs OCR, which isn't built.
+     - **Checked:**
+       - 9 new tests (267 in all).
+       - A round trip on the real law index with the demo model: a case's
+         own Word and PDF downloads, uploaded back. The complaint was
+         found in both, about 83% the same as the original by text
+         similarity. Word came out nearly exact. The PDF joined a few
+         lines it shouldn't have, which is what the review step is for.
+       - In Chrome with the demo model, a scratch config and a throwaway
+         account: upload, the review note, the text in the box, then
+         start, progress and results ("user-supplied"), with no console
+         errors. Screenshots timed out, so it was checked through the
+         page structure, not by eye.
+     - **Not checked:** a real lawyer's complaint, and especially a real
+       filed PDF (pleading paper, captions, signature blocks). Worth
+       trying with the first beta tester's files.
+     - **Found on the way:** an empty file input arrives at the server as
+       an empty string, not a file, and upload temporary files have to be
+       closed by hand. Both handled.
 
 ## Model size estimate
 
@@ -1870,7 +1939,7 @@ beta testing is close.
 ## Restart prompt
 
 Paste this into a new Claude Code session, opened in the `battle_test`
-folder, to pick up where the 2026-10-10 session left off:
+folder, to pick up where the 2026-10-12 session left off:
 
 ```
 We're continuing work on battle_test, the legal adversarial argument system.
@@ -1882,29 +1951,38 @@ development). Then read plans/plan.md (especially "Status", build step 5,
 testing costs"), and plans/server-migration-plan.md. Then skim the code in
 battle_test/ (including battle_test/web/) and tests/.
 
-Next up, two tracks:
-1. Search and selection quality (plan.md, build step 3b), which needs no
-   AWS. The new per-query selection was evaluated on 2026-10-10 and
-   so was semantic search: it finds more Texas law, but the briefs cite
-   no more. PAUSED 2026-10-12: the direction is now correct references
-   over complete ones (plan.md, "Decisions made"). Built that day: a
-   "Possible references" section in every output, and 3a, the "does it
-   say that?" check ([models] checker, on only in config.tunnel.toml,
-   `evaluate --checker NAME`). On the 14B the check catches nearly all
-   the wrong law but also doubts most good citations, so next is my
-   decision on its "partly" verdicts, and a stronger checker once
-   Bedrock works (plan.md, 3a). Also built: a fit check before
-   drafting (the checker keeps sections that don't fit the case out of
-   the drafts; `evaluate --no-fit-check` to compare). It cut wrong-law
-   citations sharply on the 14B without losing right ones, but drops
-   Utah § 78A-5-102 and § 15-1-1 every run. Evaluate through
-   config.tunnel.toml. See "Changed 2026-10-09" and "Added 2026-10-10" below.
-2. The first real Bedrock runs (plans/aws-bedrock-plan.md, Phase 1 then
-   Phase 2 step 2). The code is built and the laptop is set up, but AWS
-   is BLOCKING Bedrock for my account, so no model has answered yet. It
-   waits on an AWS Support case, which is mine. Whether REAL case
-   material may go to AWS is still the lawyer's call, so Bedrock runs
-   fictional cases only.
+THE DIRECTION CHANGED on 2026-10-12: correct references over complete
+ones (plan.md, "Decisions made"). The output is a starting point for a
+lawyer, not a file to submit. A reference the model isn't sure of is left
+out. The 3b work on finding MORE law (semantic search, selection with
+both lists, the research prompt) is PAUSED.
+
+Next up:
+1. Larger models on Bedrock, which is what I asked about last. Still
+   BLOCKED on me: on 2026-10-12 the AWS sign-in had expired, and I
+   hadn't said whether the AWS Support case is filed or answered. Ask
+   me. Whether REAL case material may go to AWS is still the lawyer's
+   call, so Bedrock runs fictional cases only.
+   - You offered, and I haven't answered: a change so one run can use
+     two providers (the 14B on the server drafting, a Bedrock model as
+     the checker). Today one run uses one provider. It costs nothing to
+     build. Ask me whether to build it.
+   - Order once Bedrock works: the $0.002 research-only check, then a
+     stronger CHECKER with the 14B drafting, then a stronger drafter.
+     Expect $5 to $8 for a full comparison now that the two checks add
+     tokens. Give me an estimate before each paid run.
+2. Quality with the local models, through config.tunnel.toml (see
+   "Added 2026-10-12" below): the fit check wrongly drops two Utah
+   sections every run, and it hasn't been run with the 7B drafting.
+3. Not on the live site yet: everything from 2026-10-12. Both checks are
+   off in config.server.toml. Before turning them on I want to look at
+   a real results page, which nobody has done in a browser.
+4. Other open work: Cloudflare Access, and the presentation for beta
+   testers and prospective users (plan.md has a section; not scheduled).
+   Web UI part 3 is complete: upload with text extraction was built on
+   2026-10-14 (plan.md, step 5, "Part 3"). It's NOT on the server, and
+   deploying it means building the image on the laptop and copying it,
+   since requirements.txt gained pypdf.
 
 Where things stand:
 - Built on this dev laptop (RTX 3050 Ti, 4 GB VRAM, Ollama with qwen2.5:7b):
@@ -1987,6 +2065,48 @@ Where things stand:
   memory (Windows itself did on 2026-10-09). Use it for evaluations.
   - The benchmark scripts were in the session's scratch folder and are
     not in the repo.
+- Added 2026-10-12 (plan.md, "Decisions made" and build step 3a). All
+  committed and pushed. NONE of it is on the server.
+  - "Possible references" section in the Markdown, results page, Word
+    and PDF: sections the research picked that no draft cited, plus
+    those the fit check wasn't sure of. Only real sections from the law
+    index.
+  - [models] checker names a checker model. It's set ONLY in
+    config.tunnel.toml (the server's qwen2.5:14b). With it set, two
+    checks run:
+    - The FIT CHECK, before drafting: is each selected section the kind
+      of law a court would apply in this case? "applies" goes to the
+      drafting model, "unsure" goes to Possible references, "does not
+      apply" is listed in the appendix as set aside.
+      [pipeline] fit_check = false, or `evaluate --no-fit-check`, turns
+      it off.
+    - The "DOES IT SAY THAT?" check (3a), after each draft: does the
+      cited section support the paragraph citing it? Only "does not
+      support" is marked inline ([⚠ MAY NOT SUPPORT THIS]), which I
+      decided on 2026-10-12. "partly" is listed in the citation check
+      only. `evaluate --checker NAME` sets the checker for a run.
+  - Results on the 14B drafting and checking, 3 runs per case, fit check
+    off against on: cited authorities on the expected list 52% -> 79%,
+    off-topic cited 3 -> 0, core cited 17/48 -> 21/48 (within the
+    noise). The 14B drafting alone was no better than the 7B.
+  - Known problems:
+    - The fit check drops Utah § 78A-5-102 (core) and § 15-1-1 (useful)
+      every run, and sets aside 124 of 180 selected sections, so Utah
+      drafts are thin. One prompt change to fix it made things worse.
+    - On the 14B, "partly" is mostly quibbles about good citations.
+      "does not support" has been right every time so far.
+    - The "may not support" column counts "partly" too, so it can be
+      higher than the marks in the draft. You asked me about this and I
+      haven't answered.
+    - The right/wrong sorting behind these numbers is Claude's, not a
+      lawyer's, and the fit prompt is tuned on the three sample cases.
+  - Not done: a browser look at the new sections, a pasted-complaint
+    run, the 7B drafting with the fit check.
+  - The tunnel wasn't up when I said it was (nothing on port 11435), so
+    you opened it yourself in the background. If a tunnel run fails to
+    connect, check the port before anything else, and tell me.
+  - The benchmark scripts (checker-only and fit-check) were in the
+    session's scratch folder and are not in the repo.
 - Bedrock, 2026-10-06 (details in plans/aws-bedrock-plan.md, Phase 1):
   - AWS sign-in works: AWS CLI 2.37.10, profile battle-test (account
     548108386131, AdministratorAccess, us-west-2). ~/.aws/config was
@@ -2014,9 +2134,9 @@ Where things stand:
   Sonnet. One real local run used 34.8k input tokens for ONE round, so the
   plan's 39k-for-two-rounds estimate is low by roughly a fifth to a
   quarter.
-- 3b: search and selection are still the bottleneck (7B cites about 6 of
-  16 core authorities, 14B no better). Next 3b steps are semantic search
-  and better selection, then re-evaluating with stronger models.
+- 3b (finding more law) is PAUSED since 2026-10-12. For the record: the
+  case-specific law (California contractor licensing, the Texas RCLA) is
+  still almost never found, because the research queries are too vague.
 - Server (plans/server-migration-plan.md):
   - Live at https://battle.smarkiq.us in Docker on the smark_iq server,
     fully independent of smark_iq. Only the GPU is shared. 90 s per case
@@ -2052,7 +2172,7 @@ Where things stand:
 
 Before doing anything else:
 1. Run `python -m unittest` (use .venv/Scripts/python) and confirm all
-   tests pass (220 as of 2026-10-08).
+   tests pass (267 as of 2026-10-14).
 2. Check that data/law.sqlite exists. If it doesn't, rebuild it with
    `python -m battle_test.corpus build`.
 3. Check `git status` is clean, and that the latest commit is pushed to
@@ -2071,8 +2191,10 @@ Before doing anything else:
    Report the real token counts and cost against the estimates, then
    propose ONE single-case run (about a cent) and wait for me to confirm
    before anything bigger. If the block is still there, suggest what can
-   be done at no cost meanwhile (for example semantic search for 3b, or
-   web UI part 3: upload with text extraction).
+   be done at no cost meanwhile (for example the two-provider change, or
+   the fit check's Utah misses). On 2026-10-14 the block was still there
+   after a payment method was added (plans/aws-bedrock-plan.md, Phase
+   1): retry once, then the AWS Support case is mine to open.
 
 Working rules for this project:
 - Don't git commit or push. I handle all commits and pushes myself. When

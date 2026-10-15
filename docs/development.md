@@ -166,9 +166,10 @@ one placeholder, so every kind of highlight appears.
 The current priorities are in the "Status" section of `plans/plan.md`. In
 short:
 
-1. Hosted models on Amazon Bedrock (`plans/aws-bedrock-plan.md`).
-2. Better search (semantic search alongside keyword search) and better
-   selection of authorities.
-3. A check that each cited section says what the brief claims.
-4. Case law, through CourtListener.
-5. File upload and Word/PDF export in the web UI.
+1. Larger models on Amazon Bedrock (`plans/aws-bedrock-plan.md`), once
+   AWS lifts its block on the account. The checker first.
+2. Correct references over complete ones (decided 2026-10-12): the fit
+   check before drafting and the "does it say that?" check after. Finding
+   more law is paused.
+3. Case law, through CourtListener.
+4. Cloudflare Access, before any real users.

@@ -373,6 +373,13 @@ on your own hardware.
     Anthropic use-case form is still to submit.
   - The client now explains this error instead of suggesting a
     temperature setting.
+- **A payment method didn't lift it (2026-10-14).** No card had been on
+  the account. One was added as the root user (the Identity Center
+  sign-in can't open the billing pages). Straight afterwards, the
+  research-only check on Qwen3 32B still failed on its first call with
+  the same Error 002, so nothing was billed. Card verification may take
+  a while to reach Bedrock, so one retry later is worth it. If that
+  fails too, the AWS Support case is the next step.
 - **Found in the code, and fixed:** `evaluate --research-only` didn't
   record token usage, so on Bedrock it would have reported no tokens or
   cost. It now prints a "Model usage" line under the total, as full runs

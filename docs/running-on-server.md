@@ -242,6 +242,15 @@ Work through these in order:
    tunnel connection".
 4. **If the server doesn't answer over SSH,** it may have rebooted. Sign
    in through Chrome Remote Desktop.
+   - Windows Update restarts it on its own, often around midnight. Until
+     someone signs in, Docker Desktop doesn't start and Tailscale stays
+     at "starting", so both sites show Cloudflare error 530 and SSH to
+     `smark-iq` times out.
+   - From home, SSH still works on the local network, which is enough to
+     confirm it:
+     `ssh -o HostKeyAlias=smark-iq smark@10.0.0.219` (the router assigns
+     the address, so it may change). Event ID 1074 in the System log
+     says who restarted it and why.
 
 | Symptom | Likely cause |
 |---|---|

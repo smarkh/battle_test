@@ -190,7 +190,15 @@ python -m battle_test.web --demo-model    # canned drafts, no GPU needed
   state, choose what to draft, and choose 1 or 2 rounds:
   - **"Draft the complaint and the motion"**: fill in the case information.
   - **"Use my complaint, draft only the motion"**: paste a complaint you
-    wrote. It's used as written, and its citations are still checked.
+    wrote, or upload it as Word (`.docx`), PDF or text, up to 10 MB. It's
+    used as written, and its citations are still checked.
+    - An upload never starts a run by itself. Its text is pulled out on
+      the server (`web/extract.py`) and put in the complaint box for you
+      to check, because PDFs especially can come out with stray headers
+      or breaks. The file itself isn't kept.
+    - Scanned PDFs (pictures of pages) can't be read yet, and nor can
+      older `.doc` files or password-protected PDFs. Each gets a message
+      saying so.
 - **Progress:** runs go into a queue and execute one at a time (or
   several at once on Bedrock: `workers` in `[web]`). The page
   shows each stage live and streams the draft text. You can close it and

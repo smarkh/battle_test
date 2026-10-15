@@ -508,6 +508,39 @@ Found at the start of Phase 4.
   - Before Phase 4, and after any server work, check both stacks with
     `docker ps` and that `llm.smarkiq.us` answers.
 
+### Incident, 2026-10-14: offline after a Windows Update restart
+
+Found at the start of the 2026-10-14 session.
+- **What was seen:** `battle.smarkiq.us` and `llm.smarkiq.us` both
+  returned Cloudflare 530, SSH to `smark-iq` timed out, and Tailscale
+  showed the server offline, last seen about 00:35.
+- **Cause, from the server's event log (ID 1074):** Windows Update
+  restarted it at 00:29 and 00:34 ("Operating System: Upgrade
+  (Planned)"), and it came back up at 00:35.
+  - Nobody signed in afterwards: no desktop session.
+  - **Docker Desktop doesn't start until someone signs in,** so both
+    compose stacks and both tunnel connectors were down.
+  - **Tailscale was stuck at "Tailscale is starting. Please wait."** It
+    isn't set to run unattended, so it waits for a signed-in user too.
+- **How it was reached anyway:** the server was on the home network at
+  `10.0.0.219` (found by probing the laptop's network for SSH). SSH
+  worked there, checked against the known host key with
+  `ssh -o HostKeyAlias=smark-iq smark@10.0.0.219`. Only read-only checks
+  were made. The address comes from the router and may change.
+- **Fix:** sign in to Windows on the server (Chrome Remote Desktop, or at
+  the machine). Then check `docker ps` shows both stacks and both
+  connectors, and that both sites answer.
+- **To stop it happening again (not decided yet):**
+  - Windows Update: set active hours and turn on "Notify me when a
+    restart is required". Windows 11 Home can't turn automatic restarts
+    off, only steer them.
+  - Tailscale: turn on "Run unattended", so SSH over Tailscale works
+    before anyone signs in.
+  - Auto sign-in: would bring Docker back without help, but was left off
+    on purpose (anyone at the machine gets a signed-in desktop).
+  - An outside uptime check on `/healthz` that emails when it fails,
+    since this one went unnoticed for 13 hours.
+
 ### Phase 4 — Go public
 Revised 2026-09-28: battle_test uses its own tunnel, and smark_iq isn't
 touched.

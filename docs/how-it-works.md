@@ -27,7 +27,10 @@ them:
 
 1. They sign in to the web UI and start a case: pick a state (Utah,
    California or Texas), then either fill in a case information form or
-   paste a complaint they wrote, and choose 1 or 2 rounds.
+   bring a complaint they wrote, and choose 1 or 2 rounds. A complaint can
+   be pasted, or uploaded as Word, PDF or text: the server pulls the text
+   out and shows it in the form to check before anything runs. The file
+   itself isn't kept.
 2. The case joins a queue. A progress page shows each stage and streams
    the draft text as it's written.
 3. The results page shows the documents in tabs, a citation-check table,

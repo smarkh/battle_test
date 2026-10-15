@@ -79,6 +79,7 @@ canned drafts.
 | `admin.py` | The `/admin` routes: accounts, plans, setup links, disable and enable, the activity log. |
 | `users.py` | `python -m battle_test.web.users`: the command-line account tool (`add`, `invite`, `passwd`, `plan`, `firm`, `paid`, `disable`, `enable`, `list`, `usage`). |
 | `render.py` | Turns a saved result into HTML: links ✅ citations to their source, highlights problems and placeholders. |
+| `extract.py` | Pulls the text out of an uploaded complaint (Word, PDF or text) for the new-case form. Limits the file size, how far a `.docx` may expand, and PDF pages. Rebuilds Word's automatic paragraph numbers, and tidies PDF text (headers, footers, page and line numbers, broken lines). Needs `python-docx` and `pypdf`. |
 | `export.py` | Builds the Word and PDF downloads. Both come from one list of blocks (`blocks()`), and are built in memory when asked for, so nothing extra is stored with a case. Needs `python-docx` and `reportlab`. |
 | `demo.py` | `DemoClient`: canned drafts for working on the UI without a GPU. Research, selection and checking still run for real. |
 | `templates/` | Jinja pages. `base.html` is the layout. `_case_form.html`, `_case_nav.html` (the case list down the left of a case page and the new-case form) and `_events.html` are shared fragments. |
@@ -116,7 +117,8 @@ fake model clients and small temporary databases.
 | `test_jobs.py` | Case storage, allowances, the queue cap, retention, and the worker running several cases at once |
 | `test_auth.py` | Passwords, sessions, setup links, lockout, the activity log |
 | `test_users.py` | The account command-line tool |
-| `test_web.py` | The routes end to end: sign-in, cases, privacy, CSRF, admin pages |
+| `test_web.py` | The routes end to end: sign-in, cases, privacy, CSRF, admin pages, uploading a complaint |
+| `test_extract.py` | Reading uploaded Word, PDF and text files, and refusing the ones that can't or shouldn't be read |
 | `test_deploy.py` | The serving rule, the server config, the Docker files' hardening, `/healthz`, the heartbeat |
 
 ## Where to make common changes

@@ -565,7 +565,7 @@ class WebAppTest(unittest.TestCase):
         home = self.client.get("/").text
         self.assertIn("<h1>Start your first case</h1>", home)
         self.assertNotIn("Start one", home)
-        self.assertIn('<form method="post" action="/cases" class="case-form">', home)
+        self.assertIn('<form method="post" action="/cases" class="case-form" enctype="multipart/form-data">', home)
         self.assertIn("Draft the complaint and the motion", home)
         self.assertIn("Use my complaint, draft only the motion", home)
         self.assertNotIn('<table class="cases">', home)
@@ -612,6 +612,44 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("user-supplied", page)
         self.assertIn("Plaintiff sues under", page)
         self.assertIn("Your complaint, motion drafted", self.client.get("/").text)
+
+    def test_uploaded_complaint_is_shown_for_review_before_anything_runs(self):
+        user_id = self.app.state.auth.get_user("dana").id
+        text = "COMPLAINT\r\nPlaintiff sues under Utah Code § 78B-2-309 & more."
+        data = {**FACTS, "mode": "complaint", "complaint": "old pasted text", "csrf": self.csrf()}
+        response = self.client.post("/cases", data=data, follow_redirects=False,
+                                    files={"complaint_file": ("my complaint.txt", text.encode(), "text/plain")})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("The text of my complaint.txt is below", response.text)
+        self.assertIn("COMPLAINT\nPlaintiff sues under Utah Code § 78B-2-309 &amp; more.</textarea>", response.text)
+        self.assertNotIn("old pasted text", response.text)  # the upload replaces what was pasted
+        self.assertIn('enctype="multipart/form-data"', response.text)
+        self.assertEqual(self.app.state.store.list(user_id), [])  # no case yet, no allowance used
+
+        # Starting the run from the reviewed text works like a paste.
+        case_url = self.submit(mode="complaint", complaint="COMPLAINT\nPlaintiff sues.").headers["location"]
+        self.assertTrue(self.app.state.worker.wait_idle())
+        self.assertIn("Plaintiff sues.", self.client.get(case_url).text)
+
+    def test_unreadable_upload_explains_and_keeps_the_form(self):
+        data = {**FACTS, "mode": "complaint", "complaint": "kept", "csrf": self.csrf()}
+        response = self.client.post("/cases", data=data,
+                                    files={"complaint_file": ("old.doc", b"\xd0\xcf\x11\xe0", "application/msword")})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("old.doc: Upload a Word (.docx), PDF (.pdf) or text (.txt) file.", response.text)
+        self.assertIn(">kept</textarea>", response.text)
+
+    def test_a_file_is_ignored_when_drafting_from_case_information(self):
+        data = {**FACTS, "csrf": self.csrf()}
+        response = self.client.post("/cases", data=data, follow_redirects=False,
+                                    files={"complaint_file": ("c.txt", b"ignored", "text/plain")})
+        self.assertEqual(response.status_code, 303)
+        # And an empty file input, as a browser sends one, is no upload at all.
+        data = {**FACTS, "mode": "complaint", "complaint": "COMPLAINT\nPasted.", "csrf": self.csrf()}
+        response = self.client.post("/cases", data=data, follow_redirects=False,
+                                    files={"complaint_file": ("", b"", "application/octet-stream")})
+        self.assertEqual(response.status_code, 303)
+        self.assertTrue(self.app.state.worker.wait_idle())  # both cases run before the test's teardown
 
     def test_cases_are_private_to_their_owner(self):
         case_url = self.finished_case()

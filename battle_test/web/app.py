@@ -29,7 +29,9 @@ from battle_test.models import make_client
 from battle_test.pipeline import ChatClient, run_case
 from battle_test.prompts import SUPPORTED_STATES
 from battle_test.report import HELD_BACK, POSSIBLE_REFERENCES_NOTE, SET_ASIDE_NOTE, render_markdown
-from battle_test.web import admin, export, render
+from starlette.datastructures import UploadFile as StarletteUploadFile
+
+from battle_test.web import admin, export, extract, render
 from battle_test.web.auth import SETUP_LINK_INVALID, AuthError, AuthStore, Session, User
 from battle_test.web.jobs import DONE, FAILED, QUEUED, RUNNING, Job, JobStore, QueueFull, QuotaExceeded, Worker
 
@@ -232,7 +234,8 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
         f.read_bytes() for f in sorted((HERE / "static").iterdir()))).hexdigest()[:12]
     templates.env.globals["static_version"] = static_version
     templates.env.globals.update(states=SUPPORTED_STATES, fact_fields=FACT_FIELDS, modes=MODES,
-                                 retention_days=web.retention_days)
+                                 retention_days=web.retention_days,
+                                 max_upload_mb=extract.MAX_UPLOAD_BYTES // (1024 * 1024))
 
     def deletes_on(job: Job) -> str:
         """The date a case will be deleted automatically, or "" if never."""
@@ -277,7 +280,9 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
 
     async def checked_form(request: Request, session: Session) -> dict[str, str]:
         same_origin(request)
-        form = {k: str(v) for k, v in (await request.form()).items()}
+        # Text fields only. A form's uploads are read where they're expected,
+        # from the same parsed form (Starlette keeps it).
+        form = {k: v for k, v in (await request.form()).items() if isinstance(v, str)}
         if not hmac.compare_digest(form.get("csrf", ""), session.csrf_token):
             raise HTTPException(403, "The form expired. Go back, reload the page and try again.")
         return form
@@ -453,10 +458,33 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
             errors.append("Choose what to draft.")
         if rounds not in ("1", "2"):
             errors.append("Choose 1 or 2 rounds.")
+        upload = (await request.form()).get("complaint_file")
+        if isinstance(upload, StarletteUploadFile) and not (mode == "complaint" and upload.filename):
+            await upload.close()  # a file sent with the case information form
+            upload = None
+        # An empty file input arrives as an empty string, not a file.
+        if isinstance(upload, StarletteUploadFile):
+            # An upload never starts a run: its text goes back into the form
+            # for the user to check first, because extraction from a PDF in
+            # particular can go wrong. Nothing of the file is kept.
+            data = await upload.read(extract.MAX_UPLOAD_BYTES + 1)
+            await upload.close()  # Starlette spools a large upload to a temporary file
+            try:
+                text = extract.extract_text(upload.filename, data)
+            except extract.ExtractError as e:
+                return page(request, "new.html", session, errors=[f"{upload.filename}: {e}"], form=form)
+            notes = [f"The text of {upload.filename} is below. Check it (a PDF especially can come out with "
+                     "stray headers, page numbers or line breaks), correct anything that's wrong, then start "
+                     "the run."]
+            if len(text) > MAX_INPUT_CHARS:
+                errors.append(f"The complaint is too long ({len(text):,} characters; the limit is "
+                              f"{MAX_INPUT_CHARS:,}). Shorten it below before starting the run.")
+            return page(request, "new.html", session, errors=errors, notes=notes,
+                        form={**form, "complaint": text})
         if mode == "complaint":
             text = form.get("complaint", "").strip()
             if not text:
-                errors.append("Paste your complaint.")
+                errors.append("Paste your complaint, or upload it.")
             title = text.splitlines()[0][:80] if text else ""
         else:
             text = facts_text(form)
