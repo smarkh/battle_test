@@ -437,6 +437,14 @@ def main(argv: list[str] | None = None) -> int:
         cfg = dataclasses.replace(cfg, checker_model=args.checker)
     if args.no_fit_check:
         cfg = dataclasses.replace(cfg, fit_check=False)
+    if cfg.split_providers:
+        # Calls go to a provider by model name, so the overrides must keep the names apart.
+        if cfg.checker_model in (cfg.plaintiff_model, cfg.defendant_model):
+            parser.error(f"the checker ({cfg.checker_model}) runs on {cfg.checker_provider}, so it can't also "
+                         f"draft on {cfg.provider}")
+        if cfg.checker_provider == "bedrock" and cfg.checker_model not in cfg.bedrock_models:
+            parser.error(f"--checker {cfg.checker_model}: not one of the Bedrock models in {args.config.name} "
+                         f"({', '.join(cfg.bedrock_models)})")
     cases = load_cases(args.case)
     search_cfg = semantic.load_search_config(args.config)
     db_path = load_corpus_config(args.config).db_path
@@ -483,7 +491,8 @@ def main(argv: list[str] | None = None) -> int:
             "provider": cfg.provider,
             "plaintiff model": cfg.plaintiff_model,
             "defendant model": cfg.defendant_model,
-            "citation checker model": cfg.checker_model or "none",
+            "citation checker model": (f"{cfg.checker_model} ({cfg.provider_of(cfg.checker_model)})"
+                                       if cfg.checker_model else "none"),
             "fit check before drafting": "on" if cfg.checker_model and cfg.fit_check else "off",
             "rounds": str(args.rounds or cfg.rounds),
             "search": f"keyword + semantic ({search_cfg.embedding_model})" if search_cfg.semantic else "keyword",

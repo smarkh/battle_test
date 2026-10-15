@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from battle_test import grounding
+from battle_test import grounding, prompts
 from battle_test.law_index import LawSection
 
 
@@ -104,6 +104,19 @@ class ResearchAndSelectionTest(unittest.TestCase):
         replies = {q: '{"selected": [1]}' for q, _ in own + standard}
         picks, _ = self.select(own + standard, replies, limit=4)
         self.assertEqual([s.citation for s in picks], ["OWN0", "STD0", "OWN1", "STD1"])
+
+    def test_select_with_topics_says_which_topic_each_pick_is_for(self):
+        a1, a2, b1 = section("A1"), section("A2"), section("B1")
+        topics = [("a", [a1, a2]), ("b", [b1])]
+        asked = lambda replies: lambda task: replies[task.split("|")[0]]  # noqa: E731
+        task_for = lambda topic, candidates: f"{topic}|{candidates}"  # noqa: E731
+        self.assertEqual(grounding.select_with_topics(asked({"a": '{"selected": [2]}', "b": '{"selected": [1]}'}),
+                                                      task_for, topics, 10), [("a", a2), ("b", b1)])
+        # The fallback keeps each candidate's topic too.
+        self.assertEqual(grounding.select_with_topics(asked({"a": "x", "b": "x"}), task_for, topics, 2),
+                         [("a", a1), ("b", b1)])
+        self.assertIn('found the section: "venue"',
+                      prompts.fit_task("Utah", "Case", "facts", "C", "T", "text", "venue"))
 
     def test_select_falls_back_to_the_top_ranked_when_nothing_is_picked(self):
         a1, a2, b1 = section("A1"), section("A2"), section("B1")

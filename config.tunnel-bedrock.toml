@@ -1,0 +1,83 @@
+# battle_test with two providers: the server's Ollama drafts (through the SSH
+# tunnel, as config.tunnel.toml), and a larger model on Amazon Bedrock is the
+# checker (the fit check before drafting, and the "does it say that?" check
+# after). Used only when asked for:
+#
+#   ssh -N -L 11435:127.0.0.1:11434 smark@smark-iq        (in its own window)
+#   python -m battle_test.evaluate --config config.tunnel-bedrock.toml --label bedrock-checker-qwen3-235b
+#
+# Only the checker's calls go to AWS: each holds the case facts or a passage
+# of a draft, and a section of law. FICTIONAL CASES ONLY until the lawyer has
+# agreed to case material going to AWS. Every run costs money: get an
+# estimate first (plans/aws-bedrock-plan.md).
+#
+# No credentials go in this file. Sign in with `aws sso login` first.
+
+[ollama]
+url = "http://127.0.0.1:11435"
+timeout_seconds = 1800
+keep_alive = "30s"
+
+[models]
+provider = "ollama"
+plaintiff = "qwen2.5:14b"
+defendant = "qwen2.5:14b"
+# The checker runs on Bedrock. Its name is one of [bedrock.models] below.
+# `evaluate --checker NAME` picks another of them for a run.
+checker_provider = "bedrock"
+checker = "qwen3-235b"
+
+[generation]
+num_ctx = 12288
+temperature = 0.4
+
+[pipeline]
+rounds = 2
+output_dir = "output"
+
+[corpus]
+snapshot = "v2026.08"
+base_url = "https://oss-data-us.vaquill.ai"
+data_dir = "data"
+jurisdictions = ["ut", "ca", "tx", "federal"]
+document_types = ["statutes", "constitutions", "court_rules"]
+
+[search]
+# As config.tunnel.toml, so results compare with its runs. The embedding
+# model is on the laptop.
+semantic = true
+embedding_model = "nomic-embed-text"
+embedding_url = "http://127.0.0.1:11434"
+
+[bedrock]
+region = "us-west-2"
+profile = "battle-test"
+max_tokens = 16000
+timeout_seconds = 600
+
+# The same models and prices as config.bedrock.toml. Keep the two in step.
+[bedrock.models.qwen3-32b]
+id = "qwen.qwen3-32b-v1:0"
+input_per_million = 0.15
+output_per_million = 1.20
+
+[bedrock.models.qwen3-235b]
+id = "qwen.qwen3-235b-a22b-2507-v1:0"
+input_per_million = 0.53
+output_per_million = 2.66
+
+[bedrock.models.llama3-3-70b]
+id = "us.meta.llama3-3-70b-instruct-v1:0"
+input_per_million = 0.99
+output_per_million = 1.32
+
+[bedrock.models.deepseek-v3-2]
+id = "deepseek.v3.2"
+input_per_million = 0.62
+output_per_million = 1.85
+
+[bedrock.models.claude-sonnet-5]
+id = "us.anthropic.claude-sonnet-5"
+input_per_million = 2.20
+output_per_million = 11.00
+temperature = false

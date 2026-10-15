@@ -189,10 +189,66 @@ class ProviderConfigTest(unittest.TestCase):
             app.state.store.close()
             app.state.auth.close()
 
-    def test_no_credentials_in_the_bedrock_config(self):
-        text = (ROOT / "config.bedrock.toml").read_text(encoding="utf-8").lower()
-        for marker in ("akia", "secret_access_key", "aws_session_token", "access_key_id"):
-            self.assertNotIn(marker, text)
+    def test_no_credentials_in_the_bedrock_configs(self):
+        for name in ("config.bedrock.toml", "config.tunnel-bedrock.toml"):
+            text = (ROOT / name).read_text(encoding="utf-8").lower()
+            for marker in ("akia", "secret_access_key", "aws_session_token", "access_key_id"):
+                with self.subTest(config=name, marker=marker):
+                    self.assertNotIn(marker, text)
+
+    def test_split_config_drafts_on_the_server_and_checks_on_bedrock(self):
+        from battle_test.models import SplitClient
+        cfg = load_config(ROOT / "config.tunnel-bedrock.toml")
+        self.assertTrue(cfg.split_providers)
+        self.assertEqual((cfg.provider, cfg.plaintiff_model, cfg.defendant_model), ("ollama", "qwen2.5:14b", "qwen2.5:14b"))
+        self.assertEqual((cfg.checker_provider, cfg.provider_of(cfg.checker_model)), ("bedrock", "bedrock"))
+        self.assertEqual((cfg.provider_of(cfg.plaintiff_model), cfg.checker_timeout_seconds), ("ollama", 600))
+        self.assertIn(cfg.checker_model, cfg.bedrock_models)
+        # The same models and prices as config.bedrock.toml.
+        self.assertEqual(cfg.bedrock_models, load_config(ROOT / "config.bedrock.toml").bedrock_models)
+        client = make_client(cfg)  # builds no AWS session until the first call
+        self.assertIsInstance(client, SplitClient)
+        self.assertIsInstance(client.drafting, OllamaClient)
+        self.assertIsInstance(client.checker, BedrockClient)
+        self.assertEqual(client.checker.timeout_seconds, 600)
+        # The tunnel config's checker stays on its own provider: no split.
+        self.assertFalse(load_config(ROOT / "config.tunnel.toml").split_providers)
+
+    def test_split_client_sends_each_call_by_model_name(self):
+        from battle_test.models import SplitClient
+
+        class Fake:
+            def __init__(self, name):
+                self.name, self.calls = name, []
+
+            def chat(self, model, system, user, **kwargs):
+                self.calls.append((model, kwargs))
+                return self.name
+
+        drafting, checker = Fake("drafting"), Fake("checker")
+        client = SplitClient(drafting, checker, "big")
+        self.assertEqual(client.chat("small", "s", "u", json_mode=True), "drafting")
+        self.assertEqual(client.chat("big", "s", "u", json_mode=True, on_usage=None), "checker")
+        self.assertEqual(checker.calls, [("big", {"json_mode": True, "on_usage": None})])
+
+    def test_split_providers_are_checked(self):
+        bedrock = '[bedrock]\nregion = "us-west-2"\n[bedrock.models.big]\nid = "x"\n'
+        ollama = '[ollama]\nurl = "http://o"\n'
+        for models, extra, message in [
+            ('checker_provider = "bedrock"', ollama + bedrock, "no models.checker"),
+            ('checker_provider = "bedrock"\nchecker = "m"', ollama + bedrock, "can't also be a drafting model"),
+            ('checker_provider = "bedrock"\nchecker = "other"', ollama + bedrock, r"\[bedrock.models.other\]"),
+            ('checker_provider = "bedrock"\nchecker = "big"', ollama, "bedrock.region"),
+            ('checker_provider = "openai"\nchecker = "big"', ollama, "checker_provider"),
+            ('provider = "bedrock"\nchecker_provider = "ollama"\nchecker = "local"', bedrock, "ollama.url"),
+        ]:
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                self._load(models, extra)
+        cfg = self._load('checker_provider = "bedrock"\nchecker = "big"', ollama + bedrock)
+        self.assertTrue(cfg.split_providers)
+        # Naming the drafting provider is the same as leaving it out.
+        same = self._load('checker_provider = "ollama"\nchecker = "m"', ollama)
+        self.assertFalse(same.split_providers)
 
     def _load(self, models: str, extra: str = ""):
         with tempfile.TemporaryDirectory() as tmp:
@@ -228,6 +284,17 @@ class CostTest(unittest.TestCase):
         self.assertIsNone(self.CFG.cost({"unpriced": {"calls": 1, "input_tokens": 5, "output_tokens": 5}}))
         self.assertIsNone(self.CFG.cost({"qwen2.5:7b": {"calls": 1, "input_tokens": 5, "output_tokens": 5}}))
         self.assertIsNone(self.CFG.cost({}))
+
+    def test_split_providers_count_only_the_priced_checker(self):
+        cfg = dataclasses.replace(self.CFG, checker_model="cheap", checker_provider="bedrock")
+        usage = {"qwen2.5:7b": {"calls": 30, "input_tokens": 100_000, "output_tokens": 9_000},
+                 "cheap": {"calls": 20, "input_tokens": 40_000, "output_tokens": 3_000}}
+        self.assertAlmostEqual(cfg.cost(usage), 40_000 * 0.15 / 1e6 + 3_000 * 1.20 / 1e6)
+        # The Ollama drafting model alone (say the checker never ran): nothing to estimate.
+        self.assertIsNone(cfg.cost({"qwen2.5:7b": usage["qwen2.5:7b"]}))
+        # A Bedrock checker with no price still gives no estimate rather than a low one.
+        unpriced = dataclasses.replace(cfg, checker_model="unpriced")
+        self.assertIsNone(unpriced.cost({**usage, "unpriced": usage["cheap"]}))
 
 
 class JsonReplyTest(unittest.TestCase):

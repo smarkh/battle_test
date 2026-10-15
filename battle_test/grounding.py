@@ -155,6 +155,11 @@ def candidate_list(candidates: list[LawSection]) -> str:
 
 def select(ask: JsonChat, task_for: Callable[[str, str], str], topics: list[Topic],
            limit: int) -> list[LawSection]:
+    return [s for _, s in select_with_topics(ask, task_for, topics, limit)]
+
+
+def select_with_topics(ask: JsonChat, task_for: Callable[[str, str], str], topics: list[Topic],
+                       limit: int) -> list[tuple[str, LawSection]]:
     """Ask the model, one topic at a time, which of that topic's candidates
     states the rule for this case. `task_for(topic, candidate list)` writes
     each prompt.
@@ -163,6 +168,8 @@ def select(ask: JsonChat, task_for: Callable[[str, str], str], topics: list[Topi
     model's own topics and the standard ones take turns, so the cut never
     falls on one kind alone. Falls back to the top-ranked candidates if the
     model picks nothing at all.
+
+    Returns (the topic each section was picked for, the section).
     """
     picks: dict[str, LawSection] = {}
     for query, sections in topics:
@@ -173,9 +180,12 @@ def select(ask: JsonChat, task_for: Callable[[str, str], str], topics: list[Topi
             if isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= len(sections):
                 picks[query] = sections[n - 1]
                 break
-    own = [picks[q] for q, _ in topics if q in picks and q not in STANDARD_QUERIES]
-    standard = [picks[q] for q, _ in topics if q in picks and q in STANDARD_QUERIES]
-    return (_by_rank([own, standard]) or all_candidates(topics))[:limit]
+    own = [(q, picks[q]) for q, _ in topics if q in picks and q not in STANDARD_QUERIES]
+    standard = [(q, picks[q]) for q, _ in topics if q in picks and q in STANDARD_QUERIES]
+    chosen = _by_rank([own, standard])
+    if not chosen:
+        chosen = _by_rank([[(q, s) for s in sections] for q, sections in topics])
+    return chosen[:limit]
 
 
 def merge(*groups: list[LawSection], limit: int = MAX_AUTHORITIES) -> list[LawSection]:

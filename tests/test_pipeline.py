@@ -293,6 +293,8 @@ class PipelineTest(unittest.TestCase):
         asked = next(c for c in client.calls if '"applies"' in c["user"])
         self.assertEqual(asked["model"], "c-model")
         self.assertIn("the facts", asked["user"])
+        # It's told the research topic that found the section.
+        self.assertIn('found the section: "action upon instrument in writing"', asked["user"])
         self.assertIn("Text of Utah Code § 78B-2-309.", asked["user"])
         self.assertEqual(run.documents[0].authorities, (LIMITS,))
         self.assertEqual([(c.section, c.verdict) for c in run.fit["plaintiff"]], [(LIMITS, "applies")])

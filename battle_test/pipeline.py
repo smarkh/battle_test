@@ -122,17 +122,20 @@ def run_case(
         if not run.candidates[role]:
             return []
         stage("Selecting authorities", role)
-        selected = grounding.select(
+        picked = grounding.select_with_topics(
             asker(role),
             lambda topic, candidates: prompts.select_task(role, materials_title, materials, topic, candidates),
             topics, grounding.MAX_AUTHORITIES)
+        selected = [s for _, s in picked]
         if not (cfg.checker_model and cfg.fit_check):
             return selected
         stage("Checking the authorities fit the case", role)
+        topic_of = {s.citation: topic for topic, s in picked}
 
         def fits(section: LawSection) -> tuple[str, str] | None:
             task = prompts.fit_task(state, materials_title, materials, section.citation, section.section_title,
-                                    grounding.excerpt(section.text, grounding.SUPPORT_EXCERPT_CHARS))
+                                    grounding.excerpt(section.text, grounding.SUPPORT_EXCERPT_CHARS),
+                                    topic_of.get(section.citation))
             return grounding.parse_verdict(
                 client.chat(cfg.checker_model, prompts.SUPPORT_SYSTEM, task, json_mode=True, on_usage=record),
                 grounding.FIT_VERDICTS)

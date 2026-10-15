@@ -168,13 +168,23 @@ shown, never from memory."""
 
 # The instructions and the case come first and are the same for every
 # section, so Ollama reuses its work on them from one call to the next.
-# Benchmarked 2026-10-12 on the 97 sections that saved runs of the three
-# sample cases gave the models (qwen2.5:14b): it kept 11 of 13 expected
-# authorities and set aside 14 of 15 off-topic ones. A version that pressed
-# harder to keep general rules still dropped the same two (Utah's interest
-# and district court jurisdiction sections) and let more unrelated law in.
+# First benchmarked 2026-10-12 on the 97 sections that saved runs of the
+# three sample cases gave the models (qwen2.5:14b): it kept 11 of 13
+# expected authorities and set aside 14 of 15 off-topic ones. A version that
+# pressed harder to keep general rules still dropped the same two (Utah's
+# interest and district court jurisdiction sections) and let more unrelated
+# law in. See the topic note inside for what fixed those two.
 def fit_task(state: str, materials_title: str, materials: str, citation: str, section_title: str,
-             law_text: str) -> str:
+             law_text: str, topic: str | None = None) -> str:
+    # The topic and "any part" sentences, added 2026-10-14: without them the
+    # 14B set aside Utah's district court jurisdiction section (it read the
+    # later subsections, a list of special proceedings) and its interest
+    # section ("not about damages") on every run. With them, on the sections
+    # saved runs had selected: 13 of 13 expected authorities kept (11
+    # before), 20 of 21 off-topic ones set aside (18), and 26 of 117 others
+    # kept (20), about half of those reasonable.
+    on_topic = (f'A search for this legal topic found the section: "{topic}". The question is whether it '
+                "states the rule a court would apply to THIS case on that topic. ") if topic else ""
     return f"""\
 Below is a case, and then the text of one section of {state} or federal law \
 that a search suggested for it. Decide whether a court would apply this \
@@ -189,6 +199,8 @@ contract is for services or construction; or banks, public agencies, \
 landlords, family or probate matters when the case is a private contract \
 dispute), even if it shares words with the case.
 - "unsure": it could apply, but that depends on facts the case does not state.
+{on_topic}If any part of the section, such as its first subsection, covers a \
+case like this one, it applies, even if the rest is about other matters. \
 If the quoted text ends with "[excerpt]", the section continues beyond it. \
 Respond with JSON only, in exactly this form:
 {{"verdict": "applies" or "unsure" or "does_not_apply", "reason": "<one sentence>"}}

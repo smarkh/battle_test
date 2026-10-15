@@ -55,18 +55,38 @@ class Config:
     # selected section applies to this kind of case, and draft only with
     # those that do. False leaves every selected section in.
     fit_check: bool = True
+    # Where the checker model runs, when that differs from `provider`: e.g.
+    # the server's Ollama drafts while a larger Bedrock model checks. ""
+    # means the same provider as the drafting models.
+    checker_provider: str = ""
+    checker_timeout_seconds: int = 0  # 0 = timeout_seconds
+
+    @property
+    def split_providers(self) -> bool:
+        """Whether the checker runs on a different provider from the drafting models."""
+        return bool(self.checker_model) and self.checker_provider not in ("", self.provider)
+
+    def provider_of(self, model: str) -> str:
+        return self.checker_provider if self.split_providers and model == self.checker_model else self.provider
 
     def cost(self, usage: dict[str, dict[str, int]]) -> float | None:
         """Estimated US dollars for a run's token usage (model -> counts), or
-        None if any model that was used has no price in the config."""
-        total = 0.0
+        None if any model that was used has no price in the config.
+
+        With split providers, the Ollama model costs nothing to call, so only
+        the priced model's tokens count. An all-Ollama run still has no cost
+        (None), since there's nothing to estimate."""
+        total, priced_any = 0.0, False
         for model, counts in usage.items():
             priced = self.bedrock_models.get(model)
             if priced is None or priced.input_price is None or priced.output_price is None:
+                if self.split_providers and self.provider_of(model) == "ollama":
+                    continue
                 return None
+            priced_any = True
             total += (counts["input_tokens"] * priced.input_price
                       + counts["output_tokens"] * priced.output_price) / 1_000_000
-        return total if usage else None
+        return total if priced_any else None
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
@@ -79,12 +99,28 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     provider = raw["models"].get("provider", "ollama")
     if provider not in PROVIDERS:
         raise ValueError(f"models.provider must be one of {PROVIDERS}, got {provider!r}")
+    checker = raw["models"].get("checker", "")
+    checker_provider = raw["models"].get("checker_provider", "")
+    if checker_provider and checker_provider not in PROVIDERS:
+        raise ValueError(f"models.checker_provider must be one of {PROVIDERS}, got {checker_provider!r}")
+    if checker_provider and checker_provider != provider:
+        if not checker:
+            raise ValueError(f"{path} sets models.checker_provider but no models.checker.")
+        # Calls are sent to a provider by model name, so the name must say which.
+        if checker in (raw["models"]["plaintiff"], raw["models"]["defendant"]):
+            raise ValueError(f"{path}: models.checker ({checker!r}) runs on {checker_provider}, so it can't "
+                             f"also be a drafting model on {provider}.")
     # Each provider needs only its own section.
     ollama, bedrock = raw.get("ollama", {}), raw.get("bedrock", {})
-    if provider == "ollama" and "url" not in ollama:
-        raise ValueError(f"{path} has no ollama.url, which the ollama provider needs.")
-    if provider == "bedrock" and not bedrock.get("region"):
-        raise ValueError(f"{path} has no bedrock.region, which the bedrock provider needs.")
+    for used in {provider, checker_provider} - {""}:
+        if used == "ollama" and "url" not in ollama:
+            raise ValueError(f"{path} has no ollama.url, which the ollama provider needs.")
+        if used == "bedrock" and not bedrock.get("region"):
+            raise ValueError(f"{path} has no bedrock.region, which the bedrock provider needs.")
+    if checker_provider == "bedrock" and checker not in bedrock.get("models", {}):
+        raise ValueError(f"{path}: models.checker ({checker!r}) runs on bedrock, so it needs a "
+                         f"[bedrock.models.{checker}] entry.")
+    sections = {"ollama": ollama, "bedrock": bedrock}
 
     return Config(
         ollama_url=ollama.get("url", "").rstrip("/"),
@@ -105,8 +141,10 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
                                m.get("max_tokens"), m.get("temperature", True))
             for name, m in bedrock.get("models", {}).items()
         },
-        checker_model=raw["models"].get("checker", ""),
+        checker_model=checker,
         fit_check=raw["pipeline"].get("fit_check", True),
+        checker_provider=checker_provider,
+        checker_timeout_seconds=sections[checker_provider].get("timeout_seconds", 1800) if checker_provider else 0,
     )
 
 

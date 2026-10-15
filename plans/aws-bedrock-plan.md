@@ -380,6 +380,42 @@ on your own hardware.
   the same Error 002, so nothing was billed. Card verification may take
   a while to reach Bedrock, so one retry later is worth it. If that
   fails too, the AWS Support case is the next step.
+- **Retried later the same day: still Error 002, nothing billed.**
+  Checked from our side (free calls), all normal:
+  - Sign-in: `AdministratorAccess` through Identity Center.
+  - The account is the management account of its own organization
+    (`o-gbo39h8te3`, all features), so no service control policy
+    applies to it.
+  - No AWS Budgets actions exist, so the $10 / $25 alerts can't be
+    blocking anything.
+  - `get-foundation-model-availability` for Qwen3 32B in `us-west-2`:
+    agreement AVAILABLE, AUTHORIZED, entitlement AVAILABLE, region
+    AVAILABLE.
+  - `freetier get-account-plan-state` returns "Missing data for
+    account", which suggests it isn't on AWS's newer free account plan.
+    That's not certain.
+  - **Conclusion:** the block is a flag on AWS's side, outside anything
+    the account's settings control. Only AWS Support can lift it.
+- **AWS Support case opened 2026-10-14** (Account and billing), asking
+  for Bedrock model invocation on account 548108386131, with the
+  checks above. Waiting for AWS's reply. When it comes: `aws sso login
+  --profile battle-test`, then the $0.002 research-only check.
+- **Two providers in one run: built 2026-10-14, at no cost.** The
+  server's 14B drafts through the tunnel and a Bedrock model is the
+  checker (`config.tunnel-bedrock.toml`, `[models] checker_provider =
+  "bedrock"`, default checker `qwen3-235b`).
+  - `models.make_client()` returns a `SplitClient`, which sends the
+    checker model's calls to Bedrock and the rest to Ollama, so the
+    pipeline, evaluation and web app are unchanged.
+  - The cost estimate counts the Bedrock checker only.
+  - Tested with stand-ins (4 new tests, 271 in all). **No Bedrock call
+    was made:** the account is still blocked.
+  - **Estimated cost of the first comparison, 3 runs per case:** the
+    checker used about 36,000 tokens in and 3,000 out per case on the
+    14B (both checks). Tokenizers differ, so treat these as rough:
+    - Qwen3 235B: about $0.03 a case, **about $0.25 for 9 runs**.
+    - Claude Sonnet 5: about $0.11 a case, **about $1.00 for 9 runs**,
+      once the Anthropic use-case form is done.
 - **Found in the code, and fixed:** `evaluate --research-only` didn't
   record token usage, so on Bedrock it would have reported no tokens or
   cost. It now prints a "Model usage" line under the total, as full runs

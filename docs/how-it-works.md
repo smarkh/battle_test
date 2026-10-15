@@ -161,8 +161,9 @@ the section says what the brief claims.
 
 When `[models] checker` names a model, it's also asked a question
 *before* drafting: would a court apply this section in this kind of case?
-It's asked once for each section the selection step picked, with the case
-and the section's text in front of it.
+It's asked once for each section the selection step picked, with the case,
+the section's text, and the research topic that found the section in
+front of it. A section applies if any part of it covers the case.
 
 | Verdict | What happens to the section |
 |---|---|
@@ -282,6 +283,7 @@ Settings live in a TOML file. `battle_test/config.py` loads it.
 | `config.server.toml` | The server's container | Host Ollama, `qwen2.5:14b`, `keep_alive = "30s"`, `/data/...` paths, `0.0.0.0` with `behind_proxy` and `secure_cookies` |
 | `config.bedrock.toml` | Nothing, unless passed with `--config` | Hosted models on Amazon Bedrock, with each model's ID and price |
 | `config.tunnel.toml` | Nothing, unless passed with `--config` | The laptop's law index and search, with the model calls sent to the server's Ollama through an SSH tunnel (`127.0.0.1:11435`) |
+| `config.tunnel-bedrock.toml` | Nothing, unless passed with `--config` | As `config.tunnel.toml`, with the server's 14B drafting and a Bedrock model as the checker. `[models] checker_provider` splits the two, and `models.make_client()` then returns a `SplitClient` that sends each call by model name |
 
 The `BATTLE_TEST_CONFIG` environment variable picks the file. The Docker
 image sets it to the server config. Most commands also take `--config`.

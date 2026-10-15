@@ -50,9 +50,11 @@ guardrails-style network isolation and data handling).
   - Expect $5 to $8 for a full model comparison, up from about $4,
     because the two checks add tokens. An estimate comes before each
     paid run.
-- **To prepare, not scheduled:** a presentation for beta testers and
-  prospective users. See "Presentation for beta testers and prospective
-  users".
+- **Presentations: drafted 2026-10-14, not finished.** Two decks, one
+  for beta testers and one for prospective users, as Claude slide
+  artifacts. Bracketed placeholders wait on hosting, Cloudflare Access,
+  a price and the beta details. See "Presentation for beta testers and
+  prospective users".
 - **Next up:**
   - 3b, as of 2026-10-09 (paused 2026-10-12, see the direction change
     above):
@@ -742,6 +744,65 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
        the fit check, the live site, and a look at the page in a
        browser.
      - **Tested:** 6 new tests (258 in all).
+     - **The two Utah misses: fixed 2026-10-14.** The fit check is now
+       told which research topic found the section ("A search for this
+       legal topic found the section: …"), and that a section applies if
+       any part of it, such as its first subsection, covers a case like
+       this one.
+       - **Why they were missed:** the 14B read § 78A-5-102's later
+         subsections (a list of special proceedings) and missed "(1) the
+         district court has original jurisdiction in all matters civil",
+         and read § 15-1-1 as "not about damages".
+       - **Benchmark first:** the sections that three saved runs had
+         selected (13 expected, 21 off-topic, 117 others), judged under
+         four versions of the prompt on the 14B.
+
+         | Prompt | Expected kept | Off-topic set aside | Others kept |
+         |---|---|---|---|
+         | As it was | 11 of 13 | 18 of 21 | 20 of 117 |
+         | + the topic | 12 of 13 | 18 of 21 | 20 of 117 |
+         | + "any part applies" | 11 of 13 | 18 of 21 | 20 of 117 |
+         | **+ both (kept)** | **13 of 13** | **20 of 21** | **26 of 117** |
+
+         Of the 12 others the new version keeps and the old didn't,
+         about half look reasonable (Utah's general limitations section,
+         Texas judgment interest, Cal. Civ. Code § 3301) and half don't
+         (federal venue, a quiet-title jurisdiction section, the
+         statute of frauds). That sorting is Claude's, not a lawyer's.
+       - **Full evaluation, same setup as before** (14B drafting and
+         checking, semantic search on, 3 runs per case). Folder
+         `output/eval/20261014-214207-fit-topic-14b-drafts-14b-checker/`.
+
+         | 9 runs each | Fit check, 2026-10-12 | With the topic, 2026-10-14 |
+         |---|---|---|
+         | Utah § 78A-5-102 (core) | set aside 3 of 3 | **cited 3 of 3** |
+         | Utah § 15-1-1 (useful) | set aside 3 of 3 | **cited 2, given 1** |
+         | Core given to the models | 21/48 | 24/48 |
+         | Core cited | 21/48 | 22/48 |
+         | Useful cited | 10/27 | 11/27 |
+         | Cited authorities on the expected list | 31/39 (79%) | 34/45 (76%) |
+         | Cited authorities not on the list | 8 | 11 |
+         | Off-topic cited | 0 | 2 |
+         | Sections set aside | 124 of 180 | 99 of 180 |
+         | *Does not support* verdicts | 1 | 2 |
+
+         - **The misses are fixed, and a little more wrong law gets
+           through:** two sale-of-goods citations in nine runs (Tex. B&C
+           § 2.725 once, Utah § 70A-2-718 once), against none before and
+           three with no fit check at all. Core cited is within the
+           noise.
+         - **How those two got in:** in each case the fit check kept
+           the section for one side and set it aside for the other, in
+           the same run. Its verdicts aren't consistent between calls
+           (temperature 0.4, and the defendant's call reads the
+           complaint, not the facts). Neither was doubted afterwards by
+           the "does it say that?" check.
+         - **Possible next steps, not done:** set a section aside for
+           both sides when either side's check sets it aside; run the
+           checker at temperature 0; or wait for a stronger checker on
+           Bedrock.
+       - **Tested:** 2 new tests (272 in all). The benchmark script was
+         in the session's scratch folder, not the repo.
    - **3b. Better selection of authorities (to evaluate).** In the first
      grounded Utah run, the model chose mostly UCC Article 2 (sales of
      goods) for a roof replacement, which is a construction/services
@@ -1729,12 +1790,70 @@ Access. Access can't sit in front of a public intake form, so the intake
 endpoint would need to sit outside the Access-protected app, with its own
 protections (item 2 above).
 
-## Presentation for beta testers and prospective users (to do, not scheduled)
+## Presentation for beta testers and prospective users (drafted, not finished)
 
-**Status: registered 2026-10-12. Nothing is built.** Return to this when
-beta testing is close.
+**Status: registered 2026-10-12. Two decks drafted 2026-10-14.** They
+can't be finished until the items under "Needed before it can be
+finished" are settled.
 
-- **Two audiences, likely two versions of one deck:**
+### The decks (2026-10-14)
+
+They're Claude slide artifacts, saved to the claude.ai account, not in
+the repo. Find them in the gallery at claude.ai/code/artifacts, or with
+`/artifacts` in Claude Code. Each can be exported as `.pptx` or PDF from
+its Share › Export menu. Both are private until shared from that menu.
+
+| Deck | Link | Slides |
+|---|---|---|
+| Beta testers | https://claude.ai/artifact/VyakD4yL9DCit4ALmGcfn7 | 15 |
+| Prospective users | https://claude.ai/artifact/PW4nt5xcX1UaXCw54kHh5A | 15 |
+
+- **Shared in both:**
+  - cover
+  - what it is ("Not a file to submit")
+  - how a case runs
+  - find / cite only what was shown / check
+  - a 4-slide walk-through of the fictional Utah roofing sample
+    (`examples/utah_roofing_facts.md`): the form, live progress, the
+    documents and downloads, and the citation check
+  - what it can and can't claim
+  - data handling
+  - coverage
+  - closing
+- **Beta testers only:** setup, what it can't do yet, and the feedback
+  wanted.
+- **Prospects only:** the problem (right after the cover), the fit
+  beside a research tool, and plans and prices.
+- **Every slide has speaker notes** with the background from this plan
+  and `docs/how-it-works.md`.
+- **The shared slides are separate copies.** A change to one, such as
+  filling in hosting, has to be made in both decks.
+- **The walk-through slides are drawn mock-ups, not screenshots.** Swap
+  in real screenshots when there are results worth showing.
+- **Bracketed placeholders still to fill:**
+  - Both decks:
+    - hosting, on the data-handling slide
+    - the Cloudflare Access note
+    - presenter, date and contact details
+  - Beta deck:
+    - the beta case allowance
+    - the beta address
+    - which case material testers may use
+    - the feedback address
+    - when setup links arrive
+  - Prospects deck:
+    - the prices, shown as the proposed figures from
+      `plans/profitability-plan.md` and marked as not yet set
+    - the free-trial size
+    - the next step
+- **Left out on purpose:** the beta deck doesn't claim it works on a
+  phone, because the mobile check is still open (Next up, server
+  deployment).
+
+### Original outline (2026-10-12)
+
+- **Two audiences, likely two versions of one deck** (decided
+  2026-10-14: two separate decks):
   - **Beta testers:** what it does, how to use it, what it can't do
     yet, what feedback is wanted, and how their case material is
     handled.
@@ -1766,6 +1885,8 @@ beta testing is close.
   - A price, for the prospects' version.
 - **Open questions:**
   - Format: slides, a live demo, a recorded walk-through, or a mix.
+    Slides exist now (2026-10-14). The walk-through can still be given
+    live in place of its four slides.
   - Who presents, and where: one-to-one, a bar association or CLE talk,
     or sent as a link.
   - Whether the lawyer should review the claims and disclaimers in it
@@ -1963,23 +2084,33 @@ Next up:
    hadn't said whether the AWS Support case is filed or answered. Ask
    me. Whether REAL case material may go to AWS is still the lawyer's
    call, so Bedrock runs fictional cases only.
-   - You offered, and I haven't answered: a change so one run can use
-     two providers (the 14B on the server drafting, a Bedrock model as
-     the checker). Today one run uses one provider. It costs nothing to
-     build. Ask me whether to build it.
+   - BUILT 2026-10-14: one run can use two providers.
+     config.tunnel-bedrock.toml drafts with the server's 14B through the
+     tunnel and checks with a Bedrock model (qwen3-235b by default,
+     `--checker NAME` for another). Tested with stand-ins only. First
+     comparison, 3 runs per case: about $0.25 on Qwen3 235B, about $1.00
+     on Claude Sonnet 5 (plans/aws-bedrock-plan.md).
+   - Still blocked on 2026-10-14 after the payment method, with every
+     account setting checked and normal. I OPENED the AWS Support case
+     on 2026-10-14 (Account and billing). Ask me whether AWS has replied.
+     My admin sign-in is the Identity Center portal,
+     https://d-9267cc86b3.awsapps.com/start (account 548108386131).
    - Order once Bedrock works: the $0.002 research-only check, then a
      stronger CHECKER with the 14B drafting, then a stronger drafter.
      Expect $5 to $8 for a full comparison now that the two checks add
      tokens. Give me an estimate before each paid run.
 2. Quality with the local models, through config.tunnel.toml (see
-   "Added 2026-10-12" below): the fit check wrongly drops two Utah
-   sections every run, and it hasn't been run with the 7B drafting.
+   "Added 2026-10-12" below): the fit check's two Utah misses were fixed
+   on 2026-10-14, at the cost of a little more wrong law getting
+   through. It hasn't been run with the 7B drafting.
 3. The code from 2026-10-12 is deployed (2026-10-14), but both checks
    are OFF on the live site: config.server.toml sets no checker. Before
    turning them on I want to look at a real results page, which nobody
    has done in a browser. "Possible references" IS live.
-4. Other open work: Cloudflare Access, and the presentation for beta
-   testers and prospective users (plan.md has a section; not scheduled).
+4. Other open work: Cloudflare Access, and finishing the two
+   presentation decks drafted on 2026-10-14, one for beta testers and
+   one for prospective users (plan.md has a section with their links
+   and the placeholders still to fill).
    Web UI part 3 is complete: upload with text extraction was built and
    deployed on 2026-10-14 (plan.md, step 5, "Part 3"). Nobody has tried
    a signed-in upload on the live site yet.
@@ -2107,9 +2238,13 @@ Where things stand:
     off-topic cited 3 -> 0, core cited 17/48 -> 21/48 (within the
     noise). The 14B drafting alone was no better than the 7B.
   - Known problems:
-    - The fit check drops Utah § 78A-5-102 (core) and § 15-1-1 (useful)
-      every run, and sets aside 124 of 180 selected sections, so Utah
-      drafts are thin. One prompt change to fix it made things worse.
+    - FIXED 2026-10-14: the fit check dropped Utah § 78A-5-102 and
+      § 15-1-1 every run. It's now told the research topic that found
+      each section, and both are cited. The cost: 2 sale-of-goods
+      citations in 9 runs got through (none before), because its
+      verdicts differ between the plaintiff's and defendant's calls in
+      the same run. Not yet tried: set aside for both sides if either
+      sets it aside, or temperature 0 for the checker.
     - On the 14B, "partly" is mostly quibbles about good citations.
       "does not support" has been right every time so far.
     - The "may not support" column counts "partly" too, so it can be
@@ -2175,8 +2310,8 @@ Where things stand:
     cases, and it should cover /admin), my signed-in checks, and the
     GPU-sharing check, which Bedrock may make moot.
 - Waiting on me, for Bedrock:
-  - An AWS Support case (Account and billing) asking for Bedrock access
-    on account 548108386131 in us-west-2, quoting Error 002.
+  - AWS's reply to the Support case I opened on 2026-10-14 (Account and
+    billing, Error 002, account 548108386131, us-west-2).
   - The Anthropic use-case form for Claude Sonnet 5 (its agreement shows
     as not available).
   - Checking the Llama 3.3 70B and Claude Sonnet 5 prices by eye on the

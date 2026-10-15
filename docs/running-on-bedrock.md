@@ -145,6 +145,29 @@ result is saved in `output\`.
 | `--rounds 1` | Skip the reply, which is the longest call |
 | `--research-only` | Three small calls, to check the search step for a cent or less |
 
+### Only the checker on Bedrock
+
+`config.tunnel-bedrock.toml` drafts with the server's `qwen2.5:14b`
+through the SSH tunnel, and sends only the checker's calls to Bedrock: the
+fit check before drafting and the "does it say that?" check after. The
+checker is where model judgement matters most, so this is the cheapest way
+to see what a large model adds.
+
+```powershell
+ssh -N -L 11435:127.0.0.1:11434 smark@smark-iq        # in its own window, left open
+.venv\Scripts\python -m battle_test.evaluate --config config.tunnel-bedrock.toml --label bedrock-checker-qwen3-235b
+.venv\Scripts\python -m battle_test.evaluate --config config.tunnel-bedrock.toml --checker claude-sonnet-5 --label bedrock-checker-sonnet
+```
+
+- `[models] checker_provider = "bedrock"` is what splits the two. Calls go
+  to a provider by model name, so the checker can't also be a drafting
+  model.
+- `--checker NAME` picks another of its `[bedrock.models]`.
+- The cost shown counts only the Bedrock checker: the server's model
+  costs nothing per call.
+- The checker reads the case facts and passages of the drafts, so this
+  sends case material to AWS too. Fictional cases only.
+
 ### The web UI
 
 The web UI can run on Bedrock on the laptop. It keeps its own accounts and
