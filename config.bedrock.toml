@@ -14,6 +14,11 @@ provider = "bedrock"
 # Names from [bedrock.models] below. `evaluate --model NAME` overrides both.
 plaintiff = "qwen3-32b"
 defendant = "qwen3-32b"
+# The checker: the fit check before drafting, and the "does it say that?"
+# check after (plans/plan.md, 3a). Also one of [bedrock.models];
+# `evaluate --checker NAME` overrides it. It adds about 36,000 tokens in and
+# 3,000 out a case, about $0.03 on this model. Leave it out to skip both.
+checker = "qwen3-235b"
 
 [generation]
 temperature = 0.4

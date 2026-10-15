@@ -416,6 +416,21 @@ on your own hardware.
     - Qwen3 235B: about $0.03 a case, **about $0.25 for 9 runs**.
     - Claude Sonnet 5: about $0.11 a case, **about $1.00 for 9 runs**,
       once the Anthropic use-case form is done.
+- **Bedrock for both drafting and checking (decided 2026-10-14):** the
+  end state is everything on Bedrock. Checker-only runs come first only
+  to show what each change adds, and because drafting is about 80% of a
+  case's tokens. `config.bedrock.toml` now names a checker
+  (`qwen3-235b`), so all-Bedrock runs include both checks.
+  - **Planned order once the block lifts:** the $0.002 research-only
+    check, then on Qwen3 235B both a checker-only run
+    (`config.tunnel-bedrock.toml`, about $0.25 for 9 runs) and an
+    all-Bedrock run (`config.bedrock.toml --model qwen3-235b`, about
+    $0.70), then Claude Sonnet 5 for everything (about $2.90, or more if
+    its tokenizer counts about 30% higher), once its use-case form is
+    done.
+  - These estimates come from the 14B's token use, about 115,000 in and
+    6,500 out a case with both checks. Larger models usually write
+    longer drafts, so expect more output.
 - **Found in the code, and fixed:** `evaluate --research-only` didn't
   record token usage, so on Bedrock it would have reported no tokens or
   cost. It now prints a "Model usage" line under the total, as full runs

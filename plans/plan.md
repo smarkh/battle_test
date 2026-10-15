@@ -2095,10 +2095,14 @@ Next up:
      on 2026-10-14 (Account and billing). Ask me whether AWS has replied.
      My admin sign-in is the Identity Center portal,
      https://d-9267cc86b3.awsapps.com/start (account 548108386131).
-   - Order once Bedrock works: the $0.002 research-only check, then a
-     stronger CHECKER with the 14B drafting, then a stronger drafter.
-     Expect $5 to $8 for a full comparison now that the two checks add
-     tokens. Give me an estimate before each paid run.
+   - Order once Bedrock works (revised 2026-10-14): the $0.002
+     research-only check, then on Qwen3 235B BOTH a checker-only run
+     (config.tunnel-bedrock.toml, ~$0.25 for 9 runs) and an all-Bedrock
+     run (config.bedrock.toml --model qwen3-235b, ~$0.70), then Claude
+     Sonnet 5 for everything (~$2.90+). The end state is Bedrock for both
+     drafting and checking. config.bedrock.toml names a checker
+     (qwen3-235b) since 2026-10-14. Give me an estimate before each paid
+     run.
 2. Quality with the local models, through config.tunnel.toml (see
    "Added 2026-10-12" below): the fit check's two Utah misses were fixed
    on 2026-10-14, at the cost of a little more wrong law getting

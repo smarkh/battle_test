@@ -143,6 +143,9 @@ class ProviderConfigTest(unittest.TestCase):
         self.assertEqual((cfg.provider, cfg.bedrock_region), ("bedrock", "us-west-2"))
         self.assertIn(cfg.plaintiff_model, cfg.bedrock_models)
         self.assertIn(cfg.defendant_model, cfg.bedrock_models)
+        # The checker is on Bedrock too, so all-Bedrock runs include both checks.
+        self.assertIn(cfg.checker_model, cfg.bedrock_models)
+        self.assertFalse(cfg.split_providers)
         for name, model in cfg.bedrock_models.items():
             with self.subTest(model=name):
                 self.assertGreater(model.input_price, 0)

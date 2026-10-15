@@ -140,6 +140,7 @@ result is saved in `output\`.
 | Option | Meaning |
 |---|---|
 | `--model NAME` | One of the names under `[bedrock.models]`, used for both roles |
+| `--checker NAME` | The checker model, also from `[bedrock.models]`. The config's is `qwen3-235b`, so both checks (the fit check and "does it say that?") run unless you pass `--no-fit-check` or remove `checker` |
 | `--repeats 3` | Run each case three times. One run is too noisy to compare models |
 | `--case utah_roofing` | Only that case |
 | `--rounds 1` | Skip the reply, which is the longest call |
