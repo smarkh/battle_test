@@ -377,7 +377,8 @@ def research_recall(cfg, client, law, case: EvalCase, on_usage=None) -> tuple[li
     task = prompts.plaintiff_research_task(state, "Case information", facts)
     system = prompts.plaintiff_system(state)
     queries = grounding.research(
-        lambda t: client.chat(cfg.plaintiff_model, system, t, json_mode=True, on_usage=on_usage), task)
+        lambda t: client.chat(cfg.plaintiff_model, system, t, json_mode=True, on_usage=on_usage), task,
+        case.state)
     candidates = grounding.gather_candidates(law, queries, case.state.lower())
     return queries, [c.citation for c in candidates]
 

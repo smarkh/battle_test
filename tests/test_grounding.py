@@ -40,6 +40,15 @@ class ResearchAndSelectionTest(unittest.TestCase):
         self.assertEqual(queries[3:], grounding.STANDARD_QUERIES[1:])  # no duplicate of `standard`
         self.assertEqual(grounding.research(lambda task: "not json", "task"), grounding.STANDARD_QUERIES)
 
+    def test_research_uses_the_states_own_standard_queries(self):
+        reply = json.dumps({"queries": ["x"]})
+        self.assertEqual(grounding.research(lambda task: reply, "task", "ak"),
+                         ["x", *grounding.STATE_STANDARD_QUERIES["ak"]])
+        for state in ("ut", "UT", "ca", "tx", None):
+            with self.subTest(state=state):
+                self.assertEqual(grounding.research(lambda task: reply, "task", state),
+                                 ["x", *grounding.STANDARD_QUERIES])
+
     def test_summary_judgment_rule_per_state(self):
         law = FakeLaw(sections=[section("Utah R. Civ. P. 56"), section("Cal. CCP § 437c", "ca"),
                                 section("Tex. R. Civ. P. 166a", "tx", status="repealed")])
@@ -101,6 +110,14 @@ class ResearchAndSelectionTest(unittest.TestCase):
     def test_select_cut_alternates_the_models_topics_and_the_standard_ones(self):
         own = [(f"own {n}", [section(f"OWN{n}")]) for n in range(3)]
         standard = [(q, [section(f"STD{n}")]) for n, q in enumerate(grounding.STANDARD_QUERIES[:3])]
+        replies = {q: '{"selected": [1]}' for q, _ in own + standard}
+        picks, _ = self.select(own + standard, replies, limit=4)
+        self.assertEqual([s.citation for s in picks], ["OWN0", "STD0", "OWN1", "STD1"])
+
+    def test_select_counts_a_states_own_standard_queries_as_standard(self):
+        own = [(f"own {n}", [section(f"OWN{n}")]) for n in range(3)]
+        standard = [(q, [section(f"STD{n}", "ak")])
+                    for n, q in enumerate(grounding.STATE_STANDARD_QUERIES["ak"][:3])]
         replies = {q: '{"selected": [1]}' for q, _ in own + standard}
         picks, _ = self.select(own + standard, replies, limit=4)
         self.assertEqual([s.citation for s in picks], ["OWN0", "STD0", "OWN1", "STD1"])

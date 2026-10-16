@@ -131,7 +131,7 @@ fake model clients and small temporary databases.
 | How many sections a model gets, or how much of each | `grounding.py` (`MAX_AUTHORITIES`, `EXCERPT_CHARS`), `pipeline.py` (`MAX_COMBINED_AUTHORITIES`) |
 | A citation form the checker doesn't recognise | `citations.py` (`_PATTERNS`), with a test in `test_citations.py` |
 | The order of documents, or adding a step | `pipeline.py` |
-| Adding a state | `prompts.py` (`SUPPORTED_STATES`, `TRIAL_COURTS`), `grounding.py` (`SUMMARY_JUDGMENT_RULES`), `[corpus] jurisdictions` in both configs, then rebuild the index |
+| Adding a state | `prompts.py` (`SUPPORTED_STATES`, `TRIAL_COURTS`), `grounding.py` (`SUMMARY_JUDGMENT_RULES`, and `STATE_STANDARD_QUERIES` if the default standard queries miss the state's own wording), `[corpus] jurisdictions` in every config, then rebuild the index |
 | The model or its settings | `[models]` and `[generation]` in the config |
 | Ollama or Bedrock | `provider` in `[models]` |
 | The Bedrock models and their prices | `[bedrock.models]` in `config.bedrock.toml` |

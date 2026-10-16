@@ -124,7 +124,7 @@ def run_case(
     def gather_authorities(role: str, research_task: str, materials_title: str,
                            materials: str) -> list[LawSection]:
         stage("Legal research", role)
-        queries = grounding.research(asker(role), research_task)
+        queries = grounding.research(asker(role), research_task, sc)
         run.research[role] = queries
         topics = grounding.gather_by_topic(law, queries, sc)
         run.candidates[role] = [s.citation for s in grounding.all_candidates(topics)]

@@ -109,7 +109,7 @@ Stop a run with **Ctrl+C**. Nothing is saved for an interrupted run.
 | Unit tests | `.venv\Scripts\python -m unittest` |
 | Search the law index | `.venv\Scripts\python -m battle_test.corpus search --state UT "summary judgment"` |
 | Law snapshot and section counts | `.venv\Scripts\python -m battle_test.corpus info` |
-| Evaluate all three sample cases (~40 min) | `.venv\Scripts\python -m battle_test.evaluate --label laptop-7b` |
+| Evaluate all four sample cases (~55 min) | `.venv\Scripts\python -m battle_test.evaluate --label laptop-7b` |
 | Evaluate the search step only (~1 min a case) | `.venv\Scripts\python -m battle_test.evaluate --research-only` |
 | Check the expected-authority lists against the index | `.venv\Scripts\python -m battle_test.evaluate --validate` |
 | Run on hosted Bedrock models (costs cents; needs AWS sign-in) | See [running-on-bedrock.md](running-on-bedrock.md) |

@@ -1,0 +1,77 @@
+# Evaluation case: Alaska boiler replacement abandoned mid-job, pipes froze.
+#
+# DRAFT, not yet reviewed by a lawyer. Each authority below was checked
+# against the text in the law index (snapshot v2026.09.1), but choosing the
+# right law is exactly the judgement being tested, so a lawyer should
+# confirm or correct this list before the scores are trusted.
+#
+# Alaska's Unfair Trade Practices Act (AS 45.50.471, 45.50.531) would be
+# "useful" here, but the snapshot marks both sections "reserved", so search
+# never returns them and they can't be expected yet.
+
+name = "alaska_boiler"
+state = "AK"
+facts = "../alaska_boiler_facts.md"
+lawyer_reviewed = false
+
+# "core": a competent brief on these facts should cite it.
+# "useful": relevant and welcome, but its absence isn't a failure.
+# `citations` lists alternatives: citing any one of them counts.
+
+[[expected]]
+importance = "core"
+citations = ["Alaska R. Civ. P. 56"]
+why = "Summary judgment standard and procedure in Alaska state court."
+
+[[expected]]
+importance = "core"
+citations = ["Alaska Stat. § 09.10.053"]
+why = "Three-year limitations period for an action upon a contract."
+
+[[expected]]
+importance = "core"
+citations = ["Alaska Stat. § 22.10.020"]
+why = "Superior court is the trial court of general jurisdiction, with original jurisdiction in all civil matters."
+
+[[expected]]
+importance = "core"
+citations = ["Alaska R. Civ. P. 3"]
+why = "Commencement of action and venue in the superior court (judicial districts; Alaska has no counties)."
+
+[[expected]]
+importance = "useful"
+citations = ["Alaska Stat. § 09.30.070"]
+why = "Rate of prejudgment interest and interest on judgments."
+
+[[expected]]
+importance = "useful"
+citations = ["Alaska R. Civ. P. 82", "Alaska Stat. § 09.60.010"]
+why = "Alaska awards partial attorney fees to the prevailing party in a civil case."
+
+[[expected]]
+importance = "useful"
+citations = ["Alaska R. Civ. P. 8"]
+why = "General pleading requirements for the complaint."
+
+# Code areas that don't govern this case. Citing them is a relevance error
+# even though the sections are real and in force. Matched by citation prefix.
+
+[[off_topic]]
+prefix = "Alaska Dist. Ct. Civ. R."
+why = "Rules of the limited-jurisdiction District Court; this case is in the superior court. The first Alaska run cited its venue rule."
+
+[[off_topic]]
+prefix = "Alaska Stat. § 34.03."
+why = "Uniform Residential Landlord and Tenant Act; there is no tenancy."
+
+[[off_topic]]
+prefix = "Alaska Stat. § 45.03."
+why = "UCC Article 3, negotiable instruments."
+
+[[off_topic]]
+prefix = "Alaska Stat. § 21."
+why = "Insurance code; no insurer is involved."
+
+[[off_topic]]
+prefix = "Alaska Stat. § 06."
+why = "Banking and financial institutions."

@@ -97,10 +97,35 @@ STANDARD_QUERIES = [
 ]
 
 
-def research(ask: JsonChat, task: str) -> list[str]:
+# The same topics in the words a state's own law uses, where the defaults
+# miss. Alaska has no counties and its trial court is the superior court, so
+# the venue and jurisdiction queries found federal statutes and the limited
+# District Court's rules, and the first Alaska run (2026-10-16) cited the
+# District Court venue rule in a superior court complaint. Its limitation
+# period says "contract actions to be brought in three years", and attorney
+# fees come from Alaska R. Civ. P. 82. Each query below ranked the right
+# section first in the v2026.09.1 index.
+STATE_STANDARD_QUERIES = {
+    "ak": [
+        "contract actions brought within three years",
+        "venue judicial district superior court civil rule",
+        "superior court original jurisdiction civil",
+        "attorney fees prevailing party civil rule",
+        "prejudgment interest contract legal rate",
+        "measure of damages breach of contract",
+    ],
+}
+_ALL_STANDARD = {q for qs in (STANDARD_QUERIES, *STATE_STANDARD_QUERIES.values()) for q in qs}
+
+
+def standard_queries(state: str | None = None) -> list[str]:
+    return STATE_STANDARD_QUERIES.get((state or "").lower(), STANDARD_QUERIES)
+
+
+def research(ask: JsonChat, task: str, state: str | None = None) -> list[str]:
     """The model's research queries, then the standard procedural ones."""
     queries = [q.strip() for q in parse_json_list(ask(task), "queries") if isinstance(q, str) and q.strip()]
-    return list(dict.fromkeys(queries + STANDARD_QUERIES))
+    return list(dict.fromkeys(queries + standard_queries(state)))
 
 
 def summary_judgment_rule(index: LawSearch, state: str) -> list[LawSection]:
@@ -181,8 +206,8 @@ def select_with_topics(ask: JsonChat, task_for: Callable[[str, str], str], topic
             if isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= len(sections):
                 picks[query] = sections[n - 1]
                 break
-    own = [(q, picks[q]) for q, _ in topics if q in picks and q not in STANDARD_QUERIES]
-    standard = [(q, picks[q]) for q, _ in topics if q in picks and q in STANDARD_QUERIES]
+    own = [(q, picks[q]) for q, _ in topics if q in picks and q not in _ALL_STANDARD]
+    standard = [(q, picks[q]) for q, _ in topics if q in picks and q in _ALL_STANDARD]
     chosen = _by_rank([own, standard])
     if not chosen:
         chosen = _by_rank([[(q, s) for s in sections] for q, sections in topics])

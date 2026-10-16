@@ -159,8 +159,22 @@ account. Press **Ctrl+C** in the tunnel window to disconnect.
 **If the build fails with a credentials error** ("A specified logon
 session does not exist"): the build has to contact the image
 registry, which doesn't work over SSH on this server. It happened on
-2026-10-05 for a code-only change. Use either of these:
+2026-10-05 for a code-only change. Use any of these:
 
+- **Classic builder, over SSH (easiest; worked 2026-10-15).** It uses the
+  `python:3.12-slim` image already on the server instead of asking the
+  registry, and a throwaway Docker config with no credential helper. It
+  tags the image `battle-test`, as `docker compose build` would.
+  ```powershell
+  $env:DOCKER_CONFIG = Join-Path $env:TEMP "docker-nocreds"
+  New-Item -ItemType Directory -Force $env:DOCKER_CONFIG | Out-Null
+  [IO.File]::WriteAllText("$env:DOCKER_CONFIG\config.json", "{}")
+  $env:DOCKER_BUILDKIT = "0"
+  docker build -t battle-test .
+  Remove-Item Env:DOCKER_CONFIG, Env:DOCKER_BUILDKIT
+  ```
+  Then carry on from step 5. A credential-free config doesn't help
+  `docker compose build` itself: BuildKit still asks for credentials.
 - **Remote Desktop:** sign in with Chrome Remote Desktop and run `docker
   compose build` there.
 - **Build on the laptop and copy the image.** The laptop must be on the
@@ -206,7 +220,7 @@ Creating or removing admins is command-line only.
 
 | What | Command |
 |---|---|
-| Run the three-case evaluation (~6 min) | `docker compose run --rm -T battle-test python -m battle_test.evaluate --label server-14b` |
+| Run the four-case evaluation (~8 min) | `docker compose run --rm -T battle-test python -m battle_test.evaluate --label server-14b` |
 | Read an evaluation summary | `docker exec battle-test cat /data/cases/output/eval/<folder>/summary.md` |
 | App log | `docker logs --tail 100 battle-test` |
 | Tunnel log | `docker logs --tail 50 battle-test-cloudflared` |
