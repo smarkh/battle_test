@@ -269,7 +269,7 @@ locally in SQLite, so searches never leave the machine.
 
 ```
 pip install -r requirements.txt           # pyarrow, needed only to build
-python -m battle_test.corpus build        # ~176 MB download, ~1.3 GB index, ~1 min
+python -m battle_test.corpus build        # ~200 MB download, ~1.4 GB index, ~1 min
 python -m battle_test.corpus info         # snapshot date and section counts
 python -m battle_test.corpus search --state UT "summary judgment"
 ```
@@ -278,6 +278,12 @@ Files are checked against the dataset's published SHA256 checksums. Which
 jurisdictions and document types are included, and which quarterly snapshot,
 is set under `[corpus]` in `config.toml`. Everything lives in `data/`, which
 is gitignored.
+
+Two fixes to the Alaska data are applied while building (see
+`docs/how-it-works.md`): statute statuses the dataset gets wrong are
+corrected, and statutes get their title and chapter names, which the
+dataset leaves out. The names are saved in `battle_test/ak_headings.json`;
+`python -m battle_test.corpus ak-headings` refreshes them from akleg.gov.
 
 **Semantic search** (optional, off by default) finds sections by meaning as
 well as by keyword. It needs an embedding model in Ollama and a one-time
@@ -294,7 +300,7 @@ Then set `semantic = true` under `[search]` in `config.toml`. See
 
 ## Evaluation
 
-Three fictional sample cases in `examples/`, one per state, each have an
+Four fictional sample cases in `examples/`, one per state, each have an
 expected-authority list in `examples/eval/*.toml`. Each list names:
 - **core** authorities a competent brief should cite
 - **useful** ones that are welcome if cited
@@ -305,7 +311,7 @@ in each file).
 
 ```
 python -m battle_test.evaluate --validate          # check the case files against the law index
-python -m battle_test.evaluate --label laptop-7b   # run and score all three cases
+python -m battle_test.evaluate --label laptop-7b   # run and score all four cases
 python -m battle_test.evaluate --case texas_foundation --rounds 1
 python -m battle_test.evaluate --research-only     # fast (~1 min/case): score the search step alone
 ```

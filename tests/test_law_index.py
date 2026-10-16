@@ -71,7 +71,9 @@ class LawIndexTest(unittest.TestCase):
             pq.write_table(pa.Table.from_pylist(rows), path)
             paths.append(path)
         cfg = CorpusConfig("vTEST", "http://unused", root, ("ut", "ca", "federal"), ("statutes",))
-        build_index(cfg, {"snapshot_date": "2026-08-14"}, paths)
+        ak_headings = {"titles": {"45": "Trade and Commerce"},
+                       "chapters": {"45.50": "Competitive Practices, Regulation of Competition, Consumer Protection"}}
+        build_index(cfg, {"snapshot_date": "2026-08-14"}, paths, ak_headings)
         cls.index = LawIndex(cfg.db_path)
 
     @classmethod
@@ -118,6 +120,14 @@ class LawIndexTest(unittest.TestCase):
         self.assertEqual([s.citation for s in self.index.search("unfair deceptive", "ak")],
                          ["Alaska Stat. § 45.50.471"])
 
+    def test_alaska_statutes_get_akleg_chapter_names(self):
+        # The section's own title ("Unlawful acts and practices.") doesn't say it.
+        self.assertEqual([s.citation for s in self.index.search("consumer protection", "ak")],
+                         ["Alaska Stat. § 45.50.471"])
+        heading = self.index._db.execute(
+            "SELECT heading FROM sections WHERE citation = 'Alaska Stat. § 06.05.910'").fetchone()[0]
+        self.assertEqual(heading, "Code")  # no name known: the dataset's heading stays
+
     def test_resolve_matches_citation_spellings(self):
         for text, state, expected in [
             ("Utah Code Ann. § 78B-2-309(1)", "ut", ["Utah Code § 78B-2-309"]),
@@ -156,6 +166,38 @@ class QueryHelpersTest(unittest.TestCase):
     def test_missing_index_explains_how_to_build(self):
         with self.assertRaisesRegex(FileNotFoundError, "battle_test.corpus build"):
             LawIndex(Path("does/not/exist.sqlite"))
+
+
+class AlaskaHeadingsTest(unittest.TestCase):
+    # Shaped like akleg.gov's table of contents: the main page lists titles
+    # (with a space inside the call), a title lists chapters or parts.
+    PAGES = {
+        "": '<a onclick="loadTOC( 9);" href="#">Title 9. Code of Civil Procedure. <BR> </a>'
+            '<a onclick="loadTOC(45);" href="#">Title 45. Trade and Commerce. <BR> </a>',
+        "9": '<a onclick=loadTOC("09"); href=x >Title 9. Code of Civil Procedure. <BR> </a>'
+             '<li><a onclick=loadTOC("09.10"); href=x ><b>Chapter 10. Limitations of Actions.<BR></h6> </a></li>',
+        "45": '<a onclick=loadTOC("45"); href=x >Title 45. Trade and Commerce. <BR> </a>'
+              '<li><a onclick=loadTOC("45p2"); href=x ><b>Part 2. Trade Practices.<BR></h6> </a></li>',
+        "45p2": '<a onclick=loadTOC("45p2"); href=x >Part 2. Trade Practices. </a>'
+                '<li><a onclick=loadTOC("45.50"); href=x ><b>Chapter 50. Competitive Practices, '
+                'Regulation of Competition, Consumer Protection.<BR></h6> </a></li>',
+    }
+
+    def test_fetch_reads_titles_chapters_and_parts(self):
+        from battle_test.corpus import fetch_ak_headings
+        names = fetch_ak_headings(lambda title="": self.PAGES[title], pause=0)
+        self.assertEqual(names["titles"], {"09": "Code of Civil Procedure", "45": "Trade and Commerce"})
+        self.assertEqual(names["chapters"], {
+            "09.10": "Limitations of Actions",
+            "45.50": "Competitive Practices, Regulation of Competition, Consumer Protection"})
+
+    def test_heading_for_a_section(self):
+        from battle_test.corpus import _ak_heading
+        names = {"titles": {"09": "Code of Civil Procedure"}, "chapters": {"09.10": "Limitations of Actions"}}
+        self.assertEqual(_ak_heading("09.10.053", names), "Code of Civil Procedure / Limitations of Actions")
+        self.assertEqual(_ak_heading("09.99.010", names), "Code of Civil Procedure")
+        self.assertIsNone(_ak_heading("12.01.010", names))
+        self.assertIsNone(_ak_heading("56", names))  # a court rule number
 
 
 if __name__ == "__main__":

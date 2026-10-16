@@ -243,7 +243,7 @@ starts. Queued cases just resume.
 | What | Command |
 |---|---|
 | One case from the command line | `.venv\Scripts\python -m battle_test --state UT --facts examples\utah_roofing_facts.md` |
-| Evaluation (all three sample cases, ~40 min on the laptop) | `.venv\Scripts\python -m battle_test.evaluate --label laptop-7b` |
+| Evaluation (all four sample cases, ~55 min on the laptop) | `.venv\Scripts\python -m battle_test.evaluate --label laptop-7b` |
 | Fast search-only check (~1 min/case) | `.venv\Scripts\python -m battle_test.evaluate --research-only` |
 | Unit tests | `.venv\Scripts\python -m unittest` |
 
@@ -400,7 +400,8 @@ declares a winner.
   single-conversation chat doesn't do this multi-role turn-taking out of the
   box.
 - **State selector:** a US state input that decides which state law applies
-  and is passed to both roles. v1 offers Utah, California and Texas.
+  and is passed to both roles. v1 offers Utah, California and Texas, and
+  Alaska since 2026-10-16.
 - **Complaint input:** two modes — paste/upload an existing complaint, or a
   structured form of case information for generation.
 - **Legal authority source:** requirement 3 (only current, accurate, valid
@@ -1987,7 +1988,7 @@ its Share › Export menu. Both are private until shared from that menu.
     law.
   - Data handling: where case text goes, who can see it, 3-month
     retention and deletion.
-  - Coverage: Utah, California and Texas, plus federal law.
+  - Coverage: Utah, California, Texas and Alaska, plus federal law.
   - Prospects only: plans and prices
     (`plans/profitability-plan.md`).
 - **Needed before it can be finished:**
@@ -2111,9 +2112,26 @@ its Share › Export menu. Both are private until shared from that menu.
 - **State coverage (v1):** Utah, California and Texas, plus federal law.
   Utah is required. California and Texas are large, heavily litigated, and
   have civil procedure that differs from Utah's, which tests that switching
-  states really changes the law applied. The state selector offers only
-  these three in v1. Open US Law covers every state, so adding more later
-  means testing output quality for that state, not sourcing new data.
+  states really changes the law applied. Open US Law covers every state, so
+  adding more later means testing output quality for that state, not
+  sourcing new data.
+  - **Alaska added (2026-10-15/16)**, deployed and live. Adding it took more
+    than config:
+    - **Snapshot:** the data host serves only its latest snapshot, so every
+      state moved from v2026.08 to v2026.09.1.
+    - **Citations:** Alaska's "AS 09.10.053" form is now parsed.
+    - **Standard queries:** the Utah/Texas wording ("county", "district
+      court") found the wrong law for Alaska, so Alaska has its own
+      (`STATE_STANDARD_QUERIES`).
+    - **Data fixes:** the dataset's Alaska statute statuses are wrong (861
+      "reserved" that are in force) and its headings carry no chapter
+      names. Both are corrected at build time; see `docs/how-it-works.md`.
+    - **Evaluation:** `alaska_boiler` scored 2/4 core cited, 3/3 on-target,
+      no off-topic (server, 14B, 2026-10-16), with all four cases 8/20 core.
+  - **Lesson for the next state:** check its statuses and headings in the
+    data before trusting search results, and run the standard queries
+    against its index. "Not sourcing new data" held for Alaska, but the
+    data needed correcting.
 - **Models:** local models via Ollama, so case documents stay on the
   machine. The only outbound calls are the citation-string checks to
   CourtListener. Early development happens on this dev laptop (RTX 3050 Ti,
@@ -2171,6 +2189,17 @@ its Share › Export menu. Both are private until shared from that menu.
 - **UI: data retention.** Decided for now (2026-09-25): 3 months, then
   automatic deletion, and users can delete sooner. Worth confirming with the
   lawyer against any record-keeping duties. It's one setting to change.
+- **Search and selection, next steps (from the 2026-10-16 evaluation):**
+  - **Venue** is never cited in any of the four sample cases. The rule is
+    often found by search (Alaska R. Civ. P. 3) but not selected.
+  - **The fit check sets aside prejudgment interest statutes** because the
+    case "has no judgment yet" (Alaska's AS 09.30.070, as Utah's once was).
+  - **Alaska's Unfair Trade Practices Act** (AS 45.50.471, .531) is now
+    searchable but doesn't rank in the top 8 for consumer protection
+    queries. Article names would pin it down, but akleg.gov's table of
+    contents only goes to chapters.
+  - **The Alaska expected-authority list** (`examples/eval/alaska_boiler.toml`)
+    is a draft, like the others, until a lawyer reviews it.
 
 ## Restart prompt
 
@@ -2270,10 +2299,11 @@ Where things stand:
   - I was going to take Ollama and Docker Desktop off Windows startup
     myself (Task Manager, Startup apps). Ask me if I did.
 - Built on this dev laptop (RTX 3050 Ti, 4 GB VRAM):
-  - Pipeline, local Open US Law index for UT/CA/TX/federal
-    (data/law.sqlite), grounded research -> selection -> drafting, and
+  - Pipeline, local Open US Law index for UT/CA/TX/AK/federal
+    (data/law.sqlite, snapshot v2026.09.1, with build-time fixes to the
+    Alaska statute data), grounded research -> selection -> drafting, and
     code-level citation checking.
-  - 3b evaluation set: three sample cases with expected authorities, and
+  - 3b evaluation set: four sample cases with expected authorities, and
     python -m battle_test.evaluate (--research-only for a fast search
     check, --repeats N, --model NAME).
   - Web UI: python -m battle_test.web, with accounts, plans and limits,

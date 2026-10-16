@@ -51,7 +51,7 @@ research, four drafts) and about **25 short ones** for selection.
 
 | # | Stage | Who | What happens |
 |---|---|---|---|
-| 1 | Legal research | Plaintiff | The model lists its legal issues as short search queries, in statute wording, as JSON. Six standard procedural queries (limitations, venue, jurisdiction, attorney fees, interest, damages) are always added. |
+| 1 | Legal research | Plaintiff | The model lists its legal issues as short search queries, in statute wording, as JSON. Six standard procedural queries (limitations, venue, jurisdiction, attorney fees, interest, damages) are always added, in the state's own wording where the default wording misses (Alaska). |
 | | Search | Code | Each query is run against the law index, 8 results each. A section found by several queries stays with the one that ranked it highest. |
 | 2 | Selecting authorities | Plaintiff | One short call per query: the model sees that query's candidates (citation, title, first 40 words) and picks the one that states the rule for this case, or none, as JSON. Up to 10 picks are kept. |
 | 3 | Complaint | Plaintiff | Drafted from the case information and the selected sections. Skipped if the user supplied a complaint, which is used as written but still checked. |
@@ -67,7 +67,15 @@ inline in the text.
 Details worth knowing:
 
 - **The summary judgment rule is looked up directly,** not left to search:
-  Utah R. Civ. P. 56, Cal. CCP § 437c, Tex. R. Civ. P. 166a.
+  Utah R. Civ. P. 56, Cal. CCP § 437c, Tex. R. Civ. P. 166a, Alaska R. Civ.
+  P. 56.
+- **The standard queries are worded for Utah and Texas** ("county",
+  "district court", "instrument in writing"). For Alaska, which has no
+  counties and whose trial court is the superior court, they found federal
+  statutes and the wrong court's rules, so Alaska has its own wording
+  (`grounding.STATE_STANDARD_QUERIES`). In search alone that found 5 of 6
+  expected Alaska authorities, against 2. The other states still use the
+  default, which their evaluation results were measured with.
 - **A drafting prompt holds at most 12 sections,** each cut to about 700
   characters, so the longest prompt (the reply) fits the model's context.
 - **Selection asks about one query at a time** because small models pick
@@ -107,11 +115,11 @@ back as described above.
 
 The law comes from [Open US Law](https://www.vaquill.ai/open-us-law) (by
 Vaquill AI, CC BY 4.0): statutes, constitutions and court rules for Utah,
-California, Texas and federal law.
+California, Texas, Alaska and federal law.
 
-- `python -m battle_test.corpus build` downloads 12 files (~176 MB),
-  checks their SHA256 checksums, and builds `data/law.sqlite` (~1.3 GB,
-  about 370,000 sections) in about a minute.
+- `python -m battle_test.corpus build` downloads 15 files (~200 MB),
+  checks their SHA256 checksums, and builds `data/law.sqlite` (~1.4 GB,
+  about 397,000 sections) in about a minute.
 - It's a SQLite database with a full-text (FTS5) index. Searches run on
   the machine, so no case facts leave it.
 - Search is **keyword search**. It returns only law that's in force, from
@@ -135,13 +143,33 @@ California, Texas and federal law.
     by another model, or before the index was rebuilt, are refused.
 - The data is a quarterly snapshot. Every output states the date the law
   is current as of.
+- **Two fixes to the Alaska statutes** are applied while building, both
+  found on 2026-10-16 (snapshot v2026.09.1):
+  - **Status.** The dataset marks 861 Alaska statutes "reserved" and 6
+    "repealed". A sample of 36 checked on akleg.gov were all current law:
+    "reserved" marks a section with one repealed subsection, "repealed" one
+    that mentions repeal. That hid the Unfair Trade Practices Act from
+    search. They're stored as in force, unless the text is only a repeal
+    note. Alaska's constitution and court rule statuses are right, and are
+    kept.
+  - **Headings.** The dataset gives every Alaska statute the heading "AK
+    Code", while other states' headings name the title and chapter, which
+    search weights highly. The names come from akleg.gov's table of
+    contents, saved in `battle_test/ak_headings.json` (47 titles, 942
+    chapters) so a build doesn't depend on the site. `python -m
+    battle_test.corpus ak-headings` refreshes them. Alaska law's share of
+    search candidates rose from 73% to 81%, and "consumer protection"
+    queries now reach chapter 45.50. They still don't rank its key sections
+    (AS 45.50.471, .531) in the top 8: the chapter holds about 100 sections,
+    and the more precise article name isn't in the table of contents.
 
 ## The citation check
 
 `grounding.check_citations()` runs on every draft. It finds statute, rule
 and constitution citations in many written forms ("Utah Code Ann. §",
 "U.C.A.", "Rule 56 of the Utah Rules of Civil Procedure", "Code of Civil
-Procedure section 437c") and resolves each against the index.
+Procedure section 437c", Alaska's "AS 09.10.053") and resolves each against
+the index.
 
 | Mark | Meaning |
 |---|---|
@@ -212,8 +240,9 @@ Be clear on these before judging any output:
 
 - **The wrong law gets chosen.** Keyword search misses statutes worded
   differently from the query, and each state words things differently. On
-  the three sample cases, the briefs cite about 4 to 6 of the 16 authorities a
-  competent brief should. A bigger model (14B instead of 7B) didn't help,
+  the four sample cases, the briefs cite 8 of the 20 core authorities a
+  competent brief should (server, 14B, 2026-10-16). Venue authorities are
+  never cited in any of them. A bigger model (14B instead of 7B) didn't help,
   because a model only sees what search returns.
 - **Real law gets misstated.** A model may cite a real, in-force section
   for something it doesn't say. Nothing catches this yet.

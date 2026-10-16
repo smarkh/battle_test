@@ -238,6 +238,11 @@ Creating or removing admins is command-line only.
   docker compose run --rm battle-test python -m battle_test.corpus build
   docker compose run --rm -T battle-test python -m battle_test.evaluate --validate
   ```
+  Only the latest snapshot can be downloaded, so the old index can't be
+  rebuilt after a refresh.
+- **Rebuild the law index after any change to how it's built** (such as
+  `corpus.py` or `ak_headings.json`), with the same two commands. The app
+  opens the index fresh for each case, so no restart is needed after it.
 - **Backups.** Only accounts (`users.sqlite`) are backed up. Case files
   are deliberately not: they're privileged and expire after 90 days.
 - **Retention** runs itself: an hourly purge of cases older than 90 days.

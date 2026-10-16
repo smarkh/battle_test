@@ -5,6 +5,7 @@
     python -m battle_test.corpus search --state UT "summary judgment"
     python -m battle_test.corpus embed        # section vectors for semantic search
     python -m battle_test.corpus search --state TX --semantic "time limit to sue on a contract"
+    python -m battle_test.corpus ak-headings  # refresh Alaska chapter names (rarely)
 
 Data: Open US Law by Vaquill AI, CC BY 4.0 (https://www.vaquill.ai/open-us-law).
 """
@@ -130,6 +131,73 @@ def _heading(row: dict) -> str:
     return " / ".join(p for p in parts if p and p != "None")
 
 
+# Open US Law gives every Alaska statute the heading "AK Code" and no chapter
+# name, so keyword search can't match a topic a section's own title doesn't
+# name: "consumer protection" never found AS 45.50.471 ("Unlawful acts and
+# practices."), whose chapter is "Unfair Trade Practices and Consumer
+# Protection". The names come from akleg.gov's table of contents, saved by
+# `python -m battle_test.corpus ak-headings` so a build doesn't depend on it.
+AK_HEADINGS_PATH = Path(__file__).with_name("ak_headings.json")
+_AKLEG_TOC = "https://www.akleg.gov/basis/statutes.asp"
+
+
+def _load_ak_headings(path: Path = AK_HEADINGS_PATH) -> dict:
+    if not path.exists():
+        return {"titles": {}, "chapters": {}}
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _ak_heading(section_key: str, names: dict) -> str | None:
+    """'45.50.471' -> 'Trade and Commerce / Unfair Trade Practices and Consumer Protection'."""
+    parts = section_key.split(".")
+    if len(parts) < 3:
+        return None
+    title, chapter = names["titles"].get(parts[0]), names["chapters"].get(".".join(parts[:2]))
+    return " / ".join(p for p in (title, chapter) if p) or None
+
+
+def _akleg_toc(title: str = "") -> str:
+    url = f"{_AKLEG_TOC}?media=js&type=TOC&title={title}" if title else _AKLEG_TOC
+    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(request, timeout=60) as r:
+        return r.read().decode("utf-8", "replace")
+
+
+_TOC_ENTRY = re.compile(r'loadTOC\(\s*"?([\w.]+)"?\s*\);[^>]*>(?:<b>)?\s*([^<]+)')
+
+
+def fetch_ak_headings(fetch=_akleg_toc, pause: float = 1.0) -> dict:
+    """Alaska's title and chapter names from akleg.gov's table of contents.
+
+    The main page lists the titles; each title's entry lists its chapters,
+    or parts ("45p2") that list them in turn.
+    """
+    import html
+    import time
+
+    names: dict = {"source": _AKLEG_TOC, "fetched": datetime.now().date().isoformat(),
+                   "titles": {}, "chapters": {}}
+    pending = [key for key, _ in _TOC_ENTRY.findall(fetch())]
+    seen = set()
+    while pending:
+        key = pending.pop(0)
+        if key in seen:
+            continue
+        seen.add(key)
+        time.sleep(pause)
+        for entry, label in _TOC_ENTRY.findall(fetch(key)):
+            label = " ".join(html.unescape(label).split())
+            name = re.sub(r"^(?:Title|Chapter|Article|Part)\s+[\w.]+\.\s*", "", label).rstrip(". ").strip()
+            if "." in entry and "p" not in entry:
+                names["chapters"][entry] = name
+            elif "p" in entry:
+                pending.append(entry)
+            else:
+                names["titles"][entry.zfill(2)] = name
+    return names
+
+
 # Open US Law's status for Alaska statutes is wrong (checked against
 # akleg.gov, 2026-10-16, snapshot v2026.09.1): all 30 sampled "reserved"
 # sections and all 6 "repealed" ones are current law. "Reserved" marks a
@@ -149,8 +217,11 @@ def _act_status(jurisdiction: str, document_type: str, status: str, text: str) -
     return status
 
 
-def build_index(cfg: CorpusConfig, manifest: dict, files: list[Path]) -> dict[str, int]:
+def build_index(cfg: CorpusConfig, manifest: dict, files: list[Path],
+                ak_headings: dict | None = None) -> dict[str, int]:
     import pyarrow.parquet as pq  # build-time only dependency
+
+    ak_names = ak_headings if ak_headings is not None else _load_ak_headings()
 
     tmp = cfg.db_path.with_suffix(".building")
     tmp.unlink(missing_ok=True)
@@ -169,10 +240,14 @@ def build_index(cfg: CorpusConfig, manifest: dict, files: list[Path]) -> dict[st
                 rows_seen += 1
                 if not r["citation"] or not r["text"]:
                     continue
+                prefix, section_key = split_corpus_citation(r["citation"])
+                heading = _heading(r)
+                if jurisdiction == "ak" and r["document_type"] == "statute":
+                    heading = _ak_heading(section_key, ak_names) or heading
                 rows.append((
                     r["act_id"], jurisdiction, r["document_type"] or "", r["citation"],
-                    citation_key(r["citation"]), *split_corpus_citation(r["citation"]),
-                    _heading(r), r["section_title"] or "",
+                    citation_key(r["citation"]), prefix, section_key,
+                    heading, r["section_title"] or "",
                     r["display_path"] or "",
                     _act_status(jurisdiction, r["document_type"] or "", r["act_status"] or "unknown", r["text"]),
                     r["text"],
@@ -283,11 +358,18 @@ def main(argv: list[str] | None = None) -> int:
                         help="Search by meaning (needs `embed` to have been run), not by keyword.")
     search.add_argument("query")
     sub.add_parser("embed", help="Build the section vectors for semantic search (slow; resumable).")
+    sub.add_parser("ak-headings", help=f"Refresh Alaska's title and chapter names from akleg.gov "
+                                       f"into {AK_HEADINGS_PATH.name}, then rebuild.")
     args = parser.parse_args(argv)
 
     cfg = load_corpus_config(args.config)
     try:
-        if args.command == "build":
+        if args.command == "ak-headings":
+            names = fetch_ak_headings()
+            AK_HEADINGS_PATH.write_text(json.dumps(names, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+            print(f"Saved {len(names['titles'])} titles and {len(names['chapters'])} chapters "
+                  f"to {AK_HEADINGS_PATH}")
+        elif args.command == "build":
             _cmd_build(cfg)
         elif args.command == "info":
             _cmd_info(cfg)

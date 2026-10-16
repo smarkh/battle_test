@@ -10,7 +10,7 @@ Read [how-it-works.md](how-it-works.md) first. This is the map.
 |---|---|
 | `battle_test/` | The Python package: the pipeline and the web app |
 | `tests/` | Unit tests (`python -m unittest`) |
-| `examples/` | Three fictional sample cases, and their expected-authority lists in `examples/eval/` |
+| `examples/` | Four fictional sample cases (UT, CA, TX, AK), and their expected-authority lists in `examples/eval/` |
 | `docs/` | These documents |
 | `plans/` | Design, decisions, results and future plans |
 | `config.toml` | Laptop settings |
@@ -39,7 +39,8 @@ needed only to build the law index and to run the web UI.
 | `grounding.py` | Research (model queries plus the standard ones), gathering search candidates per query, selection (one call per query), formatting sections for a prompt, and `check_citations()`, which classifies every citation in a draft and, given a judge, records whether each cited section supports the paragraph citing it. `fit_filter()` keeps, before drafting, only the selected sections a judge says apply to the case. | citations, law_index |
 | `citations.py` | Pure text handling: finds citations in a draft, parses them, and normalises code names so "Utah Code Ann." and "U.C.A." match. No database access. | none |
 | `law_index.py` | `LawIndex`: reads `law.sqlite`. `search()` is the keyword search, `lookup()` finds an exact citation, and `resolve()` matches a parsed citation from a draft. | citations |
-| `corpus.py` | `python -m battle_test.corpus build / info / search / embed`. Downloads Open US Law, verifies checksums, builds the index. Needs `pyarrow`. `embed` builds the vectors for semantic search. | law_index, citations, semantic |
+| `corpus.py` | `python -m battle_test.corpus build / info / search / embed / ak-headings`. Downloads Open US Law, verifies checksums, builds the index. Needs `pyarrow`. While building, corrects Alaska statute statuses (`_act_status`) and adds Alaska title and chapter names from `ak_headings.json`. `embed` builds the vectors for semantic search. `ak-headings` refreshes the Alaska names from akleg.gov. | law_index, citations, semantic |
+| `ak_headings.json` | Alaska's statute title and chapter names, from akleg.gov's table of contents (the dataset leaves them out). Shipped in the image. | none |
 | `semantic.py` | Semantic search. `Embedder` calls an Ollama embedding model, `build()` embeds every in-force section (resumable), `VectorIndex` finds the nearest sections, and `attach()` wraps a `LawIndex` as a `SemanticLaw` when `[search] semantic` is on. Needs `numpy`, imported only here. | law_index, models |
 | `report.py` | Turns a `CaseRun` into the Markdown document set: disclaimer, citation-check table, documents, possible references, appendix. `possible_references()` is the authorities given to the models that no draft cited. | grounding |
 | `evaluate.py` | `python -m battle_test.evaluate`. Runs the sample cases and scores them against the expected authorities. | pipeline, report |
@@ -131,7 +132,7 @@ fake model clients and small temporary databases.
 | How many sections a model gets, or how much of each | `grounding.py` (`MAX_AUTHORITIES`, `EXCERPT_CHARS`), `pipeline.py` (`MAX_COMBINED_AUTHORITIES`) |
 | A citation form the checker doesn't recognise | `citations.py` (`_PATTERNS`), with a test in `test_citations.py` |
 | The order of documents, or adding a step | `pipeline.py` |
-| Adding a state | `prompts.py` (`SUPPORTED_STATES`, `TRIAL_COURTS`), `grounding.py` (`SUMMARY_JUDGMENT_RULES`, and `STATE_STANDARD_QUERIES` if the default standard queries miss the state's own wording), `[corpus] jurisdictions` in every config, then rebuild the index |
+| Adding a state | `prompts.py` (`SUPPORTED_STATES`, `TRIAL_COURTS`), `grounding.py` (`SUMMARY_JUDGMENT_RULES`, and `STATE_STANDARD_QUERIES` if the default standard queries miss the state's own wording), `[corpus] jurisdictions` in every config, citation forms in `citations.py`, a sample case in `examples/` and `examples/eval/` (and the state set in `test_evaluate.py`), then rebuild the index. Check the new state's statuses and headings in the data (`corpus info`): Alaska's needed fixing |
 | The model or its settings | `[models]` and `[generation]` in the config |
 | Ollama or Bedrock | `provider` in `[models]` |
 | The Bedrock models and their prices | `[bedrock.models]` in `config.bedrock.toml` |

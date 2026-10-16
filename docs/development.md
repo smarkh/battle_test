@@ -47,7 +47,7 @@ How to make a change safely. Set up first with
 Unit tests show the code works. They don't show the briefs are any good.
 The evaluation does that.
 
-Three fictional sample cases are in `examples/`, one per state, all
+Four fictional sample cases are in `examples/`, one per state, all
 residential construction disputes. Each has an expected-authority list in
 `examples/eval/*.toml`:
 
