@@ -209,7 +209,7 @@ class EvaluateTest(unittest.TestCase):
 class ShippedCasesTest(unittest.TestCase):
     def test_sample_cases_load_and_have_facts(self):
         cases = load_cases()
-        self.assertEqual({c.state for c in cases}, {"UT", "CA", "TX"})
+        self.assertEqual({c.state for c in cases}, {"UT", "CA", "TX", "AK"})
         for c in cases:
             with self.subTest(case=c.name):
                 self.assertTrue(c.facts_path.exists())

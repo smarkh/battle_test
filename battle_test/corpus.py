@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import sys
 import urllib.request
@@ -129,6 +130,25 @@ def _heading(row: dict) -> str:
     return " / ".join(p for p in parts if p and p != "None")
 
 
+# Open US Law's status for Alaska statutes is wrong (checked against
+# akleg.gov, 2026-10-16, snapshot v2026.09.1): all 30 sampled "reserved"
+# sections and all 6 "repealed" ones are current law. "Reserved" marks a
+# section with one repealed subsection ("(b) [Repealed, § 28 ch 90 SLA
+# 1991.]") or the word "reserved"; "repealed" marks one that mentions repeal
+# ("Construction against implied repeal"). That hid the Unfair Trade
+# Practices Act (AS 45.50.471) from search. Wholly repealed sections aren't
+# in the data at all. Alaska's constitution and court rule statuses are right.
+_STATUS_UNRELIABLE = {("ak", "statute")}
+_REPEAL_NOTE = re.compile(r"\s*\[?Repealed\b")
+
+
+def _act_status(jurisdiction: str, document_type: str, status: str, text: str) -> str:
+    if ((jurisdiction, document_type) in _STATUS_UNRELIABLE and status in ("reserved", "repealed")
+            and not _REPEAL_NOTE.match(text)):
+        return "in_force"
+    return status
+
+
 def build_index(cfg: CorpusConfig, manifest: dict, files: list[Path]) -> dict[str, int]:
     import pyarrow.parquet as pq  # build-time only dependency
 
@@ -153,7 +173,9 @@ def build_index(cfg: CorpusConfig, manifest: dict, files: list[Path]) -> dict[st
                     r["act_id"], jurisdiction, r["document_type"] or "", r["citation"],
                     citation_key(r["citation"]), *split_corpus_citation(r["citation"]),
                     _heading(r), r["section_title"] or "",
-                    r["display_path"] or "", r["act_status"] or "unknown", r["text"],
+                    r["display_path"] or "",
+                    _act_status(jurisdiction, r["document_type"] or "", r["act_status"] or "unknown", r["text"]),
+                    r["text"],
                     r["source_url"] or "", r["last_amended_year"],
                 ))
             db.executemany(

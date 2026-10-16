@@ -50,6 +50,20 @@ class LawIndexTest(unittest.TestCase):
             "us_ca_statutes.parquet": [
                 _row("CA1", "Cal. CCP § 437c", "Section 437c", "Summary judgment in California."),
             ],
+            # Open US Law's Alaska statute statuses are wrong; see corpus._act_status.
+            "us_ak_statutes.parquet": [
+                _row("AK1", "Alaska Stat. § 45.50.471", "Unlawful acts and practices.",
+                     "(a) Unfair or deceptive acts are unlawful. (b) [Repealed, § 1 ch 2 SLA 1990.]",
+                     status="reserved"),
+                _row("AK2", "Alaska Stat. § 06.05.910", "Construction with subsequent legislation.",
+                     "No part of this chapter shall be considered impliedly repealed.", status="repealed"),
+                _row("AK3", "Alaska Stat. § 1.01.010", "Old section.", "[Repealed, § 3 ch 4 SLA 1999.]",
+                     status="repealed"),
+            ],
+            "us_ak_constitutions.parquet": [
+                _row("AKC1", "Alaska Const. art. VI, § 5", "Section 5", "[Repealed 1998]",
+                     status="repealed", doc_type="constitution"),
+            ],
         }
         paths = []
         for name, rows in files.items():
@@ -90,6 +104,19 @@ class LawIndexTest(unittest.TestCase):
         (old,) = self.index.lookup("Utah Code § 1-1-1")
         self.assertFalse(old.in_force)
         self.assertEqual(self.index.lookup("Utah Code Ann. § 78-27-102"), [])
+
+    def test_alaska_statute_statuses_are_corrected(self):
+        status = {c: self.index.lookup(c)[0].act_status for c in [
+            "Alaska Stat. § 45.50.471", "Alaska Stat. § 06.05.910", "Alaska Stat. § 1.01.010",
+            "Alaska Const. art. VI, § 5"]}
+        self.assertEqual(status, {
+            "Alaska Stat. § 45.50.471": "in_force",  # "reserved": one subsection repealed
+            "Alaska Stat. § 06.05.910": "in_force",  # "repealed": only mentions repeal
+            "Alaska Stat. § 1.01.010": "repealed",  # really is just a repeal note
+            "Alaska Const. art. VI, § 5": "repealed",  # constitution statuses are trusted
+        })
+        self.assertEqual([s.citation for s in self.index.search("unfair deceptive", "ak")],
+                         ["Alaska Stat. § 45.50.471"])
 
     def test_resolve_matches_citation_spellings(self):
         for text, state, expected in [
