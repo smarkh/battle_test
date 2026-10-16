@@ -87,9 +87,9 @@ guardrails-style network isolation and data handling).
          for the full $26,500 paid to the new roofer on top of the
          $12,000 deposit.
        - **`checker = "qwen2.5:14b"` set in `config.server.toml`
-         (2026-10-15),** with `checker_temperature = 0.0`. Not deployed
-         yet: the live site gets both checks at the next build and
-         restart. Then, if you're happy, set
+         (2026-10-15),** with `checker_temperature = 0.0`. **Deployed the
+         same day** (commit `662a6d7`): both checks are on at
+         `battle.smarkiq.us`. Not yet tried there with a signed-in case. Then, if you're happy, set
        `checker` in `config.server.toml` and deploy (about a minute more
        per case on the server's GPU).
     3. Broaden the evaluation set beyond residential construction (an
@@ -666,8 +666,8 @@ Decided: v1 uses free sources only. Paid sources are revisited after v1.
      - **Where it's on:** `config.tunnel.toml` (the server's 14B). Off in
        `config.toml` (the laptop has only the 7B), `config.server.toml`
        (the live site) and `config.bedrock.toml`. *Since 2026-10-15 it's
-       set in `config.server.toml` and `config.bedrock.toml` too; the
-       live site gets it at the next deploy.*
+       on in `config.server.toml` (live, deployed that day) and
+       `config.bedrock.toml` too.*
      - **First run (2026-10-12):** 7B drafts, 14B checker, through the
        tunnel, semantic search on, one run per case. Folder
        `output/eval/20261012-205525-support-check-7b-drafts-14b-checker/`.

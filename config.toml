@@ -33,10 +33,10 @@ output_dir = "output"
 [corpus]
 # Open US Law snapshot (https://www.vaquill.ai/open-us-law), CC BY 4.0.
 # Refreshed quarterly: bump the version and rebuild to update.
-snapshot = "v2026.08"
+snapshot = "v2026.09.1"
 base_url = "https://oss-data-us.vaquill.ai"
 data_dir = "data"
-jurisdictions = ["ut", "ca", "tx", "federal"]
+jurisdictions = ["ut", "ca", "tx", "ak", "federal"]
 # Federal regulations (~2.8 GB) are left out for now; add "regulations" to
 # include them.
 document_types = ["statutes", "constitutions", "court_rules"]

@@ -84,10 +84,10 @@ output_per_million = 11.00
 temperature = false
 
 [corpus]
-snapshot = "v2026.08"
+snapshot = "v2026.09.1"
 base_url = "https://oss-data-us.vaquill.ai"
 data_dir = "data"
-jurisdictions = ["ut", "ca", "tx", "federal"]
+jurisdictions = ["ut", "ca", "tx", "ak", "federal"]
 document_types = ["statutes", "constitutions", "court_rules"]
 
 [web]

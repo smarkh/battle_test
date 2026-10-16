@@ -40,7 +40,7 @@ _PREFIX_RUN = (
     rf"|{_WORD}(?:\s+(?:{_WORD}|of|and|&|{_ART}))*)"
 )
 _RULE_BODY = r"(?:Civil|Appellate|Criminal)\s+Procedure|Evidence|Professional\s+Conduct"
-_JURIS_WORD = r"Federal|Utah|Texas|California"
+_JURIS_WORD = r"Federal|Utah|Texas|California|Alaska"
 
 # (pattern, bare_ok). Order doesn't matter; overlapping matches keep the longest.
 _PATTERNS = [
@@ -48,8 +48,11 @@ _PATTERNS = [
     (re.compile(rf"(?:(?P<prefix>{_PREFIX_RUN})\s*)?§§?\s*(?P<sec>{_SEC})"), True),
     # "Civil Code section 1542": needs a prefix, or "section 4 of the contract" would count
     (re.compile(rf"(?P<prefix>{_PREFIX_RUN})\s+[Ss]ections?\s+(?P<sec>{_SEC})"), False),
+    # "AS 09.10.053(a)", Alaska's usual statute form. Only that exact shape,
+    # so the word "AS" in capitals elsewhere doesn't count.
+    (re.compile(rf"\b(?P<prefix>AS)\s+(?P<sec>\d{{2}}\.\d{{2}}\.\d{{3}}[a-z]?(?:\(\w+\))*)"), False),
     # "Utah R. Civ. P. 56(a)", "Cal. R. Ct. 3.1350", "Utah R. Bus. & Ch. Ct. P. 1"
-    (re.compile(rf"(?P<prefix>\b(?:Fed|Utah|Ut|Cal|Tex)\.?\s+R\.(?:\s+(?:[A-Z][\w.\-]*|&))*?)\s+(?P<sec>{_SEC})"), False),
+    (re.compile(rf"(?P<prefix>\b(?:Fed|Utah|Ut|Cal|Tex|Alaska)\.?\s+R\.(?:\s+(?:[A-Z][\w.\-]*|&))*?)\s+(?P<sec>{_SEC})"), False),
     # "Utah Rule(s) of Civil Procedure 56"
     (re.compile(rf"\b(?P<prefix>(?:{_JURIS_WORD})\s+Rules?\s+of\s+(?:{_RULE_BODY}))\s+(?:[Rr]ule\s+)?(?P<sec>{_SEC})"), False),
     # "Rule 56 of the Utah Rules of Civil Procedure"
@@ -62,8 +65,9 @@ _PATTERNS = [
 
 
 # The statute patterns (§ and "section") can start a list of sections:
-# "Utah Code § 78B-6-2705, 78B-5-826, and 70A-2-712", "§§ 1983 and 1988".
-_LIST_PATTERNS = {0, 1}
+# "Utah Code § 78B-6-2705, 78B-5-826, and 70A-2-712", "§§ 1983 and 1988",
+# "AS 09.10.053 and 09.10.070".
+_LIST_PATTERNS = {0, 1, 2}
 _LIST_NEXT = re.compile(rf"(?:\s*,\s*(?:and\s+|or\s+)?|\s+(?:and|or)\s+)(?P<sec>{_SEC})")
 
 
@@ -88,14 +92,14 @@ def _list_continuation(text: str, masked: str, pos: int, prefix: str, first_sec:
             break
         start = m.start("sec")
         end = start + len(raw)
-        shown = f"{prefix} § {text[start:end]}".strip()
+        shown = f"{prefix} {text[start:end]}" if prefix == "AS" else f"{prefix} § {text[start:end]}".strip()
         refs.append(CitationRef(start, end, shown, prefix, normalize_section(raw), bare_ok))
         pos = end
     return refs
 
 
 _JURISDICTION_START = re.compile(
-    r"\b(?:Utah|Ut\.|U\.\s?C\.\s?A|Cal(?:\.|ifornia)|Tex(?:\.|as)|Fed(?:\.|eral)|\d{1,2}\s+U\.?\s?S\.?\s?C)"
+    r"\b(?:Utah|Ut\.|U\.\s?C\.\s?A|Alaska|Cal(?:\.|ifornia)|Tex(?:\.|as)|Fed(?:\.|eral)|\d{1,2}\s+U\.?\s?S\.?\s?C)"
 )
 
 
@@ -172,6 +176,7 @@ _JURISDICTION_TOKENS = {
     "utah": "ut", "ut": "ut",
     "cal": "ca", "california": "ca",
     "tex": "tx", "texas": "tx",
+    "alaska": "ak",
     "fed": "federal", "federal": "federal",
 }
 _FILLER = {"ann", "annotated", "code", "of", "and", "the", "vernon", "vernons", "west", "wests"}
@@ -203,6 +208,8 @@ def code_name(prefix: str) -> CodeName:
     if m:
         return CodeName("federal", ("usc", m.group(1)))
     prefix = _UCA.sub("Utah Code", prefix)
+    if prefix == "AS":  # Alaska's "AS 09.10.053"; case matters, "as" is just a word
+        prefix = "Alaska Stat."
 
     words = re.findall(r"[a-z0-9]+", prefix.lower().replace("&", " and ").replace("'", ""))
     # Anything before the last jurisdiction word is surrounding prose, e.g.
@@ -260,7 +267,9 @@ _UNPARSED_PATTERNS = [
     r"\bUtah Admin\. Code\b",
     r"\bCal\. [A-Z][A-Za-z.& ]{0,30}? Code\b",
     r"\bTex\. [A-Z][A-Za-z.& ]{0,30}? Code\b",
-    r"\b(?:Fed\.|Utah|Cal\.|Tex\.) R\.",
+    r"\bAlaska Stat\b",
+    r"\bAS \d{2}\.\d{2}\.\d{3}",
+    r"\b(?:Fed\.|Utah|Cal\.|Tex\.|Alaska) R\.",
     # Case reporter citations: volume, a reporter abbreviation containing a
     # period, then a page, e.g. "550 U.S. 544", "123 P.3d 456",
     # "45 F. Supp. 2d 789", "12 Cal. App. 4th 345".

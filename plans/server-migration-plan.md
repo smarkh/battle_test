@@ -702,7 +702,16 @@ how to run it". That replaces the separate `deploy.md` planned here.
     - Until that's deployed: purge the cache in the Cloudflare
       dashboard (Caching → Configuration → Purge Everything, which also
       affects `llm.smarkiq.us`), or wait 4 hours, and hard-refresh.
-  - **Last done 2026-10-14:** commit `14339ed`, nine commits on from
+  - **Last done 2026-10-15:** commit `662a6d7`, which turns both checks
+    on (`checker = "qwen2.5:14b"` in `config.server.toml`) and brings
+    the consistent fit check. `git pull` over SSH worked, but `docker
+    compose build` over SSH failed again with the credentials error
+    (it looks up the base image), so the image was built on the laptop
+    and copied (`f7015083b7f6`, 155 MB file, same ID on both machines),
+    then `docker compose up -d`. Healthy, and the container's config
+    shows the checker. A 105 MB `battle-test-image.tar` from 2026-10-04
+    is still in the server's repo folder (untracked).
+  - **Done before, 2026-10-14:** commit `14339ed`, nine commits on from
     `9e43916`. It brought complaint upload with text extraction, the
     "Possible references" section, and the queue-position fix. Bedrock,
     semantic search and both checks came too, but stay off:

@@ -30,6 +30,22 @@ class FindCitationRefsTest(unittest.TestCase):
              ("URCP 56", "56"), ("Cal. Rules of Court, rule 3.1350", "3.1350")],
         )
 
+    def test_alaska_forms(self):
+        self.assertEqual(
+            self.refs("AS 09.10.053; Alaska Stat. § 45.45.900(2); Alaska R. Civ. P. 56(c); "
+                      "Rule 82 of the Alaska Rules of Civil Procedure; Alaska Const. art. I, § 7."),
+            [("AS 09.10.053", "09.10.053"), ("Alaska Stat. § 45.45.900(2)", "45.45.900"),
+             ("Alaska R. Civ. P. 56(c)", "56"), ("Rule 82 of the Alaska Rules of Civil Procedure", "82"),
+             ("Alaska Const. art. I, § 7", "7")],
+        )
+        self.assertEqual(self.refs("AS 09.10.053 and 09.10.070(a)"),
+                         [("AS 09.10.053", "09.10.053"), ("AS 09.10.070(a)", "09.10.070")])
+
+    def test_as_needs_alaska_section_shape(self):
+        for text in ["AS 12 days passed", "AS IT TURNS OUT 09.10.053", "as 09.10.053"]:
+            with self.subTest(text=text):
+                self.assertEqual(find_citation_refs(text), [])
+
     def test_trims_prose_before_citation(self):
         self.assertEqual(self.refs("See U.C.A. § 1-2-3"), [("U.C.A. § 1-2-3", "1-2-3")])
         self.assertEqual(self.refs("The Defendant Violated Utah Code § 1-2-3"),
@@ -102,6 +118,10 @@ class CodeNameTest(unittest.TestCase):
             ("Tex. Gov't Code", "Tex. Government Code"),
             ("Cal. Rules of Court, rule", "Cal. R. Ct."),
             ("42 U.S.C.A.", "42 U.S.C."),
+            ("AS", "Alaska Stat."),
+            ("Alaska Statutes", "Alaska Stat."),
+            ("Alaska Rules of Civil Procedure", "Alaska R. Civ. P."),
+            ("Alaska Const. art. I,", "Alaska Const. art. I"),
         ]:
             with self.subTest(a=a, b=b):
                 ca, cb = code_name(a), code_name(b)

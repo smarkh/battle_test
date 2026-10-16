@@ -49,7 +49,7 @@ python -m battle_test --state UT --facts examples/utah_roofing_facts.md
 python -m battle_test --state CA --complaint path/to/my_complaint.md --rounds 1
 ```
 
-- `--state`: `UT`, `CA` or `TX` (v1 coverage). Federal law always applies.
+- `--state`: `UT`, `CA`, `TX` or `AK`. Federal law always applies.
 - `--facts` or `--complaint`: generate a complaint from case information, or
   use one you wrote.
 - `--rounds 1|2`: round 2 adds the plaintiff's reply. The default is set in
@@ -104,7 +104,7 @@ Each output file contains:
 | `battle_test/web/render.py` | Turning a finished run into HTML (links, highlights, summaries) |
 | `battle_test/web/demo.py` | The demo model for working on the UI without a GPU |
 | `battle_test/web/templates/`, `static/` | Pages, CSS, and the small progress/tabs script |
-| `examples/` | Fictional sample cases (UT, CA, TX) for testing |
+| `examples/` | Fictional sample cases (UT, CA, TX, AK) for testing |
 | `examples/eval/` | Expected authorities for each sample case |
 | `docs/` | How it works, a guide to the code, running it locally and on the server, and how to work on it |
 | `plans/plan.md` | Design, decisions, build steps, and open questions |
@@ -262,7 +262,7 @@ for the full steps.
 
 ## Law corpus
 
-Statutes, constitutions and court rules for Utah, California, Texas and
+Statutes, constitutions and court rules for Utah, California, Texas, Alaska and
 federal law come from [Open US Law](https://www.vaquill.ai/open-us-law)
 (Open US Law by Vaquill AI, CC BY 4.0). They're downloaded and indexed
 locally in SQLite, so searches never leave the machine.

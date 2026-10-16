@@ -255,7 +255,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("build", help="Download the configured files and (re)build the index.")
     sub.add_parser("info", help="Show the index's snapshot and section counts.")
     search = sub.add_parser("search", help="Full-text search over state + federal law.")
-    search.add_argument("--state", required=True, type=str.lower, choices=("ut", "ca", "tx"))
+    search.add_argument("--state", required=True, type=str.lower, choices=("ut", "ca", "tx", "ak"))
     search.add_argument("--limit", type=int, default=5)
     search.add_argument("--semantic", action="store_true",
                         help="Search by meaning (needs `embed` to have been run), not by keyword.")

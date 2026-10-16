@@ -1,7 +1,7 @@
 """System and task prompts for the plaintiff and defendant roles."""
 
 # v1 state coverage (see plans/plan.md). Federal law applies in every run.
-SUPPORTED_STATES = {"UT": "Utah", "CA": "California", "TX": "Texas"}
+SUPPORTED_STATES = {"UT": "Utah", "CA": "California", "TX": "Texas", "AK": "Alaska"}
 
 # General-jurisdiction state trial court, so the complaint names the right
 # court. (The first Utah run filed in a nonexistent "Circuit Court".)
@@ -9,6 +9,8 @@ TRIAL_COURTS = {
     "UT": "the Utah District Court for the appropriate judicial district and county",
     "CA": "the Superior Court of California for the appropriate county",
     "TX": "the Texas District Court for the appropriate county",
+    # Alaska has no counties; the superior court sits in four judicial districts.
+    "AK": "the Superior Court for the State of Alaska in the appropriate judicial district",
 }
 
 # Models cite from memory unless told not to, and memory is often outdated

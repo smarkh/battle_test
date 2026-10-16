@@ -464,13 +464,21 @@ on your own hardware.
   to show what each change adds, and because drafting is about 80% of a
   case's tokens. `config.bedrock.toml` now names a checker
   (`qwen3-235b`), so all-Bedrock runs include both checks.
-  - **Planned order once the block lifts:** the $0.002 research-only
-    check, then on Qwen3 235B both a checker-only run
-    (`config.tunnel-bedrock.toml`, about $0.25 for 9 runs) and an
-    all-Bedrock run (`config.bedrock.toml --model qwen3-235b`, about
-    $0.70), then Claude Sonnet 5 for everything (about $2.90, or more if
-    its tokenizer counts about 30% higher), once its use-case form is
-    done.
+  - **Planned order once the block lifts:**
+    1. The $0.002 research-only check.
+    2. Qwen3 235B: a checker-only run (`config.tunnel-bedrock.toml`,
+       about $0.25 for 9 runs) and an all-Bedrock run
+       (`config.bedrock.toml --model qwen3-235b`, about $0.70).
+    3. gpt-oss 120B (added 2026-10-15), the same two runs:
+       checker-only (`config.tunnel-bedrock.toml --checker
+       gpt-oss-120b`, about $0.07 for 9 runs) and all-Bedrock
+       (`config.bedrock.toml --model gpt-oss-120b`, about $0.20).
+       Needs a `[bedrock.models.gpt-oss-120b]` entry first, in both
+       `config.bedrock.toml` and `config.tunnel-bedrock.toml` (each
+       has its own model list).
+    4. Claude Sonnet 5 for everything (about $2.90, or more if its
+       tokenizer counts about 30% higher). Its use-case form went in on
+       2026-10-15.
   - These estimates come from the 14B's token use, about 115,000 in and
     6,500 out a case with both checks. Larger models usually write
     longer drafts, so expect more output.

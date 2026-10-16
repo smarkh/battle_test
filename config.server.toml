@@ -40,11 +40,11 @@ rounds = 2
 output_dir = "/data/cases/output"
 
 [corpus]
-snapshot = "v2026.08"
+snapshot = "v2026.09.1"
 base_url = "https://oss-data-us.vaquill.ai"
 # The battle-law volume.
 data_dir = "/data/law"
-jurisdictions = ["ut", "ca", "tx", "federal"]
+jurisdictions = ["ut", "ca", "tx", "ak", "federal"]
 document_types = ["statutes", "constitutions", "court_rules"]
 
 [web]

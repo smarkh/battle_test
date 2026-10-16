@@ -38,8 +38,8 @@ You need Python 3.11 or newer, [Ollama](https://ollama.com), and about
    .venv\Scripts\python -m unittest
    .venv\Scripts\python -m battle_test.corpus info
    ```
-   The tests should all pass. `corpus info` should show snapshot v2026.08
-   and about 370,000 sections.
+   The tests should all pass. `corpus info` should show snapshot v2026.09.1
+   and about 397,000 sections.
 5. **Create your web account.** This asks for a password at a hidden
    prompt, so run it yourself in a terminal:
    ```powershell
@@ -92,7 +92,7 @@ Press **Ctrl+C** in the window running it.
 
 | Option | Meaning |
 |---|---|
-| `--state` | `UT`, `CA` or `TX`. Federal law always applies. |
+| `--state` | `UT`, `CA`, `TX` or `AK`. Federal law always applies. |
 | `--facts FILE` | Case information. The complaint is generated from it. |
 | `--complaint FILE` | A complaint you wrote, used as written. Give this or `--facts`. |
 | `--rounds 1` or `2` | Round 2 adds the plaintiff's reply. The default is in `config.toml`. |

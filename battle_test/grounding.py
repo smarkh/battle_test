@@ -40,6 +40,7 @@ SUMMARY_JUDGMENT_RULES = {
     "ut": "Utah R. Civ. P. 56",
     "ca": "Cal. CCP § 437c",
     "tx": "Tex. R. Civ. P. 166a",
+    "ak": "Alaska R. Civ. P. 56",
 }
 
 

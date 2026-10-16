@@ -48,7 +48,7 @@ _COLUMNS = (
 @dataclass(frozen=True)
 class LawSection:
     citation: str
-    jurisdiction: str  # "ut", "ca", "tx" or "federal"
+    jurisdiction: str  # "ut", "ca", "tx", "ak" or "federal"
     document_type: str  # e.g. "statute", "court_rule", "constitution"
     section_title: str
     display_path: str
