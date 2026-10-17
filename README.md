@@ -28,7 +28,9 @@ The checking works, but the models often pick the wrong law or misstate it.
 That's true on the laptop's 7B and on the server's 14B, which scored no
 better. Search and selection are the bottleneck. `plans/plan.md` covers the
 model size estimate, the planned fixes (3a/3b), the web UI (step 5), and
-the Bedrock hosting option. AWS hosting costs are in
+the Bedrock hosting option. **Updated 2026-10-16:** semantic search and
+a weekly law-update check (approved by an admin before new law goes live;
+`docs/running-on-server.md`, "Law updates") are live. AWS hosting costs are in
 `plans/aws-bedrock-plan.md`, and pricing and profit in
 `plans/profitability-plan.md`. **Day-to-day start/stop instructions** are in
 `plans/plan.md`, under "Start and stop: how to run it".
@@ -87,7 +89,7 @@ Each output file contains:
 | `battle_test/grounding.py` | Research, authority selection, and checking each draft's citations |
 | `battle_test/citations.py` | Finding and parsing citations in text (no database) |
 | `battle_test/law_index.py` | Searching the local law index and resolving citations |
-| `battle_test/semantic.py` | Semantic search: section vectors from an Ollama embedding model, searched alongside keywords (off by default) |
+| `battle_test/semantic.py` | Semantic search: section vectors from an Ollama embedding model, searched alongside keywords (on on the live site, off in `config.toml`) |
 | `battle_test/corpus.py` | Downloading Open US Law and building the index (`python -m battle_test.corpus`) |
 | `battle_test/report.py` | Writing the Markdown output |
 | `battle_test/evaluate.py` | Scoring runs against the sample cases (`python -m battle_test.evaluate`) |
@@ -285,7 +287,7 @@ corrected, and statutes get their title and chapter names, which the
 dataset leaves out. The names are saved in `battle_test/ak_headings.json`;
 `python -m battle_test.corpus ak-headings` refreshes them from akleg.gov.
 
-**Semantic search** (optional, off by default) finds sections by meaning as
+**Semantic search** (on at battle.smarkiq.us since 2026-10-16, off in `config.toml`) finds sections by meaning as
 well as by keyword. It needs an embedding model in Ollama and a one-time
 build of the section vectors:
 

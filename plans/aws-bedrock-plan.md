@@ -409,6 +409,67 @@ on your own hardware.
   industry Legal, 1 user, use case "a legal adversarial system to test
   legal complaints against theoretical responses". **It isn't the cause
   of Error 002:** the block started on 2026-10-06, nine days earlier.
+- **Checked against AWS's model-access page (2026-10-16):**
+  https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html.
+  Every prerequisite it lists is already met:
+  - Models switch on with the first call. There's no "Model access"
+    page outside GovCloud, as found on 2026-10-06.
+  - AWS Marketplace permissions (`aws-marketplace:Subscribe`,
+    `Unsubscribe`, `ViewSubscriptions`): covered by
+    `AdministratorAccess`. Qwen, DeepSeek and Meta models aren't sold
+    through Marketplace at all, and they're the ones failing.
+  - A valid payment method: added 2026-10-14.
+  - Anthropic use-case form: submitted 2026-10-15 (Claude only).
+  - Nothing restricting `bedrock:InvokeModel`: no SCP applies to the
+    account.
+  - **New lead:** the page has a section on "additional account-level
+    access". It says that if every requirement is met and calls are
+    still denied, contact **AWS Sales**
+    (https://aws.amazon.com/contact-us/sales-support/). Only Support
+    has been contacted so far. Next: quote that paragraph on the open
+    Support case, and send the same details to AWS Sales: account
+    548108386131, `us-west-2` and `us-east-1`, the Error 002 text, and
+    the checks above.
+  - **After the block lifts:** the page says the Anthropic agreement
+    can sit in **PENDING** for a while after the form, with calls
+    still denied until AWS emails that it's set up.
+    `get-foundation-model-availability` shows the state.
+  - gpt-oss 120B needs no Marketplace subscription. A failing call to
+    it (a fraction of a cent) would be one more sign the block is
+    account-wide, if AWS asks for more evidence.
+- **Identity Center user re-checked (2026-10-16), free calls only:**
+  - Signed in as `smarkh`, the only Identity Center user, with the
+    `AdministratorAccess` role on 548108386131. No classic IAM users
+    exist. The role has only the `AdministratorAccess` policy, with no
+    inline policies and no permissions boundary.
+  - The IAM policy simulator allows `bedrock:InvokeModel`,
+    `InvokeModelWithResponseStream`, `PutUseCaseForModelAccess`,
+    `CreateFoundationModelAgreement` and all three Marketplace actions.
+  - The organization has no policy types switched on, so no SCP
+    applies.
+  - Model status in `us-west-2` and `us-east-1`: Qwen3 32B, Qwen3 235B
+    (`us-west-2` only), Llama 3.3 70B, DeepSeek v3.2 and gpt-oss 120B
+    all show agreement AVAILABLE, AUTHORIZED, entitlement and region
+    AVAILABLE. Quotas are normal (Qwen3 32B: 10,000 requests a minute).
+  - **Claude Sonnet 5 is still NOT_AVAILABLE**, not PENDING, a day
+    after the form went in.
+  - **The saved Anthropic form looks wrongly encoded.** AWS holds it as
+    base64 text, not as JSON: it decodes only after two rounds of
+    base64. That probably happened because the CLI's `--form-data`
+    already base64-decodes what it's given, so already-encoded input
+    was stored as text. AWS may not be able to read the form, which
+    would explain Sonnet 5 staying NOT_AVAILABLE. Fix: send the form
+    again with boto3, passing plain JSON. This doesn't affect Error
+    002.
+- **Account and both sign-ins re-checked (2026-10-16).** Account
+  contact details corrected to match the card. Card billing address
+  fixed and currency set to USD (by you, as root). Root has MFA and no
+  keys. The Identity Center permission set is plain
+  `AdministratorAccess` (1-hour sessions). The support plan is Basic.
+  Contact info still shows `UNVERIFIED`. Nothing left on our side.
+- **AWS Sales (chat, 2026-10-16) sent it back to Support:** reference
+  case 179203335400015, or upgrade the support plan for a faster
+  response. Sales won't handle it.
 - **Decided 2026-10-15: no Ollama Cloud stopgap.** Wait for Bedrock
   rather than split testing across two providers, which could cause
   problems later. The lookup below is kept for reference only. Its one

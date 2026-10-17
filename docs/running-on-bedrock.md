@@ -18,6 +18,16 @@ still run on your machine.
 
 Commands are for PowerShell on the laptop, from the project folder.
 
+## Sign-in links
+
+**AWS account ID: `548108386131`.** It's also shown in the console's
+top-right menu after signing in.
+
+| Sign in as | Link | Use it for |
+|---|---|---|
+| `smarkh` (Identity Center, day to day) | https://d-9267cc86b3.awsapps.com/start | Everything except billing. The CLI's `aws sso login --profile battle-test` uses it too. |
+| Root user | https://console.aws.amazon.com/ → choose **Root user** | Billing pages (payment methods, currency) and account settings only. Use the account's email, password and MFA. The console's top-right corner shows `smarkh` for both sign-ins, because that's also the account name. To tell which one you're in, open IAM → **Security credentials**: root shows a "Root user" badge. |
+
 ## What it costs
 
 - **Nothing while idle.** Bedrock bills per token, only when a model is

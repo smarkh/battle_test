@@ -38,6 +38,35 @@ guardrails-style network isolation and data handling).
   submit. A reference the model isn't sure of is left out of the draft.
   The 3b work on finding more authorities is paused, and 3a (the "does
   it say that?" check) moves up. See "Decisions made".
+- **Where the 2026-10-16 session stopped:**
+  - **Done that day:**
+    - **Broader evaluation set** (item 3 below): `texas_invoice`,
+      `california_lease`, `utah_used_car`, drafts not yet reviewed by a
+      lawyer. Results under "Broader evaluation set" in Open questions:
+      core cited 21–22/51, about the same as the construction cases.
+      The fit check isn't overfitted. Search is the gap.
+    - **Incremental embedding:** vectors are kept with a hash of each
+      section's text, and a rebuild embeds only new and changed sections.
+      The laptop's vectors were rebuilt for the Alaska index (1.5 hours).
+    - **Law updates with approval** (`battle_test/refresh.py`): a weekly
+      `corpus refresh` builds a new snapshot beside the live law and
+      logs "law update ready" in the activity log; `corpus promote`
+      puts it live, `corpus rollback` undoes it. Deployed (commit
+      `de61466`) and scheduled on the server, Sundays at 3 am.
+    - **Semantic search is ON on the live site** (commit `de56c35`). The
+      server reused all 386,709 of the laptop's vectors by hash. Cases
+      fall back to keyword search, with a warning, if the vectors are
+      ever missing or behind the index.
+    - **Why search misses California law, found:** California's
+      statutes have no titles or named headings in the data, keyword
+      ranking penalises long sections, and semantic search embeds only
+      each section's first 1,500 characters. Details and the proposed fix
+      (index passages, not whole sections) under "Broader evaluation
+      set".
+  - **Agreed next:** decide between passage indexing (fixes the length
+    penalty, the 1,500-character embedding cut-off and the checker's
+    3,000-character view together) and the smaller California
+    chapter-names fix.
 - **Where the 2026-10-14 session stopped:**
   - **Done that day:**
     - The server came back from a Windows Update restart (see the
@@ -2231,11 +2260,44 @@ its Share › Export menu. Both are private until shared from that menu.
     not built: show the checker the paragraphs of the section that best
     match the passage, not just its opening. The drafting model has the
     same limit at 700 characters (`EXCERPT_CHARS`).
+  - **With semantic search** (same setup, keyword + semantic;
+    `output/eval/20261016-221943-broad-cases-semantic-14b/`): core FOUND
+    by search 11/51 → 21/51, but core CITED only 21/51 → 22/51. Off-topic
+    2 → 2, checker doubts 102/131 → 76/97, `[CITATION NEEDED]` 20 → 9.
+    The same pattern as 2026-10-10: search finds more, the briefs don't
+    cite more, so selection and the fit check are now the bottleneck.
+    - Texas gained most: venue (CPRC § 15.002) cited in all 3 runs, 3/5
+      core cited in every run (2/5 before).
+    - California looked worse, but semantic search ISN'T the cause
+      (checked 2026-10-16 by replaying every lease run's recorded queries
+      both ways: the keyword-only and merged candidates always agree).
+      Cal. CIV § 1950.5, the deposit statute at the heart of the case, was
+      found by search in only 1 of the 6 runs, at rank 8 of 8. The other
+      "cited" runs cited it from the model's memory. Why search misses it:
+      - ALL 161,382 in-force California statutes are titled "Section N"
+        under the heading "California Code", with numbers-only paths.
+        California has no official section titles, so there's nothing for
+        the title (5×) and heading (3×) weights to match. Chapter and
+        article names could come from leginfo, as Alaska's came from akleg.
+      - Keyword ranking divides by length. § 1950.5 is 26,182 characters
+        (California's median is 548), so it needs near-exact wording:
+        "security deposit return itemized statement" ranks it #1, "bad
+        faith retention of security deposit" #40.
+      - Semantic search embeds only the first 1,500 characters. § 1950.5's
+        itemized-statement and bad-faith rules come much later. 21% of
+        California statutes are longer than 1,500 characters.
+      - Proposed, not built: index PASSAGES (about 1,500 characters, split
+        at subdivisions) for keyword and semantic search, map a hit to its
+        section, and show the drafting model and checker the matching
+        passage. That fixes the length penalty, the embedding cut-off and
+        the checker's 3,000-character view together.
+    - Still never found: venue in CA and UT, Cal. CCP §§ 85/86, Utah
+      § 70A-2-313 (express warranty).
 
 ## Restart prompt
 
 Paste this into a new Claude Code session, opened in the `battle_test`
-folder, to pick up where the 2026-10-14 session left off:
+folder, to pick up where the 2026-10-16 session left off:
 
 ```
 We're continuing work on battle_test, the legal adversarial argument system.
@@ -2251,29 +2313,31 @@ THE DIRECTION CHANGED on 2026-10-12: correct references over complete
 ones (plan.md, "Decisions made"). The output is a starting point for a
 lawyer, not a file to submit. A reference the model isn't sure of is left
 out. The 3b work on finding MORE law (semantic search, selection with
-both lists, the research prompt) is PAUSED.
+both lists, the research prompt) was PAUSED then. Picked up again on
+2026-10-16: the broader cases showed search, not the checks, is now the
+main gap (item A below).
 
-Next up. We agreed on 2026-10-14 to start with A, then B, while Bedrock
-is blocked:
-A. Make the fit check consistent. In two of nine runs on 2026-10-14 it
-   kept a sale-of-goods section for one side and set it aside for the
-   other, and the drafts cited it. Set a section aside for both sides
-   when either side's check rejects it, and probably run the checker at
-   temperature 0. Evaluate through config.tunnel.toml with
-   `--model qwen2.5:14b --repeats 3`, against
-   output/eval/20261014-214207-fit-topic-14b-drafts-14b-checker/.
-B. Get the checks ready for the live site. Run the local web UI with
-   both checks on the server's 14B (a scratch config like
-   config.tunnel.toml, a throwaway account), so I can look at a real
-   results page in my browser. If I'm happy, set `checker` in
-   config.server.toml and deploy, after asking me.
-C. Broaden the evaluation set beyond residential construction (unpaid
-   invoice, lease, consumer dispute). Drafted by you, ideally reviewed by
-   the lawyer. DONE 2026-10-16 (texas_invoice, california_lease,
-   utah_used_car), not yet lawyer-reviewed. Results and what they showed
-   are under "Broader evaluation set" in plan.md's Open questions: search
-   misses most of the core law, and the citation checker sees only the
-   first 3,000 characters of a long section.
+Next up (as of 2026-10-16). The fit check is consistent and both checks
+are live (2026-10-15). The evaluation set now has seven cases, three of
+them not construction (2026-10-16). Semantic search is on at
+battle.smarkiq.us, and a weekly law refresh waits for my approval before
+new law goes live (docs/running-on-server.md, "Law updates").
+A. Search misses most core law outside construction. Found 2026-10-16
+   (plan.md, Open questions, "Broader evaluation set"): California
+   statutes have no titles or named headings in the data, keyword ranking
+   penalises long sections, and semantic search embeds only the first
+   1,500 characters. Decide with me between:
+   - passage indexing: split long sections into ~1,500-character passages
+     for keyword and semantic search, map hits to sections, and show the
+     drafting model and checker the matching passage (also fixes the
+     checker judging long sections from their first 3,000 characters);
+   - adding California chapter and article names from leginfo, as Alaska's
+     came from akleg.
+   Plan it with me before building; a re-embed is needed for passages.
+B. Selection and the fit check drop most of what search finds: with
+   semantic search, core found 21/51 but cited 22/51 (some cited from
+   memory). Look at it after A.
+C. Lawyer review of the seven expected-authority lists.
 D. Finish the presentation decks (item 4 below).
 E. Case law (build step 4, CourtListener). It needs my free API token.
 
@@ -2304,10 +2368,10 @@ E. Case law (build step 4, CourtListener). It needs my free API token.
    "Added 2026-10-12" below): the fit check's two Utah misses were fixed
    on 2026-10-14, at the cost of a little more wrong law getting
    through (item A above). It hasn't been run with the 7B drafting.
-3. The code from 2026-10-12 is deployed (2026-10-14), but both checks
-   are OFF on the live site: config.server.toml sets no checker. Before
-   turning them on I want to look at a real results page (item B
-   above). "Possible references" IS live.
+3. Live at battle.smarkiq.us as of 2026-10-16 (commit de56c35): both
+   checks (since 2026-10-15), semantic search, and the weekly law refresh
+   (Task Scheduler, Sundays 3 am; approve with `corpus promote`). Check
+   Admin -> Activity log for "law checked" entries each week.
 4. Other open work: Cloudflare Access, and finishing the two
    presentation decks drafted on 2026-10-14, one for beta testers and
    one for prospective users (plan.md has a section with their links
@@ -2410,9 +2474,18 @@ Where things stand:
     on the server, as Docker Desktop needs anyway. First runs, by hand
     and from the scheduler: "Up to date: Open US Law v2026.09.1", in the
     live activity log.
-  - Semantic search is still OFF on the server (no [search] in
-    config.server.toml, no nomic-embed-text in its Ollama), so the
-    server's refresh builds no vectors.
+  - Semantic search is ON on the server since 2026-10-16 (commit
+    de56c35): nomic-embed-text pulled into its Ollama, and the laptop's
+    vectors copied into the battle-law volume. The server's own
+    `corpus embed` then kept all 386,709 vectors by hash and embedded
+    none (under a minute), though its index was a separate build. The
+    weekly refresh now re-embeds new and changed sections there.
+  - Copying files into the volume with `docker cp` makes them root-owned,
+    and the container can't chown. The app user fixes that itself:
+    `cp f f.tmp && mv -f f.tmp f` inside the container.
+  - Watch for: the 2026-10-10 evaluation found semantic search finds
+    more law but the briefs cited no more. Turning it off is
+    `semantic = false` in config.server.toml and a deploy.
   - First evaluation with it on: no gain (4/16 core cited against 6/16
     on 2026-09-25, one run per case). Selection was the weak step, so I
     had it turned off and selection fixed first.

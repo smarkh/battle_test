@@ -35,10 +35,15 @@ marked **(server)** run on the server, after connecting over SSH.
 | `open-webui`, `caddy`, `cloudflared` | smark_iq | An unrelated project. Leave these alone. |
 
 - Ollama runs natively on the server (not in Docker) and serves
-  `qwen2.5:14b` on the GPU. A case takes about 90 seconds.
+  `qwen2.5:14b` on the GPU, plus `nomic-embed-text` for semantic
+  search. A case takes about 2 minutes with both checks on.
 - The two projects share only the GPU.
-- Data is in two Docker volumes: `battle_test_battle-law` (the law index)
+- Data is in two Docker volumes: `battle_test_battle-law` (the law index,
+  its section vectors, and the law refresh's `staging/` and `archive/`)
   and `battle_test_battle-cases` (accounts and case files).
+- Files copied into a volume with `docker cp` are owned by root, and the
+  container can't change that. Have the app make its own copy:
+  `docker exec battle-test sh -c 'cp F F.tmp && mv -f F.tmp F'`.
 - The server uses `config.server.toml`, which is built into the image.
 - The tunnel token is in `.env` in the battle_test folder on the server.
   It's gitignored and exists nowhere else.

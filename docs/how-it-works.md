@@ -129,8 +129,9 @@ California, Texas, Alaska and federal law.
 - Search is **keyword search**. It returns only law that's in force, from
   the chosen state and federal law, with the state's law ranked slightly
   higher.
-- **Semantic search** can run alongside it (`semantic = true` under
-  `[search]`; off by default). Keyword search only matches shared words,
+- **Semantic search** runs alongside it on the live site (`semantic =
+  true` under `[search]` in `config.server.toml`, since 2026-10-16). It's
+  off in the laptop's `config.toml` and on in `config.tunnel.toml`. Keyword search only matches shared words,
   so it misses a statute that words a topic differently from the query,
   and each state words its statutes its own way. Semantic search matches
   on meaning:
@@ -143,10 +144,20 @@ California, Texas, Alaska and federal law.
     and the closest sections are returned.
   - Each query's keyword and semantic results are merged in alternation,
     and the model then selects from that query's combined list, as before.
-  - The vectors are built on the laptop, but it's off in `config.toml`:
-    the first evaluation with it on showed no gain (`plans/plan.md`, 3b).
+  - The vectors are built on the laptop and on the server. In
+    evaluations it finds about twice as much of the expected law, but
+    the briefs cite little more of it yet (`plans/plan.md`, "Broader
+    evaluation set").
   - The same model must embed the sections and the queries. Vectors made
-    by another model, or before the index was rebuilt, are refused.
+    by another model, or before the index was rebuilt, are refused: an
+    evaluation stops, and a user's case falls back to keyword search,
+    with a warning in the log.
+  - **Known limit:** only each section's first 1,500 characters are
+    embedded, and keyword ranking penalises long sections. California's
+    statutes also have no titles or named headings in the data. Together
+    these hide long California statutes such as Civil Code § 1950.5
+    (security deposits) from both searches. Indexing passages instead of
+    whole sections is proposed in `plans/plan.md`.
 - The data is a quarterly snapshot. Every output states the date the law
   is current as of.
 - **Two fixes to the Alaska statutes** are applied while building, both
