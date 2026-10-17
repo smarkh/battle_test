@@ -47,6 +47,17 @@ data_dir = "/data/law"
 jurisdictions = ["ut", "ca", "tx", "ak", "federal"]
 document_types = ["statutes", "constitutions", "court_rules"]
 
+[search]
+# Semantic search alongside keyword search: on since 2026-10-16. The vectors
+# are in the battle-law volume next to the index (/data/law/law-vectors*),
+# and the weekly `corpus refresh` re-embeds only new and changed sections.
+# If they're ever missing or behind the index, cases fall back to keyword
+# search with a warning in the app log.
+semantic = true
+# Must be the model that built the vectors. Runs on the server's Ollama
+# (the [ollama] url), next to the drafting model: 274 MB of the 16 GB card.
+embedding_model = "nomic-embed-text"
+
 [web]
 # 0.0.0.0 inside the container. No port is published on the host: only Caddy,
 # on smark_iq's Docker network, can reach it. Allowed only because

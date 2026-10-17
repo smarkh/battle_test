@@ -2404,9 +2404,15 @@ Where things stand:
     A swap that fails part-way is undone.
   - User cases now fall back to keyword search, with a warning, if the
     vectors are missing or behind the index. Evaluations still refuse.
-  - Checked for real on the laptop 2026-10-16: "Up to date: Open US Law
-    v2026.09.1". NOT deployed. NOT scheduled: the Task Scheduler setup is
-    in running-on-server.md, to do after the next deploy, with my OK.
+  - DEPLOYED 2026-10-16 (commit de61466) and SCHEDULED: the server's
+    Task Scheduler runs "battle_test law refresh" Sundays at 3 am (and
+    once the server is back, if it missed one). Only while I'm signed in
+    on the server, as Docker Desktop needs anyway. First runs, by hand
+    and from the scheduler: "Up to date: Open US Law v2026.09.1", in the
+    live activity log.
+  - Semantic search is still OFF on the server (no [search] in
+    config.server.toml, no nomic-embed-text in its Ollama), so the
+    server's refresh builds no vectors.
   - First evaluation with it on: no gain (4/16 core cited against 6/16
     on 2026-09-25, one run per case). Selection was the weak step, so I
     had it turned off and selection fixed first.
