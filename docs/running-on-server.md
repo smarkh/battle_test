@@ -232,20 +232,64 @@ Creating or removing admins is command-line only.
 - **After a reboot.** There's no auto-login. Sign in to Windows through
   Chrome Remote Desktop. Docker Desktop, the containers and Ollama then
   come back on their own.
-- **Quarterly law refresh.** Change `corpus.snapshot` in
-  `config.server.toml` (and `config.toml`), deploy the update, then:
-  ```powershell
-  docker compose run --rm battle-test python -m battle_test.corpus build
-  docker compose run --rm -T battle-test python -m battle_test.evaluate --validate
-  ```
-  Only the latest snapshot can be downloaded, so the old index can't be
-  rebuilt after a refresh.
+- **Law updates:** see "Law updates" below.
 - **Rebuild the law index after any change to how it's built** (such as
   `corpus.py` or `ak_headings.json`), with the same two commands. The app
   opens the index fresh for each case, so no restart is needed after it.
 - **Backups.** Only accounts (`users.sqlite`) are backed up. Case files
   are deliberately not: they're privileged and expire after 90 days.
 - **Retention** runs itself: an hourly purge of cases older than 90 days.
+
+## Law updates
+
+Open US Law publishes a new snapshot about every quarter, and only the
+latest can be downloaded. A weekly check builds a new one beside the live
+law. **Nothing changes for users until you approve it.**
+
+**Every week (scheduled):** `corpus refresh` checks for a new snapshot.
+- Nothing new: the activity log (Admin → Activity log) shows "law
+  checked · Up to date".
+- A new snapshot: it's downloaded and built in `/data/law/staging/`, with
+  section vectors if semantic search is on (only new and changed sections
+  are embedded). It's then checked against the live law, and the log shows
+  "law update ready" with a summary and any warnings.
+- A failure: "law update failed", with the error. The live law is
+  untouched.
+- No entry for over a week means the task didn't run. Usually the server
+  rebooted and nobody has signed in, so Docker isn't running.
+
+**To approve a new snapshot (server):**
+```powershell
+docker compose run --rm battle-test cat /data/law/staging/report.md
+docker compose run --rm battle-test python -m battle_test.corpus promote
+```
+- Read the report first. It lists what changed per state, section counts
+  that moved more than 5%, expected-authority lists that no longer
+  validate, and a search check comparing the two laws on the evaluation
+  cases.
+- `promote` swaps the index and its vectors in together, in
+  milliseconds, with no restart needed. The old law moves to
+  `/data/law/archive/`, because it can't be downloaded again (about 1.4 GB
+  each, so clear out old ones now and then).
+- Afterwards set `corpus.snapshot` in `config.server.toml` and `config.toml`
+  at the next deploy, so `corpus build` matches.
+- If any expected-authority lists no longer validate, fix them in
+  `examples/eval/`.
+
+**To undo it:** `docker compose run --rm battle-test python -m battle_test.corpus rollback`
+puts the previous law back (and archives the one it replaces).
+
+**Set up the weekly task (once, server):** in an Administrator PowerShell:
+```powershell
+$action = New-ScheduledTaskAction -Execute "docker" -WorkingDirectory "C:\Users\smark\Documents\work\battle_test" `
+  -Argument "compose run --rm -T battle-test python -m battle_test.corpus refresh"
+$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At 3am
+Register-ScheduledTask -TaskName "battle_test law refresh" -Action $action -Trigger $trigger `
+  -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable)
+```
+`-StartWhenAvailable` runs a missed check once the server is back. It runs
+at night so it doesn't compete with Open WebUI for the GPU. To run it now:
+`Start-ScheduledTask -TaskName "battle_test law refresh"`.
 
 ## If the site can't be reached
 

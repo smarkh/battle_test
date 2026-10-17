@@ -2200,6 +2200,37 @@ its Share › Export menu. Both are private until shared from that menu.
     contents only goes to chapters.
   - **The Alaska expected-authority list** (`examples/eval/alaska_boiler.toml`)
     is a draft, like the others, until a lawyer reviews it.
+- **Broader evaluation set (added 2026-10-16).** Three cases that aren't
+  construction disputes, to check that nothing is tuned to construction:
+  `texas_invoice` (unpaid invoice for web work, business against
+  business), `california_lease` (residential security deposit) and
+  `utah_used_car` (hidden flood history, where UCC sales law is the RIGHT
+  law). Drafted by Claude and checked against the index text, NOT yet
+  reviewed by a lawyer.
+  - **First run** (server 14B drafting and checking, keyword search only,
+    3 runs each; `output/eval/20261016-204847-broad-cases-keyword-14b/`):
+    core cited 21/51 (41%), off-topic 2, checker doubts 102/131. The
+    construction cases on 2026-10-15 (keyword + semantic) were 21/48
+    (44%), off-topic 1, doubts 52/91.
+  - **Search is the gap, not the fit check.** Most missing core law was
+    never found: venue in all three states, Tex. CPRC § 38.001 attorney
+    fees, Tex. CPRC § 16.004 limitations, Cal. CCP §§ 85/86, and the Utah
+    Consumer Sales Practices Act (§§ 13-11-4, -19). This run had semantic
+    search off (the vectors were stale after the Alaska rebuild), so it
+    isn't a like-for-like comparison yet.
+  - **The fit check is stricter on these cases** (13–15 of 20 selected
+    sections kept out, against 8–13 for construction), but what it removed
+    was mostly genuinely off-topic: a mobilehome-park rule, Medi-Cal,
+    banking law. It didn't remove any core authority.
+  - **The citation checker judges long sections from their start.** It
+    said Cal. CIV § 1950.5 "does not provide statutory damages for
+    bad-faith retention". The section is 28,989 characters. The checker
+    sees the first 3,000 (`grounding.SUPPORT_EXCERPT_CHARS`), and the
+    bad-faith rule starts at character 23,279. So "does not support" on a
+    long section can mean "not in the part it was shown". Likely fix,
+    not built: show the checker the paragraphs of the section that best
+    match the passage, not just its opening. The drafting model has the
+    same limit at 700 characters (`EXCERPT_CHARS`).
 
 ## Restart prompt
 
@@ -2238,7 +2269,11 @@ B. Get the checks ready for the live site. Run the local web UI with
    config.server.toml and deploy, after asking me.
 C. Broaden the evaluation set beyond residential construction (unpaid
    invoice, lease, consumer dispute). Drafted by you, ideally reviewed by
-   the lawyer.
+   the lawyer. DONE 2026-10-16 (texas_invoice, california_lease,
+   utah_used_car), not yet lawyer-reviewed. Results and what they showed
+   are under "Broader evaluation set" in plan.md's Open questions: search
+   misses most of the core law, and the citation checker sees only the
+   first 3,000 characters of a long section.
 D. Finish the presentation decks (item 4 below).
 E. Case law (build step 4, CourtListener). It needs my free API token.
 
@@ -2346,6 +2381,32 @@ Where things stand:
     (semantic = false). Needs numpy.
   - The vectors ARE built on the laptop (data/law-vectors.npy, 358,663
     sections, nomic-embed-text, about 1.5 hours). NOT on the server.
+  - Rebuilt 2026-10-16 for the v2026.09.1 index with Alaska (386,709
+    sections, about 1.5 hours): the index rebuild had made the old vectors
+    unusable, and semantic search refuses stale vectors.
+  - INCREMENTAL since 2026-10-16: each section's vector is kept with a
+    hash of the text it was embedded from (data/law-vectors-hashes.npy),
+    and a rebuild embeds only new and changed sections, so a new law
+    snapshot should take minutes. Running `corpus embed` on vectors that
+    already match the index embeds nothing (and writes the hashes if
+    they're missing).
+- Added 2026-10-16: LAW UPDATES WITH APPROVAL (battle_test/refresh.py,
+  docs/running-on-server.md, "Law updates"). Decided: approval before
+  new law goes live, and the report goes to the admin activity log.
+  - `corpus refresh` (weekly): if Open US Law has a new snapshot, builds
+    it and its vectors in data/staging/, beside the live law, then checks
+    it: changes per state, in-force counts that moved >5%, the
+    expected-authority lists, and a search check (same queries against
+    both laws). Logs "law checked", "law update ready" or "law update
+    failed".
+  - `corpus promote` swaps index and vectors in together and archives the
+    old law (it can't be downloaded again). `corpus rollback` reverses it.
+    A swap that fails part-way is undone.
+  - User cases now fall back to keyword search, with a warning, if the
+    vectors are missing or behind the index. Evaluations still refuse.
+  - Checked for real on the laptop 2026-10-16: "Up to date: Open US Law
+    v2026.09.1". NOT deployed. NOT scheduled: the Task Scheduler setup is
+    in running-on-server.md, to do after the next deploy, with my OK.
   - First evaluation with it on: no gain (4/16 core cited against 6/16
     on 2026-09-25, one run per case). Selection was the weak step, so I
     had it turned off and selection fixed first.

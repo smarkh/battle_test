@@ -195,7 +195,7 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
         # the thread that made them.
         with LawIndex(law_db or corpus.db_path) as law:
             # A stand-in index has no section vectors, so it's searched by keyword alone.
-            search = law if law_db else semantic.attach(law, config_path, corpus.db_path)
+            search = law if law_db else semantic.attach(law, config_path, corpus.db_path, fallback=True)
             run = run_case(
                 cfg, client, search, job.state_code,
                 facts=text if job.input_mode == "facts" else None,

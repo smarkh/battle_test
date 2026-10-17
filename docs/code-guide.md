@@ -10,7 +10,7 @@ Read [how-it-works.md](how-it-works.md) first. This is the map.
 |---|---|
 | `battle_test/` | The Python package: the pipeline and the web app |
 | `tests/` | Unit tests (`python -m unittest`) |
-| `examples/` | Four fictional sample cases (UT, CA, TX, AK), and their expected-authority lists in `examples/eval/` |
+| `examples/` | Seven fictional sample cases (four construction disputes, one per state, plus an invoice, a lease and a used car), and their expected-authority lists in `examples/eval/` |
 | `docs/` | These documents |
 | `plans/` | Design, decisions, results and future plans |
 | `config.toml` | Laptop settings |
@@ -40,8 +40,9 @@ needed only to build the law index and to run the web UI.
 | `citations.py` | Pure text handling: finds citations in a draft, parses them, and normalises code names so "Utah Code Ann." and "U.C.A." match. No database access. | none |
 | `law_index.py` | `LawIndex`: reads `law.sqlite`. `search()` is the keyword search, `lookup()` finds an exact citation, and `resolve()` matches a parsed citation from a draft. | citations |
 | `corpus.py` | `python -m battle_test.corpus build / info / search / embed / ak-headings`. Downloads Open US Law, verifies checksums, builds the index. Needs `pyarrow`. While building, corrects Alaska statute statuses (`_act_status`) and adds Alaska title and chapter names from `ak_headings.json`. `embed` builds the vectors for semantic search. `ak-headings` refreshes the Alaska names from akleg.gov. | law_index, citations, semantic |
+| `refresh.py` | Keeping the law up to date: `python -m battle_test.corpus refresh / promote / rollback`. `refresh` checks for a new Open US Law snapshot and builds it, with its vectors, in `data/staging/`, then checks it against the live law (what changed, section counts, the expected-authority lists, and a search check with the same queries against both) and writes a report. `promote` swaps the index and vectors in together after an admin approves, archiving the old ones in `data/archive/`. Every outcome goes to the activity log. | corpus, semantic, evaluate, web.auth |
 | `ak_headings.json` | Alaska's statute title and chapter names, from akleg.gov's table of contents (the dataset leaves them out). Shipped in the image. | none |
-| `semantic.py` | Semantic search. `Embedder` calls an Ollama embedding model, `build()` embeds every in-force section (resumable), `VectorIndex` finds the nearest sections, and `attach()` wraps a `LawIndex` as a `SemanticLaw` when `[search] semantic` is on. Needs `numpy`, imported only here. | law_index, models |
+| `semantic.py` | Semantic search. `Embedder` calls an Ollama embedding model, `build()` embeds every in-force section (resumable, and a rebuild embeds only new and changed sections), `VectorIndex` finds the nearest sections, and `attach()` wraps a `LawIndex` as a `SemanticLaw` when `[search] semantic` is on (for a user's case, falling back to keyword search if the vectors are missing or behind the index). Needs `numpy`, imported only here. | law_index, models |
 | `report.py` | Turns a `CaseRun` into the Markdown document set: disclaimer, citation-check table, documents, possible references, appendix. `possible_references()` is the authorities given to the models that no draft cited. | grounding |
 | `evaluate.py` | `python -m battle_test.evaluate`. Runs the sample cases and scores them against the expected authorities. | pipeline, report |
 | `models.py` | What the model clients share: `ModelError`, `Usage` (tokens one call used), and `make_client()`, which picks the client from `models.provider`. When `models.checker_provider` differs, it returns a `SplitClient` that sends the checker model's calls to the other provider. | none |
@@ -112,7 +113,8 @@ fake model clients and small temporary databases.
 | `test_citations.py` | Finding and parsing citations in all their written forms |
 | `test_law_index.py` | Search ranking, lookup, resolving citations |
 | `test_grounding.py` | Research, merging keyword and semantic candidates, selection, citation classification and inline marks |
-| `test_semantic.py` | Semantic search against a small index and a stand-in embedding model: finding by meaning, resuming a build, and refusing stale vectors |
+| `test_semantic.py` | Semantic search against a small index and a stand-in embedding model: finding by meaning, resuming a build, embedding only changed sections, and refusing stale vectors (or falling back to keyword search) |
+| `test_refresh.py` | The law refresh against snapshots published to a temporary folder: up to date, a new snapshot built beside the live law, its report and checks, promote, rollback, a failed download, and a swap that fails part-way |
 | `test_pipeline.py` | The order of model calls, what each prompt receives, both input modes |
 | `test_evaluate.py` | Scoring against expected authorities, cost columns and repeats |
 | `test_models.py` | The Bedrock client (against a fake, so no network or cost), the provider switch, cost estimates, and reading JSON replies |

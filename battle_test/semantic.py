@@ -15,9 +15,11 @@ Needs numpy, imported only here: a setup with semantic search off doesn't
 have to install it.
 """
 
+import hashlib
 import json
 import os
 import sqlite3
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -99,6 +101,20 @@ def _meta_path(vectors: Path) -> Path:
     return vectors.with_suffix(".json")
 
 
+def _hashes_path(vectors: Path) -> Path:
+    return vectors.with_name(vectors.stem + "-hashes.npy")
+
+
+def vector_files(db_path: Path) -> list[Path]:
+    """The files that make up the section vectors of the index at db_path."""
+    final = vectors_path(db_path)
+    return [final, _ids_path(final), _hashes_path(final), _meta_path(final)]
+
+
+def _text_hash(text: str) -> bytes:
+    return hashlib.blake2b(text.encode("utf-8"), digest_size=16).digest()
+
+
 def document_text(citation: str, display_path: str, section_title: str, text: str) -> str:
     return f"{citation}. {display_path}. {section_title}.\n{text[:EMBED_CHARS]}"
 
@@ -154,13 +170,22 @@ class Embedder:
         return vectors / np.where(norms == 0, 1, norms)
 
 
-def build(db_path: Path, embedder, on_progress: Callable[[int, int], None] | None = None) -> dict:
+def build(db_path: Path, embedder, on_progress: Callable[[int, int], None] | None = None,
+          reuse_from: Path | None = None) -> dict:
     """Embed every in-force section of the index at db_path, and save the
     vectors next to it. Returns the saved description of them.
 
     Sections are stored grouped by jurisdiction, so a search reads only the
     state's block and the federal one. A build that was interrupted resumes
     where it stopped, as long as the index and the model haven't changed.
+
+    A rebuild embeds only the sections that are new or changed. Each section
+    is identified by a hash of the text it's embedded from, and a section
+    whose hash is in the previous vectors, made with the same model, keeps
+    its vector. After a new law snapshot that's minutes, not 1.5 hours. If
+    the vectors already match the index, nothing is embedded. `reuse_from`
+    names other vectors to reuse (the live law's, for a refresh built
+    beside it); by default it's the ones being replaced.
     """
     import numpy as np
 
@@ -181,44 +206,94 @@ def build(db_path: Path, embedder, on_progress: Callable[[int, int], None] | Non
 
         meta = {"model": embedder.model, "index_built_at": index_built_at, "count": total,
                 "embed_chars": EMBED_CHARS, "jurisdictions": ranges}
+        query = ("SELECT id, citation, display_path, section_title, substr(text, 1, ?) FROM sections "
+                 "WHERE act_status = 'in_force' ORDER BY jurisdiction, id LIMIT -1 OFFSET ?")
+        ids, hashes = _ids_and_hashes(db.execute(query, (EMBED_CHARS, 0)), total)
+
+        existing = _read_json(_meta_path(final))
+        if (existing and final.exists() and {k: existing.get(k) for k in meta} == meta
+                and np.array_equal(np.load(_ids_path(final)), ids)):
+            if not _hashes_path(final).exists():  # made from this index before hashes were kept
+                np.save(_hashes_path(final), hashes)
+            if np.array_equal(np.load(_hashes_path(final)), hashes):
+                return {**existing, "embedded": 0, "reused": total, "up_to_date": True}
+
+        old_vectors, old_rows = _reusable(reuse_from or final, embedder.model)
         done, vectors = 0, None
         previous = _read_json(_meta_path(part))
         if previous and part.exists() and {k: previous.get(k) for k in meta} == meta:
             done = previous["done"]
             vectors = np.lib.format.open_memmap(part, mode="r+")
-            ids = np.load(_ids_path(part))
 
-        rows = db.execute(
-            "SELECT id, citation, display_path, section_title, substr(text, 1, ?) FROM sections "
-            "WHERE act_status = 'in_force' ORDER BY jurisdiction, id LIMIT -1 OFFSET ?", (EMBED_CHARS, done))
-        batches = 0
-        while batch := rows.fetchmany(BATCH):
-            embedded = embedder.documents([document_text(*row[1:]) for row in batch])
+        def write(rows: list[int], new) -> None:
+            nonlocal vectors
             if vectors is None:
                 vectors = np.lib.format.open_memmap(part, mode="w+", dtype=np.float16,
-                                                    shape=(total, embedded.shape[1]))
-                ids = np.zeros(total, dtype=np.int64)
-            vectors[done:done + len(batch)] = embedded
-            ids[done:done + len(batch)] = [row[0] for row in batch]
-            done += len(batch)
-            batches += 1
-            if batches % CHECKPOINT_BATCHES == 0:
+                                                    shape=(total, new.shape[1]))
+            vectors[rows] = new
+
+        pending: list[tuple[int, str]] = []  # sections waiting to be embedded, as (row, text)
+
+        def embed_pending() -> None:
+            if pending:
+                write([row for row, _ in pending], embedder.documents([text for _, text in pending]))
+                pending.clear()
+
+        embedded = reused = 0
+        for row in db.execute(query, (EMBED_CHARS, done)):
+            old = old_rows.get(hashes[done].tobytes())
+            if old is None:
+                pending.append((done, document_text(*row[1:])))
+                embedded += 1
+                if len(pending) == BATCH:
+                    embed_pending()
+            else:
+                write([done], old_vectors[old:old + 1])
+                reused += 1
+            done += 1
+            if done % (BATCH * CHECKPOINT_BATCHES) == 0:
+                embed_pending()
                 _checkpoint(part, vectors, ids, {**meta, "done": done})
-            if on_progress:
+            if on_progress and (done % BATCH == 0 or done == total):
                 on_progress(done, total)
+        embed_pending()
     finally:
         db.close()
 
     meta["dimensions"] = int(vectors.shape[1])
     vectors.flush()
-    del vectors  # closes the file, so Windows lets it be renamed
+    del vectors, old_vectors  # closes the files, so Windows lets them be replaced
+    _open_vectors.cache_clear()
     np.save(_ids_path(final), ids)
+    np.save(_hashes_path(final), hashes)
     os.replace(part, final)
     _meta_path(final).write_text(json.dumps(meta, indent=2), encoding="utf-8")
     _ids_path(part).unlink(missing_ok=True)
     _meta_path(part).unlink(missing_ok=True)
-    _open_vectors.cache_clear()
-    return meta
+    return {**meta, "embedded": embedded, "reused": reused}
+
+
+def _ids_and_hashes(rows, total: int):
+    """Each in-force section's id, and the hash of the text it's embedded from, in build order."""
+    import numpy as np
+    ids, digests = np.zeros(total, dtype=np.int64), []
+    for i, row in enumerate(rows):
+        ids[i] = row[0]
+        digests.append(_text_hash(document_text(*row[1:])))
+    return ids, np.frombuffer(b"".join(digests), dtype=np.uint8).reshape(total, 16)
+
+
+def _reusable(final: Path, model: str):
+    """The previous vectors, and which row of them each section text has, if
+    any can be reused: (vectors, {text hash: row}). Vectors made by another
+    model, from differently cut text, or before hashes were kept, can't be."""
+    import numpy as np
+    meta = _read_json(_meta_path(final))
+    if (not meta or not final.exists() or not _hashes_path(final).exists()
+            or meta.get("model") != model or meta.get("embed_chars") != EMBED_CHARS):
+        return None, {}
+    old_hashes = np.load(_hashes_path(final))
+    return np.load(final, mmap_mode="r"), {h.tobytes(): row for row, h in enumerate(old_hashes)}
 
 
 def _checkpoint(part: Path, vectors, ids, meta: dict) -> None:
@@ -275,8 +350,19 @@ class VectorIndex:
         return results
 
 
+def _vectors_at(path: Path) -> VectorIndex:
+    """The vectors at path, opened once per process and file. When `corpus
+    promote` swaps new vectors in, the web UI opens the new file on its next
+    case instead of searching on with the old one."""
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return VectorIndex(path)  # raises, with how to build them
+    return _open_vectors(path, (stat.st_mtime_ns, stat.st_ino, stat.st_size))
+
+
 @lru_cache(maxsize=4)
-def _open_vectors(path: Path) -> VectorIndex:
+def _open_vectors(path: Path, file_identity: tuple) -> VectorIndex:
     # Shared by every run in the process: it's read-only, and opening it
     # once keeps the web UI's concurrent cases from each mapping the file.
     return VectorIndex(path)
@@ -304,17 +390,28 @@ class SemanticLaw:
         return [self._law.by_ids(ids) for ids in nearest]
 
 
-def attach(law: LawIndex, config_path: Path, db_path: Path):
+def attach(law: LawIndex, config_path: Path, db_path: Path, *, fallback: bool = False):
     """`law` with semantic search added, if the config turns it on. Otherwise
-    `law` itself, and the pipeline searches by keyword alone."""
+    `law` itself, and the pipeline searches by keyword alone.
+
+    Vectors that are missing or don't match the index are an error, unless
+    `fallback`: then the case is searched by keyword, with a warning. A
+    user's case shouldn't fail because the vectors are behind the law, but
+    an evaluation must not quietly measure the wrong setup."""
     cfg = load_search_config(config_path)
     if not cfg.semantic:
         return law
-    vectors = _open_vectors(vectors_path(db_path))
-    if vectors.meta["model"] != cfg.embedding_model:
-        raise SemanticError(f"The section vectors were built with {vectors.meta['model']}, but the config "
-                            f"asks for {cfg.embedding_model}. Rebuild them: python -m battle_test.corpus embed")
-    if vectors.meta["index_built_at"] != law.meta().get("built_at", ""):
-        raise SemanticError("The law index has been rebuilt since the section vectors were made. "
-                            "Rebuild them: python -m battle_test.corpus embed")
+    try:
+        vectors = _vectors_at(vectors_path(db_path))
+        if vectors.meta["model"] != cfg.embedding_model:
+            raise SemanticError(f"The section vectors were built with {vectors.meta['model']}, but the config "
+                                f"asks for {cfg.embedding_model}. Rebuild them: python -m battle_test.corpus embed")
+        if vectors.meta["index_built_at"] != law.meta().get("built_at", ""):
+            raise SemanticError("The law index has been rebuilt since the section vectors were made. "
+                                "Rebuild them: python -m battle_test.corpus embed")
+    except SemanticError as e:
+        if not fallback:
+            raise
+        print(f"warning: searching by keyword only. {e}", file=sys.stderr)
+        return law
     return SemanticLaw(law, vectors, Embedder(cfg.embedding_url, cfg.embedding_model))

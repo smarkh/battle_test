@@ -48,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
     try:
-        search = semantic.attach(law, args.config, db_path)
+        search = semantic.attach(law, args.config, db_path, fallback=True)
     except ModelError as e:
         law.close()
         print(f"error: {e}", file=sys.stderr)

@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS events (
     at TEXT NOT NULL,
     actor TEXT NOT NULL,     -- who did it: a username, or "command line"
     kind TEXT NOT NULL,      -- e.g. "plan changed", "signed in"
-    subject TEXT NOT NULL,   -- the account it happened to
+    subject TEXT NOT NULL,   -- the account it happened to; '' for the law refresh
     detail TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS events_by_subject ON events (subject, id);

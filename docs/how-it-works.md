@@ -120,6 +120,10 @@ California, Texas, Alaska and federal law.
 - `python -m battle_test.corpus build` downloads 15 files (~200 MB),
   checks their SHA256 checksums, and builds `data/law.sqlite` (~1.4 GB,
   about 397,000 sections) in about a minute.
+- **Keeping it current:** a weekly `corpus refresh` checks for a new
+  snapshot and builds it beside the live law, with a report of what
+  changed. It goes live only when an admin runs `corpus promote`
+  ([running-on-server.md](running-on-server.md), "Law updates").
 - It's a SQLite database with a full-text (FTS5) index. Searches run on
   the machine, so no case facts leave it.
 - Search is **keyword search**. It returns only law that's in force, from
@@ -133,6 +137,8 @@ California, Texas, Alaska and federal law.
   - `python -m battle_test.corpus embed` turns every in-force section
     into a vector with an embedding model on Ollama, once per snapshot.
     The vectors are saved next to the index (`data/law-vectors.npy`).
+    A hash of each section's text is saved with them, so after a new
+    snapshot only new and changed sections are embedded again.
   - At run time each search query is turned into a vector the same way,
     and the closest sections are returned.
   - Each query's keyword and semantic results are merged in alternation,

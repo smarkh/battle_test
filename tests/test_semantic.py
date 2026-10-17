@@ -59,7 +59,7 @@ class SemanticSearchTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        files = {
+        self.files = {
             "us_tx_statutes.parquet": [
                 _row("TX1", "Tex. CPRC § 16.004", "A person must bring suit not later than four years after the day."),
                 _row("TX2", "Tex. CPRC § 15.002", "All lawsuits shall be brought in the county of the events."),
@@ -74,15 +74,22 @@ class SemanticSearchTest(unittest.TestCase):
                 _row("F1", "28 U.S.C. § 1658", "A civil action may not be commenced later than 4 years after."),
             ],
         }
+        self.cfg = CorpusConfig("vTEST", "http://unused", self.root, ("tx", "ut", "federal"), ("statutes",))
+        self.db = self.cfg.db_path
+        self.law = None
+        self.build_law_index()
+        semantic._open_vectors.cache_clear()
+
+    def build_law_index(self):
+        """(Re)build the law index from self.files, as a new law snapshot would."""
+        if self.law:
+            self.law.close()
         paths = []
-        for name, rows in files.items():
+        for name, rows in self.files.items():
             pq.write_table(pa.Table.from_pylist(rows), self.root / name)
             paths.append(self.root / name)
-        self.cfg = CorpusConfig("vTEST", "http://unused", self.root, ("tx", "ut", "federal"), ("statutes",))
         build_index(self.cfg, {"snapshot_date": "2026-08-14"}, paths)
-        self.db = self.cfg.db_path
         self.law = LawIndex(self.db)
-        semantic._open_vectors.cache_clear()
 
     def tearDown(self):
         self.law.close()
@@ -157,6 +164,48 @@ class SemanticSearchTest(unittest.TestCase):
             semantic.build(self.db, other)
         self.assertEqual(len(other.embedded), 6)
 
+    def test_a_rebuild_embeds_only_new_and_changed_sections(self):
+        semantic.build(self.db, FakeEmbedder())
+        tx = self.files["us_tx_statutes.parquet"]
+        tx[2] = _row("TX3", "Tex. CPRC § 38.001", "A person may recover reasonable lawyer costs, as amended.")
+        tx.append(_row("TX6", "Tex. CPRC § 15.020", "A major transaction is sued on in the county agreed."))
+        del tx[4]  # § 1.001 is gone from the new snapshot
+        self.build_law_index()
+
+        second = FakeEmbedder()
+        meta = semantic.build(self.db, second)
+        self.assertEqual(sorted(t[:18] for t in second.embedded), ["Tex. CPRC § 15.020", "Tex. CPRC § 38.001"])
+        self.assertEqual((meta["embedded"], meta["reused"], meta["count"]), (2, 4, 6))
+        search = lambda q, n: [s.citation for s in self.searcher().semantic_search([q], "tx", limit=n)[0]]
+        self.assertEqual(search("time limit to sue", 1), ["Tex. CPRC § 16.004"])  # a kept vector
+        self.assertEqual(search("lawyer costs", 1), ["Tex. CPRC § 38.001"])       # a re-embedded one
+        self.assertEqual(set(search("where to file", 2)), {"Tex. CPRC § 15.002", "Tex. CPRC § 15.020"})
+        semantic.attach(self.law, self.config('[search]\nsemantic = true\nembedding_model = "fake-embed"\n'),
+                        self.db)  # matches the rebuilt index
+
+    def test_vectors_that_match_the_index_are_left_alone(self):
+        semantic.build(self.db, FakeEmbedder())
+        hashes = semantic._hashes_path(semantic.vectors_path(self.db))
+        hashes.unlink()  # as vectors built before hashes were kept are
+
+        again = FakeEmbedder()
+        self.assertTrue(semantic.build(self.db, again)["up_to_date"])
+        self.assertEqual(again.embedded, [])
+        self.assertTrue(hashes.exists())  # so the next rebuild can reuse them
+
+        self.files["us_ut_statutes.parquet"].append(_row("UT2", "Utah Code § 78B-3-307", "Venue in the county."))
+        self.build_law_index()
+        third = FakeEmbedder()
+        semantic.build(self.db, third)
+        self.assertEqual(len(third.embedded), 1)
+
+    def test_vectors_from_another_model_are_not_reused(self):
+        semantic.build(self.db, FakeEmbedder())
+        other = FakeEmbedder()
+        other.model = "another-model"
+        semantic.build(self.db, other)
+        self.assertEqual(len(other.embedded), 6)
+
     def test_attach_follows_the_config(self):
         off = self.config('[ollama]\nurl = "http://o:1"\n')
         self.assertIs(semantic.attach(self.law, off, self.db), self.law)
@@ -185,6 +234,15 @@ class SemanticSearchTest(unittest.TestCase):
 
         with self.assertRaisesRegex(semantic.SemanticError, "rebuilt since"):
             semantic.attach(Rebuilt(), on, self.db)
+
+    def test_a_case_falls_back_to_keyword_search_when_the_vectors_are_behind(self):
+        on = self.config('[search]\nsemantic = true\nembedding_model = "fake-embed"\n')
+        with mock.patch("sys.stderr") as stderr:
+            self.assertIs(semantic.attach(self.law, on, self.db, fallback=True), self.law)  # none built
+            semantic.build(self.db, FakeEmbedder())
+            rebuilt = mock.Mock(meta=lambda: {"built_at": "2030-01-01T00:00:00"})
+            self.assertIs(semantic.attach(rebuilt, on, self.db, fallback=True), rebuilt)  # stale
+        self.assertIn("keyword only", "".join(c.args[0] for c in stderr.write.call_args_list))
 
 
 @unittest.skipIf(np is None, "numpy or pyarrow not installed")

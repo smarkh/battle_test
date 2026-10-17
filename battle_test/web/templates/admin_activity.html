@@ -3,7 +3,7 @@
 {% block content %}
 <p><a href="/admin">← Accounts</a></p>
 <h1>Activity log</h1>
-<p class="muted">Sign-ins and every change to an account, newest first (the latest {{ events|length }}).
+<p class="muted">Sign-ins, every change to an account, and the weekly law check, newest first (the latest {{ events|length }}).
   Entries can't be edited or removed.</p>
 {% include "_events.html" %}
 {% endblock %}

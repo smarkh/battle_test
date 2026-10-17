@@ -68,9 +68,21 @@ def _open(url: str):
     return urllib.request.urlopen(request, timeout=120)
 
 
-def _fetch_manifest(cfg: CorpusConfig) -> dict:
+def fetch_manifest(cfg: CorpusConfig) -> dict:
+    """The latest published snapshot's description: version, date, and each file's URL and checksum."""
     with _open(f"{cfg.base_url}/index.json") as r:
-        manifest = json.load(r)
+        return json.load(r)
+
+
+def files_fingerprint(cfg: CorpusConfig, manifest: dict) -> str:
+    """One checksum for the files this config builds from, so a snapshot
+    republished under the same version still counts as new."""
+    return hashlib.sha256("".join(f["sha256"] for f in _wanted_files(cfg, manifest, quiet=True))
+                          .encode()).hexdigest()
+
+
+def _fetch_manifest(cfg: CorpusConfig) -> dict:
+    manifest = fetch_manifest(cfg)
     if manifest["version"] != cfg.snapshot:
         # The manifest (and its checksums) only describes the latest snapshot.
         raise SystemExit(
@@ -81,12 +93,12 @@ def _fetch_manifest(cfg: CorpusConfig) -> dict:
     return manifest
 
 
-def _wanted_files(cfg: CorpusConfig, manifest: dict) -> list[dict]:
+def _wanted_files(cfg: CorpusConfig, manifest: dict, quiet: bool = False) -> list[dict]:
     wanted = {f"us_{j}_{t}.parquet" for j in cfg.jurisdictions for t in cfg.document_types}
-    files = [f for f in manifest["files"] if f["file"] in wanted]
+    files = [f for f in manifest.get("files", []) if f["file"] in wanted]
     # Not every jurisdiction publishes every type (e.g. no Utah regulations).
     missing = wanted - {f["file"] for f in files}
-    for name in sorted(missing):
+    for name in sorted(missing) if not quiet else ():
         print(f"  (not in snapshot, skipped: {name})")
     return sorted(files, key=lambda f: f["file"])
 
@@ -273,6 +285,7 @@ def build_index(cfg: CorpusConfig, manifest: dict, files: list[Path],
         "attribution": ATTRIBUTION,
         "jurisdictions": ",".join(cfg.jurisdictions),
         "document_types": ",".join(cfg.document_types),
+        "files_sha256": files_fingerprint(cfg, manifest),
     }
     db.executemany("INSERT INTO meta VALUES (?, ?)", meta.items())
     db.commit()
@@ -312,7 +325,8 @@ def _cmd_embed(cfg: CorpusConfig, config_path: Path) -> None:
     if not search.embedding_model:
         raise SystemExit(f"Set search.embedding_model in {config_path} first.")
     print(f"Embedding the in-force sections of {cfg.db_path} with {search.embedding_model}. "
-          "This takes a while, and can be stopped and resumed.")
+          "Sections unchanged since the last build keep their vectors. A full build takes a while, "
+          "and can be stopped and resumed.")
     started = datetime.now()
 
     def on_progress(done: int, total: int) -> None:
@@ -322,8 +336,12 @@ def _cmd_embed(cfg: CorpusConfig, config_path: Path) -> None:
 
     meta = semantic.build(cfg.db_path, semantic.Embedder(search.embedding_url, search.embedding_model), on_progress)
     path = semantic.vectors_path(cfg.db_path)
+    if meta.get("up_to_date"):
+        print(f"{path} is already up to date ({meta['count']:,} sections).")
+        return
     print(f"Built {path} ({meta['count']:,} sections, {meta['dimensions']} dimensions, "
-          f"{path.stat().st_size / 1e6:.0f} MB)")
+          f"{path.stat().st_size / 1e6:.0f} MB): {meta['embedded']:,} embedded, "
+          f"{meta['reused']:,} kept from the last build")
 
 
 def _cmd_search(cfg: CorpusConfig, state: str, query: str, limit: int, config_path: Path | None = None) -> None:
@@ -358,6 +376,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="Search by meaning (needs `embed` to have been run), not by keyword.")
     search.add_argument("query")
     sub.add_parser("embed", help="Build the section vectors for semantic search (slow; resumable).")
+    sub.add_parser("refresh", help="Check for a new law snapshot and, if there is one, build and check "
+                                   "it beside the live law, for an admin to approve (weekly).")
+    sub.add_parser("promote", help="Swap the law that `refresh` built in for the live law.")
+    sub.add_parser("rollback", help="Put the law from before the last `promote` back.")
     sub.add_parser("ak-headings", help=f"Refresh Alaska's title and chapter names from akleg.gov "
                                        f"into {AK_HEADINGS_PATH.name}, then rebuild.")
     args = parser.parse_args(argv)
@@ -375,6 +397,9 @@ def main(argv: list[str] | None = None) -> int:
             _cmd_info(cfg)
         elif args.command == "embed":
             _cmd_embed(cfg, args.config)
+        elif args.command in ("refresh", "promote", "rollback"):
+            from battle_test import refresh
+            print(getattr(refresh, args.command)(cfg, args.config))
         else:
             _cmd_search(cfg, args.state, args.query, args.limit, args.config if args.semantic else None)
     except (FileNotFoundError, ModelError) as e:  # no index built yet, or Ollama isn't reachable

@@ -291,7 +291,7 @@ build of the section vectors:
 
 ```
 ollama pull nomic-embed-text
-python -m battle_test.corpus embed        # slow (over an hour); can be stopped and resumed
+python -m battle_test.corpus embed        # first build slow (over an hour); resumable; rebuilds embed only changed sections
 python -m battle_test.corpus search --state TX --semantic "time limit to sue on a contract"
 ```
 
@@ -300,18 +300,24 @@ Then set `semantic = true` under `[search]` in `config.toml`. See
 
 ## Evaluation
 
-Four fictional sample cases in `examples/`, one per state, each have an
+Seven fictional sample cases in `examples/` each have an
 expected-authority list in `examples/eval/*.toml`. Each list names:
 - **core** authorities a competent brief should cite
 - **useful** ones that are welcome if cited
 - **off-topic** code areas (e.g. UCC sales law for a construction contract)
+
+Four are residential construction disputes, one per state (UT, CA, TX, AK).
+Three, added 2026-10-16, are other kinds of case, to check that nothing is
+tuned to construction: an unpaid invoice (TX), a residential security
+deposit (CA) and a used car sold with a hidden flood history (UT), where
+UCC sales law is the right law.
 
 The lists are drafts until a lawyer has reviewed them (`lawyer_reviewed`
 in each file).
 
 ```
 python -m battle_test.evaluate --validate          # check the case files against the law index
-python -m battle_test.evaluate --label laptop-7b   # run and score all four cases
+python -m battle_test.evaluate --label laptop-7b   # run and score all seven cases
 python -m battle_test.evaluate --case texas_foundation --rounds 1
 python -m battle_test.evaluate --research-only     # fast (~1 min/case): score the search step alone
 ```

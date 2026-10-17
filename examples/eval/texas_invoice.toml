@@ -1,0 +1,87 @@
+# Evaluation case: Texas unpaid invoice for website and booking-portal work,
+# business against business.
+#
+# DRAFT, not yet reviewed by a lawyer. Each authority below was checked
+# against the text in the law index (snapshot v2026.09.1), but choosing the
+# right law is exactly the judgement being tested, so a lawyer should
+# confirm or correct this list before the scores are trusted.
+#
+# Added 2026-10-16 to test whether the fit check is overfitted to the
+# residential construction cases: no homeowner, no construction, and a
+# plaintiff who is the one who did the work.
+
+name = "texas_invoice"
+state = "TX"
+facts = "../texas_invoice_facts.md"
+lawyer_reviewed = false
+
+# "core": a competent brief on these facts should cite it.
+# "useful": relevant and welcome, but its absence isn't a failure.
+# `citations` lists alternatives: citing any one of them counts.
+
+[[expected]]
+importance = "core"
+citations = ["Tex. R. Civ. P. 166a"]
+why = "Summary judgment standard and procedure in Texas state court."
+
+[[expected]]
+importance = "core"
+citations = ["Tex. Civil Practice and Remedies Code § 38.001"]
+why = "Attorney fees on a claim for rendered services or a written contract; the contract has no fee clause."
+
+[[expected]]
+importance = "core"
+citations = ["Tex. Civil Practice and Remedies Code § 16.004", "Tex. Civil Practice and Remedies Code § 16.051"]
+why = "Four-year limitations period for debt (or the residual period)."
+
+[[expected]]
+importance = "core"
+citations = ["Tex. Government Code § 24.007"]
+why = "District court jurisdiction; $34,500 is above the justice court's limit."
+
+[[expected]]
+importance = "core"
+citations = ["Tex. Civil Practice and Remedies Code § 15.002"]
+why = "General venue rule: Harris County, where the events occurred and the defendant resides."
+
+[[expected]]
+importance = "useful"
+citations = ["Tex. R. Civ. P. 185"]
+why = "Suit on a sworn account for personal services rendered; shifts the burden to a verified denial."
+
+[[expected]]
+importance = "useful"
+citations = ["Tex. Civil Practice and Remedies Code § 38.002"]
+why = "Presentment and representation requirements for recovering fees under § 38.001; the demand letter satisfies presentment."
+
+[[expected]]
+importance = "useful"
+citations = ["Tex. Finance Code § 302.002"]
+why = "Six percent interest from the 30th day after an amount is due when no rate was agreed."
+
+# Code areas that don't govern this case. Citing them is a relevance error
+# even though the sections are real and in force. Matched by citation prefix.
+
+[[off_topic]]
+prefix = "Tex. Business & Commerce Code § 2."
+why = "UCC Article 2, sale of goods; this is a contract for design and software services. A lawyer may disagree about the portal."
+
+[[off_topic]]
+prefix = "Tex. Property Code § 28."
+why = "Prompt payment to contractors for work on real property; this isn't construction."
+
+[[off_topic]]
+prefix = "Tex. Property Code § 53."
+why = "Mechanic's and materialman's liens; there's no improvement to real property."
+
+[[off_topic]]
+prefix = "Tex. Government Code § 27."
+why = "Justice court jurisdiction, capped at $20,000; the claim is $34,500."
+
+[[off_topic]]
+prefix = "Tex. Insurance Code"
+why = "No insurer is involved."
+
+[[off_topic]]
+prefix = "Tex. Penal Code"
+why = "Criminal law; this is a civil collection suit."

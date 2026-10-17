@@ -47,8 +47,10 @@ How to make a change safely. Set up first with
 Unit tests show the code works. They don't show the briefs are any good.
 The evaluation does that.
 
-Four fictional sample cases are in `examples/`, one per state, all
-residential construction disputes. Each has an expected-authority list in
+Seven fictional sample cases are in `examples/`. Four are residential
+construction disputes, one per state. Three are other kinds of case: an
+unpaid invoice (TX), a residential security deposit (CA) and a used car
+sold with a hidden flood history (UT). Each has an expected-authority list in
 `examples/eval/*.toml`:
 
 - **core:** a competent brief on these facts should cite it
@@ -65,7 +67,7 @@ residential construction disputes. Each has an expected-authority list in
 
 | Mode | Time | Use it for |
 |---|---|---|
-| Full run | ~40 min on the laptop, ~6 min on the server | Any change to prompts, search, selection or the model |
+| Full run | ~2 min a case on the server's 14B | Any change to prompts, search, selection or the model |
 | `--research-only` | ~1 min a case | A fast check of the search step alone |
 | `--validate` | Seconds | Checking the lists against the index, after a new law snapshot |
 

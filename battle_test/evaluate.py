@@ -370,17 +370,22 @@ def research_recall(cfg, client, law, case: EvalCase, on_usage=None) -> tuple[li
     full run, so query-prompt changes can be checked in about a minute per
     case. The defendant's research needs the drafts, so it isn't covered.
     """
-    from battle_test import grounding, prompts
+    queries = research_queries(cfg, client, case, on_usage)
+    candidates = grounding.gather_candidates(law, queries, case.state.lower())
+    return queries, [c.citation for c in candidates]
+
+
+def research_queries(cfg, client, case: EvalCase, on_usage=None) -> list[str]:
+    """The search queries the plaintiff's research step writes for a case."""
+    from battle_test import prompts
 
     state = prompts.SUPPORTED_STATES[case.state]
     facts = case.facts_path.read_text(encoding="utf-8")
     task = prompts.plaintiff_research_task(state, "Case information", facts)
     system = prompts.plaintiff_system(state)
-    queries = grounding.research(
+    return grounding.research(
         lambda t: client.chat(cfg.plaintiff_model, system, t, json_mode=True, on_usage=on_usage), task,
         case.state)
-    candidates = grounding.gather_candidates(law, queries, case.state.lower())
-    return queries, [c.citation for c in candidates]
 
 
 def render_research(rows: list[tuple[EvalCase, list[str], list[str]]], label: str,

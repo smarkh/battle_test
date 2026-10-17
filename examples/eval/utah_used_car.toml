@@ -1,0 +1,109 @@
+# Evaluation case: Utah used car sold "as is" by a dealer that hid an
+# insurer's flood total loss.
+#
+# DRAFT, not yet reviewed by a lawyer. Each authority below was checked
+# against the text in the law index (snapshot v2026.09.1), but choosing the
+# right law is exactly the judgement being tested, so a lawyer should
+# confirm or correct this list before the scores are trusted.
+#
+# Added 2026-10-16 to test whether the fit check is overfitted to the
+# residential construction cases. Here UCC Article 2 (sale of goods) IS the
+# right law, while the fit check's prompt names it as an example of law
+# that doesn't apply to a services contract. Nothing in Article 2 is
+# off-topic for this case.
+#
+# Question for the lawyer: which limitations period governs the Consumer
+# Sales Practices Act claim? § 78B-2-305 (three years, fraud or a liability
+# created by statute) is listed as an alternative to the UCC's § 70A-2-725.
+
+name = "utah_used_car"
+state = "UT"
+facts = "../utah_used_car_facts.md"
+lawyer_reviewed = false
+
+# "core": a competent brief on these facts should cite it.
+# "useful": relevant and welcome, but its absence isn't a failure.
+# `citations` lists alternatives: citing any one of them counts.
+
+[[expected]]
+importance = "core"
+citations = ["Utah R. Civ. P. 56"]
+why = "Summary judgment standard and procedure in Utah state court."
+
+[[expected]]
+importance = "core"
+citations = ["Utah Code § 13-11-4"]
+why = "Consumer Sales Practices Act: a supplier's deceptive act in a consumer transaction, e.g. misstating the car's history."
+
+[[expected]]
+importance = "core"
+citations = ["Utah Code § 13-11-19"]
+why = "The consumer's private action for damages, and attorney fees against a supplier that violated the Act."
+
+[[expected]]
+importance = "core"
+citations = ["Utah Code § 70A-2-313"]
+why = "Express warranty from the dealer's affirmations (\"no flood damage\"), which an \"as is\" clause doesn't disclaim."
+
+[[expected]]
+importance = "core"
+citations = ["Utah Code § 70A-2-725", "Utah Code § 78B-2-305"]
+why = "Limitations period: four years for a contract for sale, or three for fraud."
+
+[[expected]]
+importance = "core"
+citations = ["Utah Code § 78A-5-102"]
+why = "District court has original jurisdiction in all civil matters."
+
+[[expected]]
+importance = "core"
+citations = ["Utah Code § 78B-3a-201"]
+why = "General venue rule: Weber County, where the claim arose and the defendant resides."
+
+[[expected]]
+importance = "useful"
+citations = ["Utah Code § 41-1a-1004", "Utah Code § 41-1a-1005.3"]
+why = "Written notice required before selling a vehicle an insurer declared a total loss."
+
+[[expected]]
+importance = "useful"
+citations = ["Utah Code § 70A-2-608", "Utah Code § 70A-2-711"]
+why = "Revocation of acceptance and the buyer's refund remedy, for returning the car."
+
+[[expected]]
+importance = "useful"
+citations = ["Utah Code § 70A-2-714", "Utah Code § 70A-2-715"]
+why = "Damages for accepted goods (value as warranted less value as delivered) and incidental and consequential damages."
+
+[[expected]]
+importance = "useful"
+citations = ["Utah Code § 70A-2-316"]
+why = "Exclusion of warranties: an \"as is\" clause disclaims implied warranties, not express ones."
+
+[[expected]]
+importance = "useful"
+citations = ["Utah R. Civ. P. 9"]
+why = "Fraud must be pleaded with particularity."
+
+# Code areas that don't govern this case. Citing them is a relevance error
+# even though the sections are real and in force. Matched by citation prefix.
+
+[[off_topic]]
+prefix = "Utah Code § 13-20-"
+why = "Lemon law, which covers new motor vehicles only."
+
+[[off_topic]]
+prefix = "Utah Code § 70A-2a-"
+why = "UCC Article 2A, leases of goods; the car was bought."
+
+[[off_topic]]
+prefix = "Utah Code § 31A-"
+why = "Insurance code; the claim is against the dealer, not an insurer."
+
+[[off_topic]]
+prefix = "Utah Code § 38-"
+why = "Construction and mechanic's liens."
+
+[[off_topic]]
+prefix = "Utah Code § 57-22-"
+why = "Utah Fit Premises Act (landlord and tenant)."

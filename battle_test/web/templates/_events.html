@@ -6,7 +6,7 @@
   <tbody>
   {% for e in events %}
     <tr><td class="muted">{{ e.at.replace("T", " ") }}</td>
-      <td><a href="/admin/users/{{ e.subject }}">{{ e.subject }}</a></td>
+      <td>{% if e.subject %}<a href="/admin/users/{{ e.subject }}">{{ e.subject }}</a>{% else %}<span class="muted">–</span>{% endif %}</td>
       <td>{{ e.kind }}{% if e.detail %} <span class="muted">· {{ e.detail }}</span>{% endif %}</td>
       <td>{{ e.actor or "–" }}</td></tr>
   {% endfor %}

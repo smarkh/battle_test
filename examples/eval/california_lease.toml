@@ -1,0 +1,92 @@
+# Evaluation case: California residential security deposit kept without an
+# itemized statement.
+#
+# DRAFT, not yet reviewed by a lawyer. Each authority below was checked
+# against the text in the law index (snapshot v2026.09.1), but choosing the
+# right law is exactly the judgement being tested, so a lawyer should
+# confirm or correct this list before the scores are trusted.
+#
+# Added 2026-10-16 to test whether the fit check is overfitted to the
+# residential construction cases. The traps are the other "lease" law:
+# commercial deposits (Civ. § 1950.7), commercial leases (Civ. § 1995.*) and
+# leases of goods (Com. Code Division 10).
+#
+# Question for the lawyer: is the limitations period for the § 1950.5(m)
+# statutory damages CCP § 340(a) (one year, a statutory penalty) rather than
+# § 337 or § 338? If it's § 340, it should be added as "core", since the
+# deposit was kept on March 30, 2026.
+
+name = "california_lease"
+state = "CA"
+facts = "../california_lease_facts.md"
+lawyer_reviewed = false
+
+# "core": a competent brief on these facts should cite it.
+# "useful": relevant and welcome, but its absence isn't a failure.
+# `citations` lists alternatives: citing any one of them counts.
+
+[[expected]]
+importance = "core"
+citations = ["Cal. CCP § 437c"]
+why = "Summary judgment standard and procedure in California superior court."
+
+[[expected]]
+importance = "core"
+citations = ["Cal. CIV § 1950.5"]
+why = "Residential security deposits: 21-day itemized statement, no charge for ordinary wear and tear, move-out photographs, and up to twice the deposit for bad-faith retention."
+
+[[expected]]
+importance = "core"
+citations = ["Cal. CCP § 337", "Cal. CCP § 338"]
+why = "Limitations period: four years on the written lease, or three for a liability created by statute."
+
+[[expected]]
+importance = "core"
+citations = ["Cal. CCP § 85", "Cal. CCP § 86"]
+why = "A claim of $16,200 is a limited civil case (up to $35,000)."
+
+[[expected]]
+importance = "core"
+citations = ["Cal. CCP § 395", "Cal. CCP § 395.5"]
+why = "Venue: Alameda County, where the defendant is and where the lease was made and performed."
+
+[[expected]]
+importance = "useful"
+citations = ["Cal. CIV § 1717"]
+why = "The lease's prevailing-party attorney fee clause is enforced, and made reciprocal, by § 1717."
+
+[[expected]]
+importance = "useful"
+citations = ["Cal. CIV § 3287"]
+why = "Prejudgment interest on damages certain from the day they were due."
+
+# Code areas that don't govern this case. Citing them is a relevance error
+# even though the sections are real and in force. Matched by citation prefix.
+
+[[off_topic]]
+prefix = "Cal. CIV § 1950.7"
+why = "Deposits on non-residential rental agreements; this was the tenant's home."
+
+[[off_topic]]
+prefix = "Cal. CIV § 1995."
+why = "Commercial real property leases (transfer of the tenant's interest)."
+
+[[off_topic]]
+prefix = "Cal. COM § 10"
+why = "UCC Division 10, leases of goods, not of real property."
+
+[[off_topic]]
+prefix = "Cal. COM § 2"
+why = "UCC Article 2, sale of goods."
+
+[[off_topic]]
+prefix = "Cal. CCP § 116"
+why = "Small claims court (§ 116.x) and unlawful detainer (§§ 1160-1169): the claim is above the small claims limit, and nobody is being evicted."
+
+[[off_topic]]
+prefix = "Cal. INS §"
+why = "No insurer is involved."
+
+[[off_topic]]
+prefix = "Cal. PEN §"
+why = "Criminal law; this is a civil deposit suit."
