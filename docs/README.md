@@ -13,6 +13,7 @@ No winner is declared.
 
 | If you want to… | Read |
 |---|---|
+| Join the project: install everything, get access, and learn how we push and deploy | [onboarding.md](onboarding.md) |
 | Understand what the system does and how a case flows through it | [how-it-works.md](how-it-works.md) |
 | Find the file that does something | [code-guide.md](code-guide.md) |
 | Set up and run it on your own machine | [running-locally.md](running-locally.md) |
@@ -20,8 +21,8 @@ No winner is declared.
 | Run the models on Amazon Bedrock instead of your own GPU | [running-on-bedrock.md](running-on-bedrock.md) |
 | Make a change: tests, evaluation, and the project's rules | [development.md](development.md) |
 
-A sensible order for a newcomer: how-it-works, running-locally, code-guide,
-development. Read running-on-server only when you need to touch the
+A sensible order for a newcomer: how-it-works, onboarding (to get set up),
+code-guide, development, and running-locally as a reference. Read running-on-server only when you need to touch the
 server, and running-on-bedrock only when you want hosted models.
 
 ## Where things stand

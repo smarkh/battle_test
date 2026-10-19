@@ -10,8 +10,9 @@ How to make a change safely. Set up first with
 3. If it affects what the models are given or write, run the evaluation.
 4. If it affects a page, check it in a browser.
 5. Update the docs and `plans/plan.md`.
-6. Commit and push, then update the server
-   ([running-on-server.md](running-on-server.md)).
+6. Commit and push to `main` in small steps (trunk-based: see
+   [onboarding.md](onboarding.md#6-day-to-day-trunk-based-development)),
+   then update the server ([running-on-server.md](running-on-server.md)).
 
 ## Rules
 
