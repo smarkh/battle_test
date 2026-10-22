@@ -149,6 +149,50 @@ class ResearchAndSelectionTest(unittest.TestCase):
         self.assertIn("CITATION NEEDED", grounding.format_authorities([]))
 
 
+FILLER = [f"({n}) Filler paragraph number {n} about unrelated matters of fees, forms and filing offices "
+          "that go on for a while to make this section long." for n in range(1, 41)]
+LONG_TEXT = "\n\n".join(["(a) This section governs deposits held by landlords."] + FILLER
+                         + ["(z) The landlord shall return the deposit within 21 days, or forfeit twice its amount."])
+
+
+class RelevantExcerptTest(unittest.TestCase):
+    def test_short_text_or_no_query_is_the_plain_excerpt(self):
+        self.assertEqual(grounding.relevant_excerpt("Short text.", "deposit"), "Short text.")
+        self.assertEqual(grounding.relevant_excerpt(LONG_TEXT, None), grounding.excerpt(LONG_TEXT))
+        self.assertEqual(grounding.relevant_excerpt(LONG_TEXT, "nothing matches xyzzy"),
+                         grounding.excerpt(LONG_TEXT))
+
+    def test_long_text_shows_its_opening_and_the_matching_part(self):
+        text = grounding.relevant_excerpt(LONG_TEXT, "deposit returned within 21 days", 700)
+        self.assertTrue(text.startswith("(a) This section governs deposits held by landlords."))
+        self.assertIn("[…] (z) The landlord shall return the deposit within 21 days", text)
+        self.assertNotIn("Filler paragraph number 20", text)
+        self.assertLessEqual(len(text), 700)
+        self.assertFalse(text.endswith("[excerpt]"))  # the last paragraph is shown whole
+
+    def test_words_in_every_paragraph_count_for_nothing(self):
+        # "filler" and "paragraph" are in 40 of 42 paragraphs; "forfeit" in one.
+        text = grounding.relevant_excerpt(LONG_TEXT, "filler paragraph forfeit", 400)
+        self.assertIn("forfeit twice its amount", text)
+
+    def test_parts_shown_keep_the_section_order_and_mark_what_was_left_out(self):
+        # Single digits don't count as matches, so not "number 5".
+        text = grounding.relevant_excerpt(LONG_TEXT, "number 30 number 15", 3000)
+        self.assertLess(text.index("number 15 "), text.index("number 30 "))
+        self.assertEqual(text.count("[…]"), 2)
+        self.assertTrue(text.endswith("…[excerpt]"))
+
+    def test_a_long_paragraph_is_split_at_its_subdivisions(self):
+        one_line = " ".join(f"({n}) Rule {n} about general matters of procedure and form." for n in range(1, 60))
+        text = grounding.relevant_excerpt(one_line + " (60) Interest accrues at ten percent.", "interest rate", 500)
+        self.assertIn("(60) Interest accrues at ten percent.", text)
+
+    def test_drafting_authorities_use_each_sections_query(self):
+        law = LawSection("Cal. CIV § 1", "ca", "statute", "T", "p", "in_force", LONG_TEXT, "u", None)
+        self.assertIn("within 21 days", grounding.format_authorities([law], {"Cal. CIV § 1": "21 days"}))
+        self.assertNotIn("within 21 days", grounding.format_authorities([law]))
+
+
 class CheckCitationsTest(unittest.TestCase):
     LAW = FakeLaw(sections=[
         section("Utah Code § 78B-2-309"),

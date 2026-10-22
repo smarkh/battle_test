@@ -78,6 +78,17 @@ Details worth knowing:
   default, which their evaluation results were measured with.
 - **A drafting prompt holds at most 12 sections,** each cut to about 700
   characters, so the longest prompt (the reply) fits the model's context.
+- **Long sections show the part that matters, not just their start**
+  (`grounding.relevant_excerpt`, since 2026-10-22). A section longer than
+  the space for it shows its opening (a quarter of the space, to say what
+  it's about), then the paragraphs that best match what it's wanted for,
+  in the section's order, with `[…]` where text is left out. "What it's
+  wanted for" is the research topic that found it, the other side's
+  passage citing it, or, for the summary judgment rule, the standard
+  itself. Words that appear all through the section count for nothing.
+  The same goes for the fit check and the "does it say that?" check
+  below. Cal. Civ. Code § 1950.5 is 26,182 characters, and its 21-day
+  deposit rule starts past character 20,000.
 - **Selection asks about one query at a time** because small models pick
   close to at random from a long list. Asked to choose 10 from about 100
   in one call, `qwen2.5:7b` kept 6 of the 24 expected authorities the
@@ -235,8 +246,9 @@ front of it. A section applies if any part of it covers the case.
 
 When `[models] checker` names a model, a second check runs on each draft
 ("3a" in `plans/plan.md`). For every ✅ or ☑ citation, the checker model
-reads the paragraph citing it beside the section's text (the first 3,000
-characters) and answers *supports*, *partly* or *does not support*, with
+reads the paragraph citing it beside the section's text (up to 3,000
+characters: for a long section, its opening and the parts that best match
+the paragraph) and answers *supports*, *partly* or *does not support*, with
 one sentence of reasoning.
 
 - *Does not support* is marked inline, `[⚠ MAY NOT SUPPORT THIS]`. The

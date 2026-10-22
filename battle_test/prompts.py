@@ -203,8 +203,8 @@ dispute), even if it shares words with the case.
 - "unsure": it could apply, but that depends on facts the case does not state.
 {on_topic}If any part of the section, such as its first subsection, covers a \
 case like this one, it applies, even if the rest is about other matters. \
-If the quoted text ends with "[excerpt]", the section continues beyond it. \
-Respond with JSON only, in exactly this form:
+If the quoted text ends with "[excerpt]", the section continues beyond it, \
+and "[…]" marks a part left out. Respond with JSON only, in exactly this form:
 {{"verdict": "applies" or "unsure" or "does_not_apply", "reason": "<one sentence>"}}
 
 {wrap(materials_title, materials)}
@@ -223,8 +223,8 @@ relies on something the text does not say.
 - "does_not_support": the text is about a different subject, or a different \
 kind of case or party, or says the opposite.
 If the passage cites several authorities, judge only {citation}. If the \
-quoted text ends with "[excerpt]", the section continues beyond it. Respond \
-with JSON only, in exactly this form:
+quoted text ends with "[excerpt]", the section continues beyond it, and \
+"[…]" marks a part left out. Respond with JSON only, in exactly this form:
 {{"verdict": "supports" or "partly" or "does_not_support", "reason": "<one sentence>"}}
 
 {wrap("Section of law", f"{citation} — {section_title}{chr(10)}{law_text}")}

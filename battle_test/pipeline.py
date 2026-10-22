@@ -120,6 +120,19 @@ def run_case(
     # The fit check's verdicts so far, by citation, from either side. A
     # section one side's check left out is left out for the other side too.
     set_aside: dict[str, FitCheck] = {}
+    # role -> {citation: the research topic each selected section was picked
+    # for}. A long section's excerpt shows the part matching it.
+    picked_for: dict[str, dict[str, str]] = {"plaintiff": {}, "defendant": {}}
+
+    def wanted_for(role: str, *others: CheckedText) -> dict[str, str]:
+        """citation -> what the section is wanted for in `role`'s next draft:
+        the summary judgment standard, its own research topic, and the
+        passages citing it in the other side's documents."""
+        wanted = {s.citation: grounding.SUMMARY_JUDGMENT_QUERY for s in sj_rule}
+        for source in (picked_for[role], *(o.passages for o in others)):
+            for citation, text in source.items():
+                wanted[citation] = f"{wanted[citation]}\n{text}" if citation in wanted else text
+        return wanted
 
     def gather_authorities(role: str, research_task: str, materials_title: str,
                            materials: str) -> list[LawSection]:
@@ -136,18 +149,19 @@ def run_case(
             lambda topic, candidates: prompts.select_task(role, materials_title, materials, topic, candidates),
             topics, grounding.MAX_AUTHORITIES)
         selected = [s for _, s in picked]
+        picked_for[role].update({s.citation: topic for topic, s in picked})
         if not (cfg.checker_model and cfg.fit_check):
             return selected
         stage("Checking the authorities fit the case", role)
-        topic_of = {s.citation: topic for topic, s in picked}
 
         def fits(section: LawSection) -> tuple[str, str] | None:
             earlier = set_aside.get(section.citation)
             if earlier:
                 return earlier.verdict, earlier.reason
             task = prompts.fit_task(state, materials_title, materials, section.citation, section.section_title,
-                                    grounding.excerpt(section.text, grounding.SUPPORT_EXCERPT_CHARS),
-                                    topic_of.get(section.citation))
+                                    grounding.relevant_excerpt(section.text, picked_for[role].get(section.citation),
+                                                               grounding.SUPPORT_EXCERPT_CHARS),
+                                    picked_for[role].get(section.citation))
             return grounding.parse_verdict(ask_checker(task), grounding.FIT_VERDICTS)
 
         selected, run.fit[role] = grounding.fit_filter(fits, selected)
@@ -156,7 +170,8 @@ def run_case(
 
     def judge(passage: str, section: LawSection) -> tuple[str, str] | None:
         task = prompts.support_task(section.citation, section.section_title,
-                                    grounding.excerpt(section.text, grounding.SUPPORT_EXCERPT_CHARS), passage)
+                                    grounding.relevant_excerpt(section.text, passage,
+                                                               grounding.SUPPORT_EXCERPT_CHARS), passage)
         return grounding.parse_verdict(ask_checker(task))
 
     def check(title: str, role: str, text: str, provided: list[LawSection] | None) -> CheckedText:
@@ -180,7 +195,8 @@ def run_case(
     p_auth = gather_authorities(
         "plaintiff", prompts.plaintiff_research_task(state, *materials), *materials
     )
-    p_text = grounding.format_authorities(p_auth)
+    sj_rule = grounding.summary_judgment_rule(law, sc)
+    p_text = grounding.format_authorities(p_auth, wanted_for("plaintiff"))
     if facts is not None:
         court = prompts.TRIAL_COURTS[state_code]
         complaint_doc = draft("Complaint", "plaintiff", prompts.complaint_task(court, facts, p_text), p_auth)
@@ -189,10 +205,10 @@ def run_case(
         run.documents.append(Document("Complaint", "plaintiff", complaint_doc.text, False,
                                       complaint_doc.checks, complaint_doc.unchecked))
     complaint = complaint_doc.text
-    sj_rule = grounding.summary_judgment_rule(law, sc)
     motion_auth = grounding.merge(sj_rule, p_auth, limit=MAX_COMBINED_AUTHORITIES)
     motion_doc = draft("Motion for Summary Judgment", "plaintiff",
-                       prompts.motion_task(state, complaint, grounding.format_authorities(motion_auth)),
+                       prompts.motion_task(state, complaint,
+                                          grounding.format_authorities(motion_auth, wanted_for("plaintiff"))),
                        motion_auth)
 
     # Defendant: its own research, plus the text of what the plaintiff cited.
@@ -204,7 +220,8 @@ def run_case(
                              d_selected, limit=MAX_COMBINED_AUTHORITIES)
     opposition_doc = draft(
         "Opposition to Motion for Summary Judgment", "defendant",
-        prompts.opposition_task(state, complaint, motion_doc.text, grounding.format_authorities(d_auth)),
+        prompts.opposition_task(state, complaint, motion_doc.text,
+                                grounding.format_authorities(d_auth, wanted_for("defendant", motion_doc))),
         d_auth,
     )
 
@@ -217,7 +234,7 @@ def run_case(
         draft(
             "Reply in Support of Motion for Summary Judgment", "plaintiff",
             prompts.reply_task(state, complaint, motion_doc.text, opposition_doc.text,
-                               grounding.format_authorities(r_auth)),
+                               grounding.format_authorities(r_auth, wanted_for("plaintiff", opposition_doc))),
             r_auth,
         )
 

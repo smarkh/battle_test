@@ -66,7 +66,10 @@ guardrails-style network isolation and data handling).
   - **Agreed next:** decide between passage indexing (fixes the length
     penalty, the 1,500-character embedding cut-off and the checker's
     3,000-character view together) and the smaller California
-    chapter-names fix.
+    chapter-names fix. **Decided 2026-10-22: passage indexing, in three
+    stages.** Stage 1 (show the matching part of long sections to the
+    checks and the drafting model) is built and evaluated, not deployed.
+    See "Passages, decided 2026-10-22" in Open questions.
 - **Where the 2026-10-14 session stopped:**
   - **Done that day:**
     - The server came back from a Windows Update restart (see the
@@ -2293,6 +2296,86 @@ its Share › Export menu. Both are private until shared from that menu.
         the checker's 3,000-character view together.
     - Still never found: venue in CA and UT, Cal. CCP §§ 85/86, Utah
       § 70A-2-313 (express warranty).
+- **Passages, decided 2026-10-22: passage indexing, in three stages,**
+  each measured before the next. California chapter names wait: they only
+  help ranking, need leginfo scraping, and would likely re-embed all of
+  California anyway. Revisit them if short sections (venue, Cal. CCP
+  §§ 85/86) are still missed after stage 3.
+  1. **Stage 1: show the matching part of a long section. BUILT
+     2026-10-22, not deployed.** No index change.
+     - `grounding.relevant_excerpt(text, query, limit)`: a section longer
+       than `limit` gives its opening (a quarter of the room), then the
+       pieces that best match `query`, in the section's order, with `[…]`
+       where text is left out. Pieces are paragraphs, with long ones split
+       at subdivisions ("(a)", "(1)") or sentence ends, about 600
+       characters each. Matching uses rough word stems weighted by how
+       rare they are in the section; a word in more than half its pieces
+       counts for nothing. A piece too big for the room left is trimmed
+       around its best-matching part. No match: the old opening excerpt.
+     - Where it's used, and what it's matched against:
+       - "Does it say that?" check (3,000): the passage citing it.
+       - Fit check (3,000): the research topic that found it.
+       - Drafting prompts (700): the topic it was picked for, plus the
+         other side's passages citing it (`CheckedText.passages`, not
+         saved in the case record). The summary judgment rule is matched
+         against the standard (`SUMMARY_JUDGMENT_QUERY`).
+       - Not changed: selection's 40-word candidate view, which was
+         benchmarked on the opening. A candidate for later, with item B.
+     - Both checker prompts now say `[…]` marks a part left out.
+     - **Replay of the checker (2026-10-22, server 14B, temperature 0):**
+       every citation of a section over 3,000 characters in the
+       2026-10-16 broad-case drafts, judged on the old excerpt and the
+       new one. The script was in the session's scratch folder, not in
+       the repo.
+       - Keyword run (54 citations): *does not support* 10 → 1, *supports*
+         10 → 19, *partly* 34 → 34. Nine of the ten were Cal. CIV
+         § 1950.5 ("does not mention 21 days", "no bad-faith damages"),
+         all wrong. The one left is right: a passage that names the
+         statute without relying on it for anything.
+       - The checker now argues from the right text. It caught the
+         opposition saying § 1950.5 gives no bad-faith damages when
+         (l) does, though it called that *partly*, not *does not
+         support*. Some new *partly* reasons are fair (the 21-day clock's
+         conditions), one is invented ("Civil Code instead of Civil
+         Procedure Code").
+       - Semantic run (37 citations): 6 changes, all *partly* →
+         *supports*, all on summary judgment rules (Cal. CCP § 437c, Tex.
+         R. Civ. P. 166a, Utah R. Civ. P. 56), whose standard comes after
+         the first 3,000 characters.
+       - Worse: Utah Code § 78A-5-102 went *supports* → *partly* twice
+         (a quibble that the jurisdiction is "subject to exceptions").
+         *Partly* isn't marked in the draft.
+     - **Full evaluation (2026-10-22, server 14B drafting and checking,
+       keyword + semantic, 3 runs each;
+       `output/eval/20261022-112755-passages-stage1-broad-14b/`),** against
+       the same setup on 2026-10-16 (`20261016-221943-…`):
+       - Core cited 22/51 → 22/51. Off-topic cited 2 → 0. ❌ problems
+         1 → 2.
+       - Checker doubts 76/97 → 64/100. *Partly* fell (lines in the
+         citation checks: 67 → 44). Inline *does not support* marks went
+         9 → 24, nearly all in the lease case: the drafting model cites
+         Cal. CIV § 2988.9 (attorney fees in vehicle leases) for the
+         21-day deposit rule, and the checker now marks it almost every
+         time. That miscitation was there on 2026-10-16 too (19 times in
+         one run): search finds § 1950.5 in neither run, so the model
+         reaches for the nearest lease statute. The marks are right.
+       - `[CITATION NEEDED]` 9 → 22, half of it one Utah run (11). Likely
+         noise; watch it on the next evaluation.
+       - Core found by search 21 → 17. Search wasn't changed: the model's
+         research queries vary from run to run.
+       - **Conclusion:** the checks now read the right part of long
+         sections, with no loss in what gets cited. It doesn't make the
+         briefs cite more: that's search (stages 2 and 3) and selection
+         (item B). Worth deploying.
+  2. **Stage 2: keyword search on passages.** A passage table in
+     law.sqlite, hits mapped back to their section. No re-embed. Measure
+     with `evaluate --research-only` on all seven cases.
+  3. **Stage 3: semantic search on passages.** Only long sections need
+     more than one vector, so the incremental embed covers only those.
+     `refresh.py`, `promote` and `rollback` must handle the passage table
+     and vectors. Estimate the embed time first; you run it in your own
+     PowerShell window. Then deploy, with the vectors copied to the
+     server.
 
 ## Restart prompt
 
@@ -2334,6 +2417,11 @@ A. Search misses most core law outside construction. Found 2026-10-16
    - adding California chapter and article names from leginfo, as Alaska's
      came from akleg.
    Plan it with me before building; a re-embed is needed for passages.
+   DECIDED 2026-10-22: passage indexing, in three stages (plan.md, Open
+   questions, "Passages, decided 2026-10-22"). Stage 1, showing the
+   matching part of long sections (grounding.relevant_excerpt), is BUILT
+   and evaluated, NOT deployed. Next: deploy it if I agree, then stage 2
+   (keyword search on passages, no re-embed).
 B. Selection and the fit check drop most of what search finds: with
    semantic search, core found 21/51 but cited 22/51 (some cited from
    memory). Look at it after A.

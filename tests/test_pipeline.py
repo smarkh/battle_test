@@ -283,6 +283,33 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("- ⚠ may not support what it's cited for: `Utah Code § 78B-2-309`. "
                       "Checker's note: It is about something else.", md)
 
+    def test_long_sections_show_the_part_matching_the_topic_and_the_citing_passage(self):
+        filler = "\n\n".join(f"({n}) Unrelated rule {n} about forms, filing offices and fees." for n in range(60))
+        long_limits = dataclasses.replace(LIMITS, text="(a) Opening of the section.\n\n" + filler
+                                          + "\n\n(z) An action upon an instrument in writing: six years.")
+
+        class LongLaw(FakeLaw):
+            def search(self, text, state, *, limit=10):
+                return [SJ_RULE, long_limits][:limit]
+
+            def resolve(self, ref, state):
+                return [s for s in (SJ_RULE, long_limits) if s.citation.lower().endswith(ref.section)]
+
+        drafts = ["An action upon an instrument in writing has six years. Utah Code § 78B-2-309.",
+                  "Motion.", "Opposition."]
+        client = FakeClient(drafts)
+        run_case(dataclasses.replace(CFG, checker_model="c-model"), client, LongLaw(), "UT",
+                 facts="f", rounds=1)
+        late = "(z) An action upon an instrument in writing: six years."
+        complaint_prompt = client.drafting_calls()[0]["user"]
+        self.assertIn(late, complaint_prompt)  # matched to its research topic
+        self.assertIn("[…]", complaint_prompt)
+        (fit,) = [c for c in client.calls if '"applies"' in c["user"] and "78B-2-309" in c["user"]][:1]
+        self.assertIn(late, fit["user"])
+        judged = [c for c in client.calls if c["model"] == "c-model" and '"supports"' in c["user"]]
+        self.assertTrue(judged)
+        self.assertTrue(all(late in c["user"] for c in judged))
+
     def fit_run(self, verdict):
         client = FakeClient(fit=verdict)
         stages = []

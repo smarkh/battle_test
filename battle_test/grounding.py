@@ -8,7 +8,10 @@ every citation in the draft is checked against the index in code.
 """
 
 import json
-from dataclasses import dataclass, replace
+import math
+import re
+from collections import Counter
+from dataclasses import dataclass, field, replace
 from itertools import zip_longest
 from typing import Callable, Protocol
 
@@ -231,10 +234,145 @@ def excerpt(text: str, limit: int = EXCERPT_CHARS, more: str = " …[excerpt]") 
     return text
 
 
-def format_authorities(sections: list[LawSection]) -> str:
+# Long sections: show the parts that match what the section is wanted for,
+# not just its opening. Cal. CIV § 1950.5 is 26,182 characters, and its
+# 21-day itemized statement rule and bad-faith rule start past character
+# 20,000, so a checker shown the first 3,000 said the section doesn't say
+# them (lease evaluation, 2026-10-16). Plan step 3b, "Passages, stage 1".
+OPENING_SHARE = 4  # a quarter of a long excerpt is the section's opening
+BLOCK_CHARS = 600  # long paragraphs are split into pieces about this size
+MIN_PIECE_CHARS = 80  # leftover room smaller than this isn't filled
+GAP = " […] "  # marks text left out between the parts shown
+_EXCERPT_STOPWORDS = {
+    "a", "an", "and", "any", "are", "as", "at", "be", "been", "by", "does", "for", "from",
+    "has", "have", "in", "is", "its", "law", "may", "not", "of", "on", "or", "section",
+    "shall", "such", "that", "the", "their", "this", "to", "under", "was", "which", "who",
+    "with",
+}
+_SUBDIVISION = re.compile(r"\s(?=\(\w{1,4}\)\s)")  # before "(a) ", "(12) ", "(iv) "
+# The summary judgment rule is supplied directly, not found by a search, so
+# its excerpt is matched against the standard itself.
+SUMMARY_JUDGMENT_QUERY = ("summary judgment no genuine issue triable issue material fact "
+                          "moving party entitled to judgment as a matter of law")
+
+
+def _terms(text: str) -> set[str]:
+    """Rough word stems for matching: "deposits" and "deposit" match, as do
+    "retained" and "retain". Numbers count ("21 days"), single digits don't."""
+    words = re.findall(r"[a-z]+|\d+", text.lower())
+    return {w.rstrip("s")[:6] for w in words
+            if (w.isdigit() and len(w) >= 2) or (len(w) >= 3 and w not in _EXCERPT_STOPWORDS)}
+
+
+def _split_long(paragraph: str) -> list[str]:
+    """A paragraph cut into pieces of about BLOCK_CHARS, at subdivisions
+    ("(a)", "(1)") where it has them, else at sentence ends."""
+    if len(paragraph) <= BLOCK_CHARS:
+        return [paragraph]
+    pieces: list[str] = []
+    for part in _parts(paragraph):
+        if pieces and len(pieces[-1]) + 1 + len(part) <= BLOCK_CHARS:
+            pieces[-1] += " " + part
+        else:
+            pieces.append(part)
+    return pieces
+
+
+def _parts(block: str) -> list[str]:
+    parts = _SUBDIVISION.split(block)
+    return parts if len(parts) > 1 else re.split(r"(?<=[.;:])\s+", block)
+
+
+def _trim_around_match(block: str, room: int, weight: dict[str, float]) -> tuple[str, bool]:
+    """The best-matching part of a block too long for `room`, widened with
+    its neighbours while it fits. Returns (text, whether it starts where the
+    block does)."""
+    parts = _parts(block)
+    scores = [sum(weight.get(t, 0.0) for t in _terms(p)) for p in parts]
+    best = max(range(len(parts)), key=lambda i: (scores[i], -i))
+    lo = hi = best
+    if len(parts[best]) > room:
+        return excerpt(parts[best], room, ""), best == 0
+    size = len(parts[best])
+    while True:
+        grown = False
+        for side in (hi + 1, lo - 1):
+            if 0 <= side < len(parts) and size + 1 + len(parts[side]) <= room:
+                size += 1 + len(parts[side])
+                lo, hi = min(lo, side), max(hi, side)
+                grown = True
+        if not grown:
+            return " ".join(parts[lo:hi + 1]), lo == 0
+
+
+def _blocks(text: str) -> list[str]:
+    paragraphs = [" ".join(p.split()) for p in text.splitlines() if p.strip()]
+    return [piece for p in paragraphs for piece in _split_long(p)]
+
+
+def relevant_excerpt(text: str, query: str | None, limit: int = EXCERPT_CHARS,
+                     more: str = " …[excerpt]") -> str:
+    """Up to `limit` characters of a section for a reader who needs it for
+    `query` (a research topic, or the passage citing it).
+
+    A short section, or one where nothing matches, comes back as excerpt()
+    gives it: its start. A long one gives its opening (what the section is
+    about), then the pieces that best match the query, in the section's
+    order, with GAP where text is left out. Matching weighs words rare in
+    the section over words in every paragraph of it.
+    """
+    if len(" ".join(text.split())) <= limit or not query:
+        return excerpt(text, limit, more)
+    blocks = _blocks(text)
+    wanted = _terms(query)
+    block_terms = [_terms(b) for b in blocks]
+    df = Counter(t for terms in block_terms for t in terms)
+    # A word in more than half the section's pieces says nothing about which
+    # piece matters, so it counts for nothing.
+    weight = {t: math.log(1 + len(blocks) / df[t]) for t in wanted if 0 < df[t] <= len(blocks) / 2}
+    scores = [sum(weight.get(t, 0.0) for t in terms) for terms in block_terms]
+    if len(blocks) < 2 or not any(scores[1:]):
+        return excerpt(text, limit, more)
+
+    opening = excerpt(blocks[0], limit // OPENING_SHARE, "")
+    # block -> (text shown, starts where the block does, is the whole block)
+    shown = {0: (opening, True, opening == blocks[0])}
+    room = limit - len(opening)
+    for i in sorted(range(1, len(blocks)), key=lambda i: (-scores[i], i)):
+        if scores[i] <= 0 or room < MIN_PIECE_CHARS:
+            break
+        if len(blocks[i]) + len(GAP) <= room:
+            shown[i] = (blocks[i], True, True)
+        else:
+            piece, at_start = _trim_around_match(blocks[i], room - len(GAP), weight)
+            if not piece:
+                continue
+            shown[i] = (piece, at_start, False)
+        room -= len(shown[i][0]) + len(GAP)
+
+    out, prev = "", None
+    for i in sorted(shown):
+        piece, at_start, _ = shown[i]
+        if prev is not None:
+            out += " " if i == prev + 1 and shown[prev][2] and at_start else GAP
+        elif not at_start:
+            out += GAP.lstrip()
+        out += piece
+        prev = i
+    if prev < len(blocks) - 1 or not shown[prev][2]:
+        out += more
+    return out
+
+
+def format_authorities(sections: list[LawSection], queries: dict[str, str] | None = None) -> str:
+    """The sections for a drafting prompt. `queries` maps a citation to what
+    it's wanted for (its research topic, or the other side's passage citing
+    it), so a long section shows the part that matters."""
     if not sections:
         return "(none found — use [CITATION NEEDED: …] placeholders for all legal authority)"
-    return "\n\n".join(f"{s.citation} — {s.section_title}\n{excerpt(s.text)}" for s in sections)
+    queries = queries or {}
+    return "\n\n".join(f"{s.citation} — {s.section_title}\n{relevant_excerpt(s.text, queries.get(s.citation))}"
+                       for s in sections)
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +409,8 @@ SUPPORT_LABELS = {
 # citation (evaluation of 2026-10-12).
 _SUPPORT_MARKS = {DOES_NOT_SUPPORT: "[⚠ MAY NOT SUPPORT THIS]"}
 # How much of the draft around a citation, and how much of the section, the
-# checker reads. The drafting model saw only EXCERPT_CHARS of the section.
+# checker reads (for a long section, the parts matching the passage: see
+# relevant_excerpt). The drafting model saw only EXCERPT_CHARS of it.
 PASSAGE_CHARS = 600
 SUPPORT_EXCERPT_CHARS = 3000
 # A citation on a line of its own (a heading, a list of authorities) is cited
@@ -363,6 +502,9 @@ class CheckedText:
     text: str  # the draft, with problem citations marked inline
     checks: tuple[CitationCheck, ...]
     unchecked: tuple[str, ...]  # citation-like lines the checker couldn't parse
+    # citation -> the draft's passages citing that section, for matching the
+    # section's text to what it's cited for. Not kept in the case record.
+    passages: dict[str, str] = field(default_factory=dict)
 
 
 def _classify(ref: CitationRef, hits: list[LawSection], state: str,
@@ -433,7 +575,15 @@ def check_citations(text: str, index: LawSearch, state: str, state_name: str,
         mark = _inline_mark(check, state_name)
         if mark:
             marked = f"{marked[:ref.end]} {mark}{marked[ref.end:]}"
-    return CheckedText(marked, tuple(checks), tuple(unchecked))
+    passages: dict[str, list[str]] = {}
+    for ref, check in zip(refs, checks):
+        if check.section is not None and check.status in CITED_STATUSES:
+            found = passages.setdefault(check.section.citation, [])
+            passage = passage_around(text, ref.start, ref.end)
+            if passage not in found:
+                found.append(passage)
+    return CheckedText(marked, tuple(checks), tuple(unchecked),
+                       {c: "\n".join(ps) for c, ps in passages.items()})
 
 
 def cited_sections(checked: CheckedText) -> list[LawSection]:

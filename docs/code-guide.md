@@ -131,7 +131,7 @@ fake model clients and small temporary databases.
 |---|---|
 | What a model is told to write | `prompts.py` |
 | How law is searched or ranked | `law_index.py` (`search`, `STATE_BOOST`), `grounding.py` (`STANDARD_QUERIES`, `RESULTS_PER_QUERY`), `semantic.py` (`EMBED_CHARS`, `STATE_BOOST`, the model prefixes) |
-| How many sections a model gets, or how much of each | `grounding.py` (`MAX_AUTHORITIES`, `EXCERPT_CHARS`), `pipeline.py` (`MAX_COMBINED_AUTHORITIES`) |
+| How many sections a model gets, or how much of each | `grounding.py` (`MAX_AUTHORITIES`, `EXCERPT_CHARS`, `SUPPORT_EXCERPT_CHARS`; `relevant_excerpt` picks which part of a long section), `pipeline.py` (`MAX_COMBINED_AUTHORITIES`) |
 | A citation form the checker doesn't recognise | `citations.py` (`_PATTERNS`), with a test in `test_citations.py` |
 | The order of documents, or adding a step | `pipeline.py` |
 | Adding a state | `prompts.py` (`SUPPORTED_STATES`, `TRIAL_COURTS`), `grounding.py` (`SUMMARY_JUDGMENT_RULES`, and `STATE_STANDARD_QUERIES` if the default standard queries miss the state's own wording), `[corpus] jurisdictions` in every config, citation forms in `citations.py`, a sample case in `examples/` and `examples/eval/` (and the state set in `test_evaluate.py`), then rebuild the index. Check the new state's statuses and headings in the data (`corpus info`): Alaska's needed fixing |
