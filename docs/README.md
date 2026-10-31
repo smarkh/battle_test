@@ -20,6 +20,7 @@ No winner is declared.
 | Start, stop, update or check the deployed copy | [running-on-server.md](running-on-server.md) |
 | Run the models on Amazon Bedrock instead of your own GPU | [running-on-bedrock.md](running-on-bedrock.md) |
 | Make a change: tests, evaluation, and the project's rules | [development.md](development.md) |
+| See how case data is handled, or get the lawyer's sign-off on it | [data-handling-for-lawyer.md](data-handling-for-lawyer.md) |
 
 A sensible order for a newcomer: how-it-works, onboarding (to get set up),
 code-guide, development, and running-locally as a reference. Read running-on-server only when you need to touch the

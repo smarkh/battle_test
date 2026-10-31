@@ -470,6 +470,145 @@ on your own hardware.
 - **AWS Sales (chat, 2026-10-16) sent it back to Support:** reference
   case 179203335400015, or upgrade the support plan for a faster
   response. Sales won't handle it.
+- **Second Support case, 179263372000506 (chat, opened 2026-10-21).**
+  The agent's chat timed out unanswered. He then passed the case to
+  the Bedrock service team (2026-10-21, 22:16 MDT). The first case,
+  179203335400015, now shows Resolved. On 2026-10-22 we replied asking
+  for chat. AWS answered in writing instead: the case is still waiting
+  for a specialist to pick it up, and nothing more is needed from us.
+- **A member account is blocked too (2026-10-22).** Created
+  `battle-test-bedrock` (399258986934) inside the organization, gave
+  `smarkh` `AdministratorAccess` on it through Identity Center, and
+  added the AWS profile `battle-test-bedrock`. One `converse` call to
+  Qwen3 32B in `us-west-2` returned the same Error 002, so nothing was
+  billed. The block covers the whole organization, or new member
+  accounts get the same hold. Either way, only AWS can lift it. The
+  account is kept, unused, in case AWS asks about it.
+- **Cause named: a fraud-prevention verification hold (2026-10-23).** An
+  AWS email ("Amazon Bedrock Service Suspended", Fraud Prevention) said
+  AWS couldn't verify the account's details, so Bedrock is suspended.
+  It asked us not to open new accounts. You posted it on case
+  179263372000506 and chatted with AWS the same day. The first case was
+  closed on 2026-10-21 only as a duplicate of this one. The agent said
+  the security and verification review is under way, no documents
+  have been asked for yet, and the team will say exactly what it
+  needs. Case status: Pending Amazon action.
+- **No word from AWS for a week; follow-up posted (2026-10-30).** No
+  reply on the case or by email since 2026-10-23. A written note (Web
+  contact, no chat) went on case 179263372000506 at 20:16 MDT. It asks
+  for the status and a timeframe, an internal or supervisor escalation,
+  and the exact documents needed. It says photo ID, proof of address and
+  a card statement are ready to send.
+  - **Next:** if there's still no reply by Tuesday 2026-11-03, open a
+    chat and ask for a supervisor or an escalation. If documents are
+    asked for, you upload them on the case.
+  - **If it's still stuck past mid-November:** revisit the 2026-10-15
+    decision not to use a second provider in the meantime.
+- **Ollama Cloud tried after all (2026-10-30): gpt-oss 120B as the
+  checker.** The 2026-10-15 decision was revisited because Bedrock is
+  still blocked. gpt-oss 120B is also on Bedrock, so the results carry
+  over. The server's Ollama was signed in to ollama.com (device
+  `smark_iq`). It sends `gpt-oss:120b-cloud` calls on to Ollama Cloud.
+  No code or config change was needed.
+  - **Billing: none.** The account has no card and $0 in pay-as-you-go
+    credits. The run used **7.5% of the account's free monthly usage**
+    (693 requests). Free usage covers only gpt-oss 120B/20B, Gemma 4
+    31B, the Nemotron 3 models and Beam. Mistral Large, DeepSeek and the
+    rest need credits added. With no credits, nothing can be charged.
+  - **Run:** `evaluate --config config.tunnel.toml --checker
+    gpt-oss:120b-cloud --repeats 3`, all 7 cases (21 runs, 52 minutes),
+    with the server's 14B drafting. Results are in
+    `output/eval/20261030-202926-ollama-cloud-gptoss120b-checker-14b-drafts`.
+  - **List-price value about $0.23** (790k tokens in, 190k out at
+    $0.15 / $0.60 per million), covered by free usage, so $0 billed. Output was about 3 times the estimate, which is likely
+    the model's reasoning, and input about the same.
+  - **Against the 14B checker** (construction cases from 2026-10-15,
+    the broader cases from 2026-10-22):
+
+    | | 14B checker | gpt-oss 120B checker |
+    |---|---|---|
+    | Construction: core cited | 21/48 | 22/48 |
+    | Construction: off-topic cited | 1 | 0 |
+    | Construction: flagged "may not support" | 57% (52/91) | 43% (56/129) |
+    | Broader cases: core cited | 22/51 | 19/51 |
+    | Broader cases: off-topic cited | 0 | 2 (California lease) |
+    | Broader cases: flagged "may not support" | 64% (64/100) | 40% (55/138) |
+    | Broader cases: ❌ not found | 2 | 14 |
+    | Fit check: selected sections kept out | 54–68% | 49% |
+
+    Alaska, which had no earlier checker run: 7/12 core cited, 0
+    off-topic, 12 of 35 flagged.
+  - **Reading:** the bigger checker doubts far fewer citations (about
+    40% against about 60%), which is the main thing a 120B checker was
+    for. It keeps more sections in at the fit check, so the drafts get
+    more law, while core cited stays about the same. The ❌ "not found"
+    citations come from the 14B's drafts (citations written from
+    memory, e.g. `Utah Code § 13-5-102`, or bare `§ 1950.7`). The
+    citation check catches them; the checker doesn't cause them. Most
+    are in two runs, so it may be noise. Watch it on the next run.
+    Whether the flags it still raises are right needs a look at the
+    reports.
+- **gpt-oss 120B for everything, on Ollama Cloud (2026-10-30).**
+  `evaluate --config config.tunnel.toml --model gpt-oss:120b-cloud
+  --checker gpt-oss:120b-cloud --repeats 3`, 7 cases, 21 runs, 59
+  minutes. Results are in
+  `output/eval/20261030-213638-ollama-cloud-gptoss120b-all`.
+  - **Usage:** 2,103 calls, 3.63M tokens in, 854k out (about $1.06 at list
+    price). It took **33% of the free monthly usage**, more than the
+    20–30% estimated. 40.6% of this month's free usage is now used.
+    $0 billed.
+
+    | | 14B drafts + 14B checker | 14B drafts + gpt-oss checker | gpt-oss for everything |
+    |---|---|---|---|
+    | Core cited, all 7 cases | — | 48/111 | **66/111** |
+    | Construction: core cited | 21/48 | 22/48 | 25/48 |
+    | Broader cases: core cited | 22/51 | 19/51 | 29/51 |
+    | Alaska: core cited | — | 7/12 | 12/12 |
+    | Flagged "may not support" | ~60% | 41% (123/302) | **24% (238/992)** |
+    | Off-topic cited | 1 + 0 | 2 | 6 |
+    | Cited on-target | — | 59% | 51% |
+
+  - **Reading:** the biggest jump so far. gpt-oss cites much more of
+    the core law (59% of it, against 43%), writes longer briefs with
+    about 3 times as many citations, and its checker doubts a quarter of
+    them. The extra citations are mostly off the expected list, but
+    only 6 are off-topic, so most are probably related law the lists
+    don't include. Worth a lawyer's look.
+  - **Bug found: gpt-oss's special hyphens break citation reading.**
+    gpt-oss writes citations as `§` + narrow no-break space (U+202F) +
+    `70A` + non-breaking hyphen (U+2011) + `2` … . `citations.py` stops at
+    the U+2011, reads `§ 70A`, and marks it `NOT FOUND` in the draft.
+    That's most of the 114 ❌ (`Utah Code § 15`, `§ 70A`, `§ 78B`), all
+    in Utah's hyphenated section numbers. The real citations are
+    correct. Core cited is probably undercounted for the same reason.
+    **Fixed 2026-10-31** (not committed or deployed):
+    `find_citation_refs` reads U+2010/2011/2012/2212 (and their
+    full-width forms) as plain hyphens, one character for one, so
+    offsets don't move and the draft keeps what the model wrote. En
+    dashes are left alone (ranges). There are 3 new tests, and 306 pass.
+  - **Utah re-run with the fix** (6 runs,
+    `output/eval/20261031-081458-ollama-cloud-gptoss120b-all-utah-hyphen-fix`,
+    1.10M tokens in, 269k out, about 10% of the free usage):
+
+    | Utah, gpt-oss for everything | Before the fix | After |
+    |---|---|---|
+    | ❌ citations not found | 99 | **5** |
+    | Core cited | 16/33 | **22/33** |
+    | Off-topic cited | 2 | 0 |
+    | Flagged "may not support" | 29% | 29% |
+
+    Core cited across all 7 cases is likely around 72/111 with the fix.
+    The 5 left are a different problem: prose read as the code name, as
+    in `Section § 70A-2-721` or `Misapplication of § 70A‑2‑714` (also
+    `Violation of Business and Professions Code § 7028` in California).
+    **Fixed 2026-10-31** (not committed or deployed):
+    - `citations.py`: words before a `§` that name no code and no
+      state (no "Code", "Stat.", "Const.", "C.F.R.", "U.S.C.", "art.")
+      are dropped, and the citation is read as a bare `§`.
+    - `law_index.resolve`: if a code name matches nothing, leading
+      words are dropped until it does, keeping at least two words.
+    - 2 new tests and 3 new resolve cases, 308 pass. All 5 real misses
+      now resolve to the right section, in force.
 - **Decided 2026-10-15: no Ollama Cloud stopgap.** Wait for Bedrock
   rather than split testing across two providers, which could cause
   problems later. The lookup below is kept for reference only. Its one

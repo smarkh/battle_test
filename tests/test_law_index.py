@@ -139,6 +139,10 @@ class LawIndexTest(unittest.TestCase):
             ("Utah Code § 1-1-1", "ut", ["Utah Code § 1-1-1"]),  # found, though repealed
             ("Utah Code § 9-9-9", "ut", []),
             ("Cal. Civ. Proc. Code § 437c", "ut", []),  # other state's law
+            # Prose before the code name or the "§"
+            ("Violation of Code of Civil Procedure section 437c", "ca", ["Cal. CCP § 437c"]),
+            ("Section § 78B-2-309", "ut", ["Utah Code § 78B-2-309"]),
+            ("Misapplication of § 78B‑2‑309", "ut", ["Utah Code § 78B-2-309"]),
         ]:
             with self.subTest(text=text, state=state):
                 (ref,) = find_citation_refs(text)

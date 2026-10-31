@@ -1,4 +1,3 @@
-
 # Plan — Legal Adversarial Argument System (battle_test)
 
 Source: `../smark_iq/plans/ideation.md`, "Future Separate Projects" §B, revised

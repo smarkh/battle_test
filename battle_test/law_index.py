@@ -157,8 +157,16 @@ class LawIndex:
         jurisdiction = name.jurisdiction or state
         if jurisdiction not in (state, "federal"):
             return []
-        prefixes = [p for j, p, tokens in self._catalogue()
-                    if j == jurisdiction and tokens_match(name.tokens, tokens)]
+        prefixes = []
+        # Prose may come before the code name ("Violation of Business and
+        # Professions Code"): if the whole name matches no code, drop leading
+        # words until it does. At least two words must remain, so one stray
+        # word can't match an unrelated code by abbreviation.
+        for i in range(max(1, len(name.tokens) - 1)):
+            prefixes = [p for j, p, tokens in self._catalogue()
+                        if j == jurisdiction and tokens_match(name.tokens[i:], tokens)]
+            if prefixes:
+                break
         if prefixes:
             marks = ", ".join("?" * len(prefixes))
             rows = self._db.execute(

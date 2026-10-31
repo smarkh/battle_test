@@ -102,6 +102,11 @@ _JURISDICTION_START = re.compile(
     r"\b(?:Utah|Ut\.|U\.\s?C\.\s?A|Alaska|Cal(?:\.|ifornia)|Tex(?:\.|as)|Fed(?:\.|eral)|\d{1,2}\s+U\.?\s?S\.?\s?C)"
 )
 
+# A word that makes the text before "§" a code name ("Civil Code",
+# "Const. art. I,", "40 C.F.R."). Without one, and without a state, the text
+# is prose ("Section § 12", "Misapplication of § 12") and is dropped.
+_CODE_WORD = re.compile(r"\b(?:Code|Stat|Const|Constitution|C\.\s?F\.\s?R|U\.\s?S\.\s?C|art)\b\.?")
+
 
 def normalize_section(section: str) -> str:
     """'78B-2-309(1)(b).' -> '78b-2-309'; '56(a)' -> '56'."""
@@ -138,9 +143,20 @@ def _mask_placeholders(text: str) -> str:
     return PLACEHOLDER.sub(lambda m: re.sub(r"[^\n]", " ", m.group()), text)
 
 
+# Typographic hyphens some models write inside section numbers, e.g.
+# gpt-oss's "§ 70A‑2‑607" with non-breaking hyphens (U+2011). Read as plain
+# hyphens, one character for one, so offsets don't move. En dashes are left
+# alone: "§§ 12–15" is a range, not one section.
+_HYPHENS = str.maketrans({c: "-" for c in "‐‑‒−﹣－"})
+
+
 def find_citation_refs(text: str) -> list[CitationRef]:
-    """Every statute/rule/constitution citation the checker can parse."""
-    masked = _mask_placeholders(text)
+    """Every statute/rule/constitution citation the checker can parse.
+
+    Each ref's `text` is the citation as written, while `section` uses plain
+    hyphens, so it matches the law index.
+    """
+    masked = _mask_placeholders(text).translate(_HYPHENS)
     found: list[CitationRef] = []
     for i, (pattern, bare_ok) in enumerate(_PATTERNS):
         for m in pattern.finditer(masked):
@@ -150,6 +166,10 @@ def find_citation_refs(text: str) -> list[CitationRef]:
             lead = list(_JURISDICTION_START.finditer(prefix))
             if lead and m.start("prefix") == start:
                 start += lead[-1].start()
+            elif i == 0 and prefix and not _CODE_WORD.search(prefix):
+                # Prose before a bare "§": read it as a bare "§".
+                start = masked.index("§", m.end("prefix"))
+                prefix = ""
             # Sentence punctuation after the number isn't part of the citation.
             cited = text[start:m.end()].rstrip(".,;:")
             found.append(CitationRef(

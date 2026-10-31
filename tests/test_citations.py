@@ -41,6 +41,25 @@ class FindCitationRefsTest(unittest.TestCase):
         self.assertEqual(self.refs("AS 09.10.053 and 09.10.070(a)"),
                          [("AS 09.10.053", "09.10.053"), ("AS 09.10.070(a)", "09.10.070")])
 
+    def test_typographic_hyphens_and_spaces(self):
+        # gpt-oss writes "§" + narrow no-break space + non-breaking hyphens.
+        text = "Utah Code § 70A‑2‑607(3)(a) and § 78B‑2‑309."
+        self.assertEqual(
+            self.refs(text),
+            [("Utah Code § 70A‑2‑607(3)(a)", "70a-2-607"),
+             ("§ 78B‑2‑309", "78b-2-309")],
+        )
+
+    def test_typographic_hyphens_in_lists(self):
+        self.assertEqual(
+            self.refs("Utah Code § 70A‑2‑714, 70A‑2‑715"),
+            [("Utah Code § 70A‑2‑714", "70a-2-714"),
+             ("Utah Code § 70A‑2‑715", "70a-2-715")],
+        )
+
+    def test_en_dash_range_is_not_one_section(self):
+        self.assertEqual(self.refs("§§ 12–15"), [("§§ 12", "12")])
+
     def test_as_needs_alaska_section_shape(self):
         for text in ["AS 12 days passed", "AS IT TURNS OUT 09.10.053", "as 09.10.053"]:
             with self.subTest(text=text):
@@ -50,6 +69,21 @@ class FindCitationRefsTest(unittest.TestCase):
         self.assertEqual(self.refs("See U.C.A. § 1-2-3"), [("U.C.A. § 1-2-3", "1-2-3")])
         self.assertEqual(self.refs("The Defendant Violated Utah Code § 1-2-3"),
                          [("Utah Code § 1-2-3", "1-2-3")])
+
+    def test_prose_before_bare_section_sign_is_dropped(self):
+        self.assertEqual(self.refs("Section § 70A-2-721"), [("§ 70A-2-721", "70a-2-721")])
+        self.assertEqual(self.refs("Misapplication of § 70A-2-714"), [("§ 70A-2-714", "70a-2-714")])
+        (ref,) = find_citation_refs("Misapplication of § 70A-2-714")
+        self.assertEqual(ref.prefix, "")
+
+    def test_code_names_before_section_sign_are_kept(self):
+        for text, prefix in [("Civil Code § 1542", "Civil Code"),
+                             ("Business and Professions Code § 7028", "Business and Professions Code"),
+                             ("Alaska Const. art. I, § 7", "Alaska Const. art. I,"),
+                             ("40 C.F.R. § 1.1", "C.F.R.")]:  # title number isn't kept (as before)
+            with self.subTest(text=text):
+                (ref,) = find_citation_refs(text)
+                self.assertEqual(ref.prefix, prefix)
 
     def test_section_word_needs_a_code_name(self):
         self.assertEqual(self.refs("Civil Code section 1542"), [("Civil Code section 1542", "1542")])
