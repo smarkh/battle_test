@@ -51,7 +51,10 @@ Console menus move, so treat the click paths as approximate.
    2. As root, put MFA on the root user (account menu → Security
       credentials → Assign MFA device).
    3. Enable **IAM Identity Center**, with the console region set to
-      `us-west-2`.
+      `us-west-2`. Keep the default **AWS-owned key** for encryption and
+      don't add a second Region. A customer-managed key costs $1/month
+      for each Region (see the KMS note of 2026-11-01 in
+      `plans/aws-bedrock-plan.md`).
    4. In Identity Center, add a user for yourself, create a permission
       set from the predefined `AdministratorAccess`, and assign both to
       the account (AWS accounts → Assign users).
@@ -179,6 +182,158 @@ ssh -N -L 11435:127.0.0.1:11434 smark@smark-iq        # in its own window, left 
 - The checker reads the case facts and passages of the drafts, so this
   sends case material to AWS too. Fictional cases only.
 
+### Long evaluations on the server (set up 2026-11-05, first run 2026-11-18: works)
+
+Run long Bedrock evaluations with semantic search on the server. The
+laptop ran out of memory on 2026-11-05 doing it locally: the law index,
+the vectors and the embedding model all load on the machine running the
+evaluation. The models are still on Bedrock and billed the same. The server
+does only the search, and the laptop can sleep once the run has started.
+
+`config.server-bedrock.toml` is the server's config with
+`provider = "bedrock"` and gpt-oss 120B by default.
+`scripts\server-bedrock-eval.ps1` copies that config and short-lived AWS
+credentials from the laptop's sign-in to `C:\Users\smark\battle-eval` on
+the server. It then starts the run there in the background as the
+container `battle-eval`. The container reads the credentials from that
+folder, mounted read-only, so they're never on a command line or in
+`docker inspect`. The server has no AWS CLI or sign-in of its own.
+
+**(laptop)**
+```powershell
+aws sso login --profile battle-test-eval   # the Bedrock-only sign-in, set up below
+.\scripts\server-bedrock-eval.ps1 -Label bedrock-gptoss120b-all-semantic -DryRun   # checks only
+.\scripts\server-bedrock-eval.ps1 -Label bedrock-gptoss120b-all-semantic
+```
+`-Model`, `-Checker`, `-Repeats` (default 3) and `-Case NAME` (one or more)
+work as the `evaluate` options do.
+
+- **The run uses the server's built image,** so deploy first if the code
+  changed (docs/running-on-server.md, "Update the code"). The config is
+  copied fresh each time, so config changes don't need a deploy.
+- **The credentials must last the whole run.** They're temporary and
+  can't renew inside the container. The script stops if they have less
+  than 3 hours left (`-MinHours`). If it stops even straight after
+  `aws sso login`, the permission set's session duration is too short.
+  Use the Bedrock-only permission set below, which lasts 4 hours. Don't
+  just raise `AdministratorAccess` to 4 hours: those credentials could do
+  anything in the account for that long, from the server.
+- **Signed in again but still short of time?** `aws sso login` renews the
+  sign-in, but the CLI keeps reusing the role credentials it fetched
+  earlier (in `%USERPROFILE%\.aws\cli\cache\`) until they expire. Delete
+  them and the next call fetches fresh ones, with the full 4 hours:
+  `Remove-Item $HOME\.aws\cli\cache\*.json` (found 2026-11-18).
+- Follow it, as the Ollama Cloud runs (docs/running-on-server.md):
+  `ssh smark@smark-iq "docker logs --tail 5 battle-eval"`.
+- **When it's finished:** copy the results to the laptop and delete them
+  from the server (docs/running-on-server.md, "Copy the results to the
+  laptop"). Then remove the container and the credentials:
+  ```powershell
+  ssh smark@smark-iq "docker rm battle-eval; Remove-Item -Recurse -Force C:\Users\smark\battle-eval"
+  ```
+- **To stop it early:** `ssh smark@smark-iq "docker stop battle-eval"`,
+  then clean up as above.
+- Fictional cases only. Each case's facts and drafts go to AWS.
+
+#### The Bedrock-only permission set (one-time setup)
+
+Server runs should use a sign-in that can only call models. If the
+credentials copied to the server leaked, they could run up a Bedrock bill
+for a few hours, but they couldn't read, change or delete anything else in
+the account. `AdministratorAccess` stays for day-to-day work on the laptop.
+
+Identity Center is free, and so are the steps and checks below. Console
+menus move, so treat the click paths as approximate.
+
+1. **Sign in** through the portal
+   (https://d-9267cc86b3.awsapps.com/start) as `smarkh`. Open the
+   console for account 548108386131 with `AdministratorAccess`. Set the
+   console region to **US West (Oregon) `us-west-2`**, where Identity
+   Center is.
+2. **Create the permission set.** IAM Identity Center → Permission sets
+   → **Create permission set**.
+   1. Choose **Custom permission set** → Next.
+   2. Leave AWS managed and customer managed policies empty. Expand
+      **Inline policy** and paste this in place of what's there:
+      ```json
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "CallModelsOnly",
+            "Effect": "Allow",
+            "Action": [
+              "bedrock:InvokeModel",
+              "bedrock:InvokeModelWithResponseStream"
+            ],
+            "Resource": [
+              "arn:aws:bedrock:us-west-2::foundation-model/*",
+              "arn:aws:bedrock:us-west-2:548108386131:inference-profile/us.*",
+              "arn:aws:bedrock:us-*::foundation-model/*"
+            ]
+          }
+        ]
+      }
+      ```
+      - battle_test calls `converse_stream`, which needs both actions.
+      - The first resource covers models called directly in Oregon,
+        such as gpt-oss 120B and Qwen.
+      - The other two cover `us.` inference profiles, such as Llama 3.3
+        70B and Claude Sonnet 5. A call through one needs the profile
+        and the model in whichever US region it lands in.
+      - Nothing outside the US, and nothing but model calls.
+   3. Next. **Name:** `BedrockInvokeOnly`. **Description:** "Model calls
+      only, for battle_test evaluations on the server". **Session
+      duration: 4 hours.** Leave the relay state empty → Next →
+      **Create**.
+3. **Assign it.** IAM Identity Center → AWS accounts → tick
+   548108386131 → **Assign users or groups** → Users → tick `smarkh` →
+   Next → tick `BedrockInvokeOnly` → Next → **Submit**. Wait until it
+   says the permission set is provisioned. That usually takes under a
+   minute.
+4. **Add a laptop profile.** Add this to `C:\Users\smark\.aws\config`.
+   It holds no secrets. It shares the existing `battle-test` sign-in
+   session, so one `aws sso login` covers both profiles.
+   ```ini
+   [profile battle-test-eval]
+   sso_session = battle-test
+   sso_account_id = 548108386131
+   sso_role_name = BedrockInvokeOnly
+   region = us-west-2
+   output = json
+   ```
+5. **Check it.** All three commands are free:
+   ```powershell
+   aws sso login --profile battle-test-eval
+   aws sts get-caller-identity --profile battle-test-eval   # the ARN should end in AWSReservedSSO_BedrockInvokeOnly_.../smarkh
+   aws s3 ls --profile battle-test-eval                     # should fail with AccessDenied
+   ```
+   Then a dry run, which should report about 4 hours left:
+   ```powershell
+   .\scripts\server-bedrock-eval.ps1 -Profile battle-test-eval -Label test -DryRun
+   ```
+6. **The first paid check (about $0.05):** one run of one case, to prove
+   the server end works before the full run:
+   ```powershell
+   .\scripts\server-bedrock-eval.ps1 -Profile battle-test-eval -Label server-bedrock-check -Case alaska_boiler -Repeats 1
+   ```
+   Clean up afterwards as above. The script uses this profile by
+   default (`-Profile` picks another).
+
+**Limits of this permission set:**
+- **It can't switch on a new model.** A model sold through AWS
+  Marketplace, such as Claude, is subscribed on its first call. That call
+  needs `aws-marketplace` permissions that this set doesn't have. Make a
+  new model's first call with `battle-test` (`AdministratorAccess`) from
+  the laptop. After that, this set can call it.
+- **It doesn't cap spending.** Budget alerts still apply but lag by hours.
+  If the credentials might have leaked, don't wait for them to expire:
+  delete the server's `battle-eval` folder. Then in the IAM console (not
+  Identity Center) → Roles, open `AWSReservedSSO_BedrockInvokeOnly_...`
+  → **Revoke sessions** tab → **Revoke active sessions**. That stops
+  credentials already handed out, which removing the assignment alone
+  doesn't do.
+
 ### The web UI
 
 The web UI can run on Bedrock on the laptop. It keeps its own accounts and
@@ -268,6 +423,7 @@ output_per_million = 1.20
 |---|---|
 | `bedrock.models.NAME.id is empty` | Fill in that model's ID in `config.bedrock.toml` (setup step 5). No call was made. |
 | `No usable AWS credentials`, or the sign-in has expired | Run `aws sso login`. Set `profile` under `[bedrock]` if you use a named profile. |
+| `aws sso login` fails with a KMS or encryption error | Identity Center's KMS key was scheduled for deletion on 2026-11-01. Sign in as root and cancel the deletion (see the KMS note of 2026-11-01 in `plans/aws-bedrock-plan.md`). |
 | `This AWS account or role isn't allowed to use that model` | On a model's first call, wait a couple of minutes and run again. For Claude, submit the use-case form (setup step 3). |
 | `Access to Bedrock models is not allowed for this account` (Error 002) | AWS is blocking Bedrock for the whole account, on every model. Seen on the first real call, 2026-10-06. Open an AWS Support case (Account and billing, free) asking for Bedrock access. Nothing in the config fixes it. |
 | `Bedrock doesn't know that model ID in this region` | Check the model's `id` and `bedrock.region`. Some models need an inference profile ID, not the plain model ID. |

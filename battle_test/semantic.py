@@ -29,7 +29,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Callable
 
-from battle_test.law_index import LawIndex, LawSection
+from battle_test.law_index import KEYWORD_MODES, LawIndex, LawSection, PassagesMissing
 from battle_test.models import ModelError
 
 # How much of each section is embedded, after its citation, path and title.
@@ -73,10 +73,12 @@ class SearchConfig:
     semantic: bool
     embedding_model: str
     embedding_url: str
+    keyword: str = "sections"  # law_index.KEYWORD_MODES
 
 
 def load_search_config(path: Path) -> SearchConfig:
-    """The [search] section. Left out, semantic search is off."""
+    """The [search] section. Left out, semantic search is off and keyword
+    search ranks whole sections."""
     import tomllib
     with open(path, "rb") as f:
         raw = tomllib.load(f)
@@ -86,7 +88,10 @@ def load_search_config(path: Path) -> SearchConfig:
     if semantic and not model:
         raise ValueError(f"{path} has search.semantic = true but no search.embedding_model.")
     url = search.get("embedding_url") or raw.get("ollama", {}).get("url") or "http://localhost:11434"
-    return SearchConfig(semantic, model, url.rstrip("/"))
+    keyword = search.get("keyword", "sections")
+    if keyword not in KEYWORD_MODES:
+        raise ValueError(f"{path}: search.keyword must be one of {', '.join(KEYWORD_MODES)}, not {keyword!r}")
+    return SearchConfig(semantic, model, url.rstrip("/"), keyword)
 
 
 def vectors_path(db_path: Path) -> Path:
@@ -390,15 +395,26 @@ class SemanticLaw:
         return [self._law.by_ids(ids) for ids in nearest]
 
 
-def attach(law: LawIndex, config_path: Path, db_path: Path, *, fallback: bool = False):
-    """`law` with semantic search added, if the config turns it on. Otherwise
-    `law` itself, and the pipeline searches by keyword alone.
+def attach(law: LawIndex, config_path: Path, db_path: Path, *, fallback: bool = False,
+           keyword: str | None = None):
+    """`law` set up for search as the config says: keyword search by passage
+    or whole section (`keyword` overrides the config), and semantic search
+    added if the config turns it on. Otherwise `law` itself, and the pipeline
+    searches by keyword alone.
 
-    Vectors that are missing or don't match the index are an error, unless
-    `fallback`: then the case is searched by keyword, with a warning. A
-    user's case shouldn't fail because the vectors are behind the law, but
-    an evaluation must not quietly measure the wrong setup."""
+    Passages or vectors that are missing or don't match the index are an
+    error, unless `fallback`: then the case is searched by whole section or
+    keyword alone, with a warning. A user's case shouldn't fail because the
+    index is behind the config, but an evaluation must not quietly measure
+    the wrong setup."""
     cfg = load_search_config(config_path)
+    try:
+        law.use_keyword(keyword or cfg.keyword)
+    except PassagesMissing as e:
+        if not fallback:
+            raise
+        print(f"warning: keyword search by whole section. {e}", file=sys.stderr)
+        law.use_keyword("sections")
     if not cfg.semantic:
         return law
     try:

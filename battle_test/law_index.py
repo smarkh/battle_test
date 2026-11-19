@@ -39,6 +39,18 @@ _CA_CODE_NAMES = {
     "WIC": "Welfare and Institutions",
 }
 
+# Keyword search modes: rank each section by its best passage (stage 2 of the
+# passage work, plans/plan.md) or as one whole document, as before.
+KEYWORD_MODES = ("passages", "sections")
+# bm25 weights for citation, heading (title/chapter names), section title,
+# path and text. Section titles matter most, then headings.
+_BM25_WEIGHTS = "2.0, 3.0, 5.0, 1.0, 1.0"
+
+
+class PassagesMissing(Exception):
+    """Passage search was asked for, but the index has no passage table."""
+
+
 _COLUMNS = (
     "citation, jurisdiction, document_type, section_title, display_path, "
     "act_status, text, source_url, last_amended_year"
@@ -81,13 +93,29 @@ def fts_query(text: str) -> str:
 
 
 class LawIndex:
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: Path, keyword: str = "sections"):
         if not db_path.exists():
             raise FileNotFoundError(
                 f"No law index at {db_path}. Build it with: python -m battle_test.corpus build"
             )
         self._db = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         self._code_names: list[tuple[str, str, tuple[str, ...]]] | None = None
+        self.keyword = "sections"
+        self.use_keyword(keyword)
+
+    @property
+    def has_passages(self) -> bool:
+        return self._db.execute(
+            "SELECT 1 FROM sqlite_master WHERE name = 'passages_fts'").fetchone() is not None
+
+    def use_keyword(self, mode: str) -> None:
+        """Rank keyword search by best passage ("passages") or whole section."""
+        if mode not in KEYWORD_MODES:
+            raise ValueError(f"keyword search must be one of {', '.join(KEYWORD_MODES)}, not {mode!r}")
+        if mode == "passages" and not self.has_passages:
+            raise PassagesMissing("The law index has no passages. Add them (no download needed): "
+                                  "python -m battle_test.corpus passages")
+        self.keyword = mode
 
     def close(self) -> None:
         self._db.close()
@@ -108,6 +136,8 @@ class LawIndex:
         query = fts_query(text)
         if not query:
             return []
+        if self.keyword == "passages":
+            return self._search_passages(query, state.lower(), limit, include_inactive)
         status_filter = "" if include_inactive else "AND s.act_status = 'in_force'"
         rows = self._db.execute(
             f"""
@@ -117,18 +147,44 @@ class LawIndex:
             WHERE sections_fts MATCH ?
               AND s.jurisdiction IN (?, 'federal')
               {status_filter}
-            -- Weights: citation, heading (title/chapter names), section
-            -- title, path, text. Section titles matter most, then headings.
             -- bm25 is negative (lower = better), so scaling it up favours
             -- the state: cases are filed in state court, so its own rules
             -- and statutes should outrank similar federal ones.
-            ORDER BY bm25(sections_fts, 2.0, 3.0, 5.0, 1.0, 1.0)
+            ORDER BY bm25(sections_fts, {_BM25_WEIGHTS})
                      * (CASE WHEN s.jurisdiction = ? THEN ? ELSE 1.0 END)
             LIMIT ?
             """,
             (query, state.lower(), state.lower(), STATE_BOOST, limit),
         ).fetchall()
         return [LawSection(*row) for row in rows]
+
+    def _search_passages(self, query: str, state: str, limit: int, include_inactive: bool) -> list[LawSection]:
+        """Sections ranked by their best-matching passage. Whole-section
+        ranking favours short sections (bm25 divides by length), so a long
+        statute with one paragraph on the topic lost to short sections that
+        mention its words once."""
+        status_filter = "" if include_inactive else "AND p.act_status = 'in_force'"
+        # Rank section ids first and fetch only the winners' text: carrying
+        # every match's text through the grouping took over a minute a query.
+        ids = [row[0] for row in self._db.execute(
+            f"""
+            -- MATERIALIZED: bm25() only works in the query that does the
+            -- MATCH, so SQLite mustn't merge it into the grouping below.
+            WITH f AS MATERIALIZED (
+                SELECT rowid AS passage_id, bm25(passages_fts, {_BM25_WEIGHTS}) AS score
+                FROM passages_fts WHERE passages_fts MATCH ?)
+            SELECT p.section_id,
+                   MIN(f.score * (CASE WHEN p.jurisdiction = ? THEN ? ELSE 1.0 END)) AS best
+            FROM f JOIN passages p ON p.id = f.passage_id
+            WHERE p.jurisdiction IN (?, 'federal')
+              {status_filter}
+            GROUP BY p.section_id
+            ORDER BY best, p.section_id
+            LIMIT ?
+            """,
+            (query, state, STATE_BOOST, state, limit),
+        )]
+        return self.by_ids(ids) if ids else []
 
     def by_ids(self, ids: list[int]) -> list[LawSection]:
         """The sections with these row ids, in the order given (for semantic search)."""

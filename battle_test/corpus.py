@@ -3,6 +3,7 @@
     python -m battle_test.corpus build        # download (if needed) + index
     python -m battle_test.corpus info         # snapshot date and row counts
     python -m battle_test.corpus search --state UT "summary judgment"
+    python -m battle_test.corpus passages     # add the passage index to an existing build
     python -m battle_test.corpus embed        # section vectors for semantic search
     python -m battle_test.corpus search --state TX --semantic "time limit to sue on a contract"
     python -m battle_test.corpus ak-headings  # refresh Alaska chapter names (rarely)
@@ -15,12 +16,14 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sqlite3
 import sys
 import urllib.request
 from datetime import datetime
 from pathlib import Path
 
+from battle_test import passages as passage_cuts
 from battle_test.citations import split_corpus_citation
 from battle_test.config import DEFAULT_CONFIG_PATH, CorpusConfig, load_corpus_config
 from battle_test.law_index import LawIndex, citation_key
@@ -58,6 +61,28 @@ CREATE INDEX sections_section_key ON sections (section_key, code_prefix);
 CREATE VIRTUAL TABLE sections_fts USING fts5(
     citation, heading, section_title, display_path, text,
     content='sections', content_rowid='id', tokenize='porter unicode61'
+);
+"""
+
+# Keyword search ranks passages, not whole sections, so a long section is
+# found by its best part (plans/plan.md, "Passages", stage 2). Every section
+# has at least one passage. The word index is contentless: it stores no copy
+# of the text, which stays in `sections`. Its columns match sections_fts, so
+# each passage carries its section's citation, headings and title.
+_PASSAGE_SCHEMA = """
+CREATE TABLE passages (
+    id INTEGER PRIMARY KEY,
+    section_id INTEGER NOT NULL REFERENCES sections (id),
+    ord INTEGER NOT NULL,  -- 0 for the section's first passage
+    -- Copied from the section, so search can filter and boost without
+    -- reading every matching section's row (about 20x faster).
+    jurisdiction TEXT NOT NULL,
+    act_status TEXT NOT NULL
+);
+CREATE INDEX passages_section ON passages (section_id);
+CREATE VIRTUAL TABLE passages_fts USING fts5(
+    citation, heading, section_title, display_path, text,
+    content='', tokenize='porter unicode61'
 );
 """
 
@@ -278,6 +303,7 @@ def build_index(cfg: CorpusConfig, manifest: dict, files: list[Path],
         print(f"  indexed   {path.name}: {added:,} sections", flush=True)
 
     db.execute("INSERT INTO sections_fts (sections_fts) VALUES ('rebuild')")
+    add_passages(db)
     meta = {
         "snapshot": cfg.snapshot,
         "snapshot_date": manifest["snapshot_date"],
@@ -294,6 +320,54 @@ def build_index(cfg: CorpusConfig, manifest: dict, files: list[Path],
     if skipped_duplicates:
         print(f"  (skipped {skipped_duplicates:,} rows with no citation/text or a duplicate id)")
     return counts
+
+
+def add_passages(db: sqlite3.Connection) -> int:
+    """Cut every section into passages and index their words. Returns how
+    many passages. Replaces any passages already there."""
+    db.executescript("DROP TABLE IF EXISTS passages_fts; DROP TABLE IF EXISTS passages;")
+    db.executescript(_PASSAGE_SCHEMA)
+    count = 0
+    rows = db.execute("SELECT id, citation, heading, section_title, display_path, text, jurisdiction, "
+                      "act_status FROM sections ORDER BY id")
+    while batch := rows.fetchmany(5000):
+        cuts, words = [], []
+        for section_id, citation, heading, title, path, text, jurisdiction, status in batch:
+            for ord_, passage in enumerate(passage_cuts.split(text) or [""]):
+                count += 1
+                cuts.append((count, section_id, ord_, jurisdiction, status))
+                words.append((count, citation, heading, title, path, passage))
+        # A second cursor, so the outer SELECT keeps its place.
+        db.cursor().executemany("INSERT INTO passages (id, section_id, ord, jurisdiction, act_status) "
+                                "VALUES (?, ?, ?, ?, ?)", cuts)
+        db.cursor().executemany(
+            "INSERT INTO passages_fts (rowid, citation, heading, section_title, display_path, text) "
+            "VALUES (?, ?, ?, ?, ?, ?)", words)
+    db.execute("INSERT OR REPLACE INTO meta VALUES ('passages', ?)", (passage_cuts.PASSAGES_VERSION,))
+    return count
+
+
+def _cmd_passages(cfg: CorpusConfig) -> None:
+    """Add the passage index to an index built before stage 2, without a
+    download or rebuild. Works on a copy and swaps it in when finished, so
+    the index in use is never half-changed. built_at is kept, so the section
+    vectors still match."""
+    if not cfg.db_path.exists():
+        raise FileNotFoundError(f"No law index at {cfg.db_path}. Build it with: python -m battle_test.corpus build")
+    tmp = cfg.db_path.with_suffix(".passages")
+    print(f"Copying {cfg.db_path} to {tmp} ...", flush=True)
+    shutil.copyfile(cfg.db_path, tmp)
+    started = datetime.now()
+    db = sqlite3.connect(tmp)
+    try:
+        count = add_passages(db)
+        db.commit()
+    finally:
+        db.close()
+    os.replace(tmp, cfg.db_path)
+    minutes = (datetime.now() - started).total_seconds() / 60
+    print(f"Added {count:,} passages to {cfg.db_path} ({cfg.db_path.stat().st_size / 1e6:.0f} MB, "
+          f"{minutes:.1f} min)")
 
 
 def _cmd_build(cfg: CorpusConfig) -> None:
@@ -344,8 +418,9 @@ def _cmd_embed(cfg: CorpusConfig, config_path: Path) -> None:
           f"{meta['reused']:,} kept from the last build")
 
 
-def _cmd_search(cfg: CorpusConfig, state: str, query: str, limit: int, config_path: Path | None = None) -> None:
-    with LawIndex(cfg.db_path) as index:
+def _cmd_search(cfg: CorpusConfig, state: str, query: str, limit: int, config_path: Path | None = None,
+                keyword: str = "passages") -> None:
+    with LawIndex(cfg.db_path, keyword=keyword) as index:
         if config_path:  # --semantic
             from battle_test import semantic
             search = semantic.load_search_config(config_path)
@@ -374,7 +449,10 @@ def main(argv: list[str] | None = None) -> int:
     search.add_argument("--limit", type=int, default=5)
     search.add_argument("--semantic", action="store_true",
                         help="Search by meaning (needs `embed` to have been run), not by keyword.")
+    search.add_argument("--keyword", choices=("passages", "sections"), default="passages",
+                        help="Rank by best passage (default) or by whole section, as before stage 2.")
     search.add_argument("query")
+    sub.add_parser("passages", help="Add the passage index to an index built without it (no download).")
     sub.add_parser("embed", help="Build the section vectors for semantic search (slow; resumable).")
     sub.add_parser("refresh", help="Check for a new law snapshot and, if there is one, build and check "
                                    "it beside the live law, for an admin to approve (weekly).")
@@ -395,13 +473,16 @@ def main(argv: list[str] | None = None) -> int:
             _cmd_build(cfg)
         elif args.command == "info":
             _cmd_info(cfg)
+        elif args.command == "passages":
+            _cmd_passages(cfg)
         elif args.command == "embed":
             _cmd_embed(cfg, args.config)
         elif args.command in ("refresh", "promote", "rollback"):
             from battle_test import refresh
             print(getattr(refresh, args.command)(cfg, args.config))
         else:
-            _cmd_search(cfg, args.state, args.query, args.limit, args.config if args.semantic else None)
+            _cmd_search(cfg, args.state, args.query, args.limit, args.config if args.semantic else None,
+                        args.keyword)
     except (FileNotFoundError, ModelError) as e:  # no index built yet, or Ollama isn't reachable
         print(f"error: {e}", file=sys.stderr)
         return 1

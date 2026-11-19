@@ -23,6 +23,8 @@ from battle_test.citations import (
     unwrap_citation_placeholders,
 )
 from battle_test.law_index import LawSection
+from battle_test.passages import blocks as _blocks
+from battle_test.passages import parts as _parts
 
 # How many sections go into a drafting prompt, and how much of each. Sized so
 # the reply (three prior documents + authorities) fits in num_ctx 12288.
@@ -240,7 +242,6 @@ def excerpt(text: str, limit: int = EXCERPT_CHARS, more: str = " …[excerpt]") 
 # 20,000, so a checker shown the first 3,000 said the section doesn't say
 # them (lease evaluation, 2026-10-16). Plan step 3b, "Passages, stage 1".
 OPENING_SHARE = 4  # a quarter of a long excerpt is the section's opening
-BLOCK_CHARS = 600  # long paragraphs are split into pieces about this size
 MIN_PIECE_CHARS = 80  # leftover room smaller than this isn't filled
 GAP = " […] "  # marks text left out between the parts shown
 _EXCERPT_STOPWORDS = {
@@ -249,7 +250,6 @@ _EXCERPT_STOPWORDS = {
     "shall", "such", "that", "the", "their", "this", "to", "under", "was", "which", "who",
     "with",
 }
-_SUBDIVISION = re.compile(r"\s(?=\(\w{1,4}\)\s)")  # before "(a) ", "(12) ", "(iv) "
 # The summary judgment rule is supplied directly, not found by a search, so
 # its excerpt is matched against the standard itself.
 SUMMARY_JUDGMENT_QUERY = ("summary judgment no genuine issue triable issue material fact "
@@ -262,25 +262,6 @@ def _terms(text: str) -> set[str]:
     words = re.findall(r"[a-z]+|\d+", text.lower())
     return {w.rstrip("s")[:6] for w in words
             if (w.isdigit() and len(w) >= 2) or (len(w) >= 3 and w not in _EXCERPT_STOPWORDS)}
-
-
-def _split_long(paragraph: str) -> list[str]:
-    """A paragraph cut into pieces of about BLOCK_CHARS, at subdivisions
-    ("(a)", "(1)") where it has them, else at sentence ends."""
-    if len(paragraph) <= BLOCK_CHARS:
-        return [paragraph]
-    pieces: list[str] = []
-    for part in _parts(paragraph):
-        if pieces and len(pieces[-1]) + 1 + len(part) <= BLOCK_CHARS:
-            pieces[-1] += " " + part
-        else:
-            pieces.append(part)
-    return pieces
-
-
-def _parts(block: str) -> list[str]:
-    parts = _SUBDIVISION.split(block)
-    return parts if len(parts) > 1 else re.split(r"(?<=[.;:])\s+", block)
 
 
 def _trim_around_match(block: str, room: int, weight: dict[str, float]) -> tuple[str, bool]:
@@ -303,11 +284,6 @@ def _trim_around_match(block: str, room: int, weight: dict[str, float]) -> tuple
                 grown = True
         if not grown:
             return " ".join(parts[lo:hi + 1]), lo == 0
-
-
-def _blocks(text: str) -> list[str]:
-    paragraphs = [" ".join(p.split()) for p in text.splitlines() if p.strip()]
-    return [piece for p in paragraphs for piece in _split_long(p)]
 
 
 def relevant_excerpt(text: str, query: str | None, limit: int = EXCERPT_CHARS,

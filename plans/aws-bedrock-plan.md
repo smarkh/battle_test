@@ -504,6 +504,124 @@ on your own hardware.
     asked for, you upload them on the case.
   - **If it's still stuck past mid-November:** revisit the 2026-10-15
     decision not to use a second provider in the meantime.
+  - **AWS replied 2026-10-31, 03:57 MDT (Kyle W.):** the review isn't
+    done and there's no timeframe. He sent an **internal escalation**
+    marked urgent, and says he'll **escalate further if the team hasn't
+    answered within 72 hours**, i.e. by about 2026-11-03, 04:00 MDT. No
+    documents have been asked for yet. He has noted they're ready.
+    **Next:** wait. If nothing has come by Wednesday 2026-11-04, reply
+    on the case and ask whether the further escalation happened.
+  - **Follow-up posted 2026-11-04, 19:32 MST.** Nothing had come from
+    AWS since 2026-10-31. A written note (Web contact) asks whether the
+    further escalation went ahead, for any update or timeframe, and says
+    the documents are still ready. **If there's no reply by Friday
+    2026-11-06:** open a chat and ask directly for a supervisor.
+  - **Block lifted 2026-11-05, 08:31 MST.** Kyle W. replied that the
+    review is complete and the account-level restriction on 548108386131
+    is resolved; no documents needed. Next: retry a Bedrock call and reply
+    on the case to confirm (or send the full error, Region and time if it
+    still fails). The fix covers only 548108386131; the member account
+    399258986934 would need its own case if it's ever used.
+  - **Confirmed working 2026-11-05.** The research-only check on Qwen3
+    32B (`config.bedrock.toml`, us-west-2) completed: 7 calls, 7,662
+    tokens in, 500 out, estimated $0.002. Search found 23/59 expected
+    authorities. Next: confirm on the case, then the planned runs,
+    starting with gpt-oss 120B.
+  - **Confirmation posted on the case 2026-11-05, 10:46 MST**, asking
+    AWS to close it.
+  - **Estimate for gpt-oss 120B for everything on Bedrock (2026-11-05):**
+    the Ollama Cloud run of the same thing (7 cases, 3 repeats, 21 runs)
+    used 3,631,900 tokens in and 853,809 out. At $0.15 / $0.60 per
+    million (AWS's page shows $0.1545 / $0.618 in Sydney, about 3% over
+    the base price) that is about $0.55 + $0.51 = **about $1.06**, or
+    about $0.05 a run. Allow up to $1.50 for differences in how Bedrock
+    counts tokens. The $0.20 above was too low: it assumed the 14B's
+    token counts, and gpt-oss writes much more.
+  - **Result: gpt-oss 120B for everything on Bedrock (2026-11-05).**
+    `evaluate --config config.bedrock.toml --model gpt-oss-120b
+    --checker gpt-oss-120b --repeats 3`, 7 cases, 21 runs, 0 failed.
+    Results in `output/eval/20261105-104924-bedrock-gptoss120b-all`.
+    2,080 calls, 3,346,060 tokens in, 823,865 out, **$0.996 estimated**
+    (inside the $1.06 estimate), about $0.047 a run.
+
+    | | Ollama Cloud (with Utah fix) | Bedrock |
+    |---|---|---|
+    | Search | keyword + semantic | **keyword only** |
+    | Core found by search | ~67/111 | 52/111 |
+    | Core cited, all 7 cases | **72/111** | 64/111 |
+    | Off-topic cited | 4 | **0** |
+    | Flagged "may not support" | 24% | 26% |
+    | ❌ problems | 20 | **7** |
+    | Time per run | ~3 min | ~6–7 min |
+    | Cost | $0 (free usage) | $1.00 |
+
+  - **Reading:** the lower core count is mostly search, not the model.
+    `config.bedrock.toml` has no semantic search, so search found 15
+    fewer core authorities, and the models cited 64 of the 67 they were
+    given. Off-topic citations and ❌ problems both dropped. Bedrock is
+    about twice as slow per run. **Next:** repeat with semantic search
+    on, to compare like for like; expect about $1.
+  - **Semantic repeat on the laptop stopped (2026-11-05).** It ran on a
+    copy of `config.bedrock.toml` with `[search]` from
+    `config.tunnel-bedrock.toml`, which itself can't be used because it
+    drafts on Ollama. Claude Code stopped it after 4 of 21 runs (about
+    $0.21) because the laptop ran low on memory. Partial: Alaska 4/4,
+    3/4, 4/4; California lease 3/5 with 1 off-topic. Set up to run on
+    the server instead: `config.server-bedrock.toml` and
+    `scripts\server-bedrock-eval.ps1` (docs/running-on-bedrock.md,
+    "Long evaluations on the server"). Not run yet.
+  - **Bedrock-only permission set created (2026-11-05).**
+    `BedrockInvokeOnly`: inline policy allowing only
+    `bedrock:InvokeModel` and `InvokeModelWithResponseStream` on US
+    models, with a 4-hour session. It's assigned to `smarkh` on
+    548108386131, with laptop profile `battle-test-eval`. Checked: it
+    signs in as that role, S3 is denied, and the script's dry run shows
+    4.0 hours left. `AdministratorAccess` stays at 1 hour.
+  - **First server run, 2026-11-18 (one-case check).**
+    `.\scripts\server-bedrock-eval.ps1 -Label server-bedrock-check -Case
+    alaska_boiler -Repeats 1`, after the dry run (4.0 hours left). Search
+    was keyword + semantic. Core cited 4/4, 0 off-topic, 6 minutes,
+    **$0.047** (estimate $0.05). Results copied back to
+    `output/eval/20261119-030309-server-bedrock-check`; the container,
+    the credentials folder and the server's copy were removed. The script
+    works past its dry run. **Next:** the full semantic run,
+    `-Label bedrock-gptoss120b-all-semantic`, about $1 and 2¼ hours, with
+    your go-ahead. It needs a fresh sign-in if fewer than 3 hours are left.
+- **KMS key removed from Identity Center (2026-11-01).** October's bill
+  had $1.59 for Key Management Service. Nothing in battle_test uses KMS.
+  - **Cause:** when Identity Center was set up on 2026-10-06, root
+    created a customer-managed, multi-Region KMS key
+    (`mrk-c81deaa218d54c039de6fbe220398d7c`, account 548108386131) to
+    encrypt it. Identity Center was set up in two Regions (`us-west-2`
+    primary, `us-east-1` added), which needs that kind of key. Each copy
+    is billed as a key at $1/month, so it cost about $2/month.
+    `battle-test-bedrock` (399258986934) has no keys.
+  - **Changes, all by CLI as `smarkh`:**
+    1. `aws sso-admin remove-region --region-name us-east-1` on instance
+       `ssoins-79073fc3d8193f51`. Identity Center now runs only in
+       `us-west-2`.
+    2. `aws sso-admin update-instance --encryption-configuration
+       KeyType=AWS_OWNED_KMS_KEY`. Encryption now reads
+       `AWS_OWNED_KMS_KEY`, `ENABLED`.
+    3. Checked afterwards: both profiles sign in, and the user `smarkh` and
+       the `AdministratorAccess` permission set are still readable.
+    4. `aws kms schedule-key-deletion --pending-window-in-days 7` on both
+       copies. The `us-east-1` copy is deleted on 2026-11-08 (19:05 MST).
+       The `us-west-2` key shows `PendingReplicaDeletion`, and its 7 days
+       start once the copy is gone, so it's deleted around 2026-11-15.
+  - **Cost:** about $0.70 more while the keys wait, then $0 a month.
+  - **Security:** the data is still encrypted, now with a key AWS holds.
+    A customer-managed key mainly helps with compliance rules that say
+    you must hold your own keys. It doesn't cover case data or Bedrock
+    requests.
+  - **If sign-in breaks before 2026-11-15:** sign in as root (that doesn't
+    go through Identity Center) and run `aws kms cancel-key-deletion
+    --key-id mrk-c81deaa218d54c039de6fbe220398d7c` in each Region that
+    still has the key. A cancelled key comes back disabled, so then run
+    `aws kms enable-key` on it too. After the deletion dates, the key is gone for good.
+  - **Next:** after the next login expires, run `aws sso login --profile
+    battle-test` once to confirm sign-in works. Check that November's bill
+    shows only the leftover KMS charge and December's shows none.
 - **Ollama Cloud tried after all (2026-10-30): gpt-oss 120B as the
   checker.** The 2026-10-15 decision was revisited because Bedrock is
   still blocked. gpt-oss 120B is also on Bedrock, so the results carry
@@ -581,7 +699,7 @@ on your own hardware.
     That's most of the 114 ❌ (`Utah Code § 15`, `§ 70A`, `§ 78B`), all
     in Utah's hyphenated section numbers. The real citations are
     correct. Core cited is probably undercounted for the same reason.
-    **Fixed 2026-10-31** (not committed or deployed):
+    **Fixed 2026-10-31** (committed in 363e014; the server image was built after it):
     `find_citation_refs` reads U+2010/2011/2012/2212 (and their
     full-width forms) as plain hyphens, one character for one, so
     offsets don't move and the draft keeps what the model wrote. En
@@ -601,7 +719,7 @@ on your own hardware.
     The 5 left are a different problem: prose read as the code name, as
     in `Section § 70A-2-721` or `Misapplication of § 70A‑2‑714` (also
     `Violation of Business and Professions Code § 7028` in California).
-    **Fixed 2026-10-31** (not committed or deployed):
+    **Fixed 2026-10-31** (committed in 363e014; the server image was built after it):
     - `citations.py`: words before a `§` that name no code and no
       state (no "Code", "Stat.", "Const.", "C.F.R.", "U.S.C.", "art.")
       are dropped, and the citation is read as a bare `§`.
@@ -609,6 +727,44 @@ on your own hardware.
       words are dropped until it does, keeping at least two words.
     - 2 new tests and 3 new resolve cases, 308 pass. All 5 real misses
       now resolve to the right section, in force.
+- **Nemotron 3 Super for everything, on Ollama Cloud (2026-10-31).**
+  `--model nemotron-3-super:cloud --checker nemotron-3-super:cloud
+  --repeats 3`, all 7 cases. It ran in three parts. The laptop ran out of
+  memory twice (other programs), so the last two cases ran on the
+  server, the first evaluation there (see `docs/running-on-server.md`,
+  "Long evaluations on Ollama Cloud models"). Folders:
+  `output/eval/20261031-092120-…-nemotron3super-all` (6 runs),
+  `…-part2` (9 runs) and `…-part3-server` (6 runs).
+  - Parts 1 and 2 were stopped before writing a summary, so they were
+    re-scored from the saved reports. The draft citations were resolved
+    against the law index, counting only unambiguous ones, as the
+    pipeline does. The method gives exactly the real summary numbers
+    for three finished runs (gpt-oss all, the gpt-oss Utah re-run,
+    Nemotron part 3).
+  - **Usage:** about 33% of the monthly free usage, now 83.6% used in
+    total. $0 billed.
+
+    | | gpt-oss 120B (with Utah fix) | Nemotron 3 Super |
+    |---|---|---|
+    | Core cited, all 7 cases | **72/111** | **71/111** (71/105 leaving out the failed run) |
+    | Off-topic cited | 4 | **0** |
+    | Flagged "may not support" | 24% | 29% |
+    | ❌ problems | 20 | 19 |
+    | Citations per run | ~48 | ~38 |
+    | Time per run | ~3 min | ~6–7 min |
+    | Failed runs | 0 | **1 of 21** |
+
+  - **The failed run:** California remodel #3. Nemotron got stuck
+    repeating `)` in the case caption, about 10,000 lines in each
+    document, so the run had no real content. A loop like this would
+    ruin a user's case. A guard against runaway repetition, or a token
+    cap, would be needed before Nemotron is used live.
+  - **Reading:** two different large models (OpenAI's and NVIDIA's)
+    both cite about 65% of the core law, against 43% for the 14B. That
+    supports **model size, not one model**, as the cause of the gain.
+    Between the two, gpt-oss is faster, never failed, and cites more.
+    Nemotron cited nothing off-topic. **gpt-oss 120B is the better
+    first choice** for Bedrock.
 - **Decided 2026-10-15: no Ollama Cloud stopgap.** Wait for Bedrock
   rather than split testing across two providers, which could cause
   problems later. The lookup below is kept for reference only. Its one

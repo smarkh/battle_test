@@ -63,6 +63,7 @@ sold with a hidden flood history (UT). Each has an expected-authority list in
 .venv\Scripts\python -m battle_test.evaluate --label my-change
 .venv\Scripts\python -m battle_test.evaluate --case utah_roofing --rounds 1
 .venv\Scripts\python -m battle_test.evaluate --research-only
+.venv\Scripts\python -m battle_test.evaluate --replay output\eval\<folder> --keyword passages
 .venv\Scripts\python -m battle_test.evaluate --validate
 ```
 
@@ -70,6 +71,7 @@ sold with a hidden flood history (UT). Each has an expected-authority list in
 |---|---|---|
 | Full run | ~2 min a case on the server's 14B | Any change to prompts, search, selection or the model |
 | `--research-only` | ~1 min a case | A fast check of the search step alone |
+| `--replay PATH` | Seconds a run, free | Scoring a search change on queries saved by an earlier run: a full evaluation's folder (both sides' queries, every run) or a `research.md`. No model calls, and the same queries each time, so the only difference is the search. Use `--keyword passages` or `sections` to compare rankings. Semantic search needs the embedding model, so run it with a config that has it |
 | `--validate` | Seconds | Checking the lists against the index, after a new law snapshot |
 
 Useful options:

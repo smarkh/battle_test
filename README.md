@@ -322,6 +322,7 @@ python -m battle_test.evaluate --validate          # check the case files agains
 python -m battle_test.evaluate --label laptop-7b   # run and score all seven cases
 python -m battle_test.evaluate --case texas_foundation --rounds 1
 python -m battle_test.evaluate --research-only     # fast (~1 min/case): score the search step alone
+python -m battle_test.evaluate --replay output/eval/<folder> --keyword passages  # free: same saved queries, another search
 ```
 
 Results go to `output/eval/<timestamp>-<label>/`:

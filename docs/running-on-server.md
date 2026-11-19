@@ -232,6 +232,44 @@ Creating or removing admins is command-line only.
 | Law index details | `docker compose run --rm battle-test python -m battle_test.corpus info` |
 | Is the model on the GPU? | `ollama ps` (expect 100% GPU during a run) |
 
+### Long evaluations on Ollama Cloud models (set up 2026-10-31)
+
+Run long evaluations here rather than on the laptop. The server has the
+memory, and a run doesn't depend on the laptop staying awake. The server's
+Ollama is signed in to ollama.com (device `smark_iq`), so `<name>:cloud`
+models (e.g. `gpt-oss:120b-cloud`, `nemotron-3-super:cloud`) are passed on
+to Ollama Cloud. They use the account's free monthly usage, and no card is
+on file. Fictional evaluation cases only.
+
+- The run uses the **built image**, so deploy first if the code changed
+  (see "Update the code").
+- It reads `config.server.toml` (semantic search on). `--model` and
+  `--checker` choose the models.
+- Cloud models barely touch the GPU, so a run can go alongside the live
+  site. A run on the server's 14B competes with real cases, so do that
+  when the site is quiet.
+
+**(server)** Start it in the background, then follow it:
+```powershell
+docker compose run -d --no-deps --name battle-eval battle-test python -m battle_test.evaluate --model gpt-oss:120b-cloud --checker gpt-oss:120b-cloud --repeats 3 --label <label>
+docker logs --tail 5 battle-eval
+```
+Add `--case NAME` (repeatable) for some cases only. When `docker ps -a`
+shows `battle-eval` as Exited, remove it with `docker rm battle-eval`.
+
+**Copy the results to the laptop, then delete them from the server.** They
+sit in the case-data volume. Take `<folder>` from
+`docker exec battle-test ls /data/cases/output/eval`.
+```powershell
+# (server)
+docker cp battle-test:/data/cases/output/eval/<folder> $HOME\eval-<folder>
+# (laptop)
+scp -r smark@smark-iq:eval-<folder> output\eval\<folder>
+# (server)
+docker exec battle-test rm -rf /data/cases/output/eval/<folder>
+Remove-Item -Recurse -Force $HOME\eval-<folder>
+```
+
 ## Routine maintenance
 
 - **After a reboot.** There's no auto-login. Sign in to Windows through

@@ -38,7 +38,8 @@ needed only to build the law index and to run the web UI.
 | `prompts.py` | Every prompt: the system prompts for each role, and the task prompts for research, selection and each brief. Also the supported states and each state's trial court. | none |
 | `grounding.py` | Research (model queries plus the standard ones), gathering search candidates per query, selection (one call per query), formatting sections for a prompt, and `check_citations()`, which classifies every citation in a draft and, given a judge, records whether each cited section supports the paragraph citing it. `fit_filter()` keeps, before drafting, only the selected sections a judge says apply to the case. | citations, law_index |
 | `citations.py` | Pure text handling: finds citations in a draft, parses them, and normalises code names so "Utah Code Ann." and "U.C.A." match. No database access. | none |
-| `law_index.py` | `LawIndex`: reads `law.sqlite`. `search()` is the keyword search, `lookup()` finds an exact citation, and `resolve()` matches a parsed citation from a draft. | citations |
+| `law_index.py` | `LawIndex`: reads `law.sqlite`. `search()` is the keyword search, ranking whole sections or each section by its best passage (`use_keyword()`), `lookup()` finds an exact citation, and `resolve()` matches a parsed citation from a draft. | citations |
+| `passages.py` | Cuts a section's text into blocks (for `grounding.relevant_excerpt`) and passages of up to 1,500 characters (for the passage index, and later passage vectors). `PASSAGES_VERSION` is stored in the index. | – |
 | `corpus.py` | `python -m battle_test.corpus build / info / search / embed / ak-headings`. Downloads Open US Law, verifies checksums, builds the index. Needs `pyarrow`. While building, corrects Alaska statute statuses (`_act_status`) and adds Alaska title and chapter names from `ak_headings.json`. `embed` builds the vectors for semantic search. `ak-headings` refreshes the Alaska names from akleg.gov. | law_index, citations, semantic |
 | `refresh.py` | Keeping the law up to date: `python -m battle_test.corpus refresh / promote / rollback`. `refresh` checks for a new Open US Law snapshot and builds it, with its vectors, in `data/staging/`, then checks it against the live law (what changed, section counts, the expected-authority lists, and a search check with the same queries against both) and writes a report. `promote` swaps the index and vectors in together after an admin approves, archiving the old ones in `data/archive/`. Every outcome goes to the activity log. | corpus, semantic, evaluate, web.auth |
 | `ak_headings.json` | Alaska's statute title and chapter names, from akleg.gov's table of contents (the dataset leaves them out). Shipped in the image. | none |
@@ -111,7 +112,8 @@ fake model clients and small temporary databases.
 | File | Covers |
 |---|---|
 | `test_citations.py` | Finding and parsing citations in all their written forms |
-| `test_law_index.py` | Search ranking, lookup, resolving citations |
+| `test_law_index.py` | Search ranking (by section and by passage), the passage index and its fallback, lookup, resolving citations |
+| `test_passages.py` | Cutting sections into passages: sizes, order, nothing lost, boundaries on excerpt blocks |
 | `test_grounding.py` | Research, merging keyword and semantic candidates, selection, citation classification and inline marks |
 | `test_semantic.py` | Semantic search against a small index and a stand-in embedding model: finding by meaning, resuming a build, embedding only changed sections, and refusing stale vectors (or falling back to keyword search) |
 | `test_refresh.py` | The law refresh against snapshots published to a temporary folder: up to date, a new snapshot built beside the live law, its report and checks, promote, rollback, a failed download, and a swap that fails part-way |
@@ -130,7 +132,7 @@ fake model clients and small temporary databases.
 | To change… | Look in |
 |---|---|
 | What a model is told to write | `prompts.py` |
-| How law is searched or ranked | `law_index.py` (`search`, `STATE_BOOST`), `grounding.py` (`STANDARD_QUERIES`, `RESULTS_PER_QUERY`), `semantic.py` (`EMBED_CHARS`, `STATE_BOOST`, the model prefixes) |
+| How law is searched or ranked | `law_index.py` (`search`, `STATE_BOOST`, `_BM25_WEIGHTS`), `passages.py` (`PASSAGE_CHARS`; bump `PASSAGES_VERSION` and run `corpus passages`), `grounding.py` (`STANDARD_QUERIES`, `RESULTS_PER_QUERY`), `semantic.py` (`EMBED_CHARS`, `STATE_BOOST`, the model prefixes) |
 | How many sections a model gets, or how much of each | `grounding.py` (`MAX_AUTHORITIES`, `EXCERPT_CHARS`, `SUPPORT_EXCERPT_CHARS`; `relevant_excerpt` picks which part of a long section), `pipeline.py` (`MAX_COMBINED_AUTHORITIES`) |
 | A citation form the checker doesn't recognise | `citations.py` (`_PATTERNS`), with a test in `test_citations.py` |
 | The order of documents, or adding a step | `pipeline.py` |

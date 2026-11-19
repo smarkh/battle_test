@@ -37,6 +37,30 @@ guardrails-style network isolation and data handling).
   submit. A reference the model isn't sure of is left out of the draft.
   The 3b work on finding more authorities is paused, and 3a (the "does
   it say that?" check) moves up. See "Decisions made".
+- **2026-11-18:**
+  - **The server Bedrock script works.** The one-case check (alaska_boiler,
+    gpt-oss 120B, keyword + semantic) cited 4/4 core, 0 off-topic, in 6
+    minutes, for $0.047 (estimate $0.05). Results copied to
+    `output/eval/20261119-030309-server-bedrock-check`, and the server
+    cleaned up. Next: the full semantic run, about $1, with your yes.
+  - **Passages stage 2 built and measured** (not committed or deployed):
+    keyword search by best passage, plus `evaluate --replay` for free
+    search comparisons. On the 21 gpt-oss runs' queries, keyword only:
+    found 75 → 80 of 177, all of it useful authorities; core 52 → 52.
+    The comparison with semantic search on is still to run. See
+    "Passages, decided 2026-10-22", stage 2.
+  - All 2026-11-05 work is still uncommitted, with stage 2 on top.
+- **Where the 2026-11-05 session stopped:**
+  - **Bedrock works** (the AWS hold was lifted that morning). gpt-oss
+    120B for everything cost $0.996 for 21 runs: 64/111 core cited, 0
+    off-topic, with keyword search only.
+  - **A semantic-search repeat** is set up to run on the server, using
+    a Bedrock-only sign-in. It hasn't been run.
+  - **An AWS hosting plan** was written (plans/aws-hosting-plan.md). It
+    isn't decided.
+  - **Both decks were updated.**
+  - Details and next steps are in the restart prompt at the end of this
+    file and in plans/aws-bedrock-plan.md.
 - **Where the 2026-10-16 session stopped:**
   - **Done that day:**
     - **Broader evaluation set** (item 3 below): `texas_invoice`,
@@ -1937,6 +1961,64 @@ Access. Access can't sit in front of a public intake form, so the intake
 endpoint would need to sit outside the Access-protected app, with its own
 protections (item 2 above).
 
+## Before a demo and a beta (checklist, 2026-11-06)
+
+A demo means showing it on fictional cases. A beta means outside users
+with their own accounts. Tick items off here as they're done, with the
+date.
+
+### Before a demo
+
+- [ ] **D1. Which models the demo runs on.** The live site uses the
+  server's 14B, which cites about 43% of core law. gpt-oss 120B on
+  Bedrock cites 58–65%, with 0 off-topic in the 2026-11-05 run. A
+  gpt-oss demo runs from the laptop's Bedrock web UI (fictional cases
+  only), or after the live site is switched to Bedrock.
+  **Decided 2026-11-06:** decide on the numbers from the server's
+  semantic run (B6) first.
+- [ ] **D2. Fill the deck placeholders:** presenter, date and contact;
+  the hosting line; the next step; prices marked as proposed.
+- [ ] **D3. Signed-in checks on the live site:** login, cookie flags,
+  live progress through Cloudflare, and a phone on mobile data. The deck
+  claims nothing about phones until this is done.
+- [ ] **D4. Sample results to show.** Run the demo cases ahead of time,
+  so there are good results to show live or as real screenshots in
+  place of the drawn walk-through slides.
+- [ ] **D5. Home server reliability**, after the 13-hour outage
+  (server-migration-plan.md): Tailscale "Run unattended", Windows Update
+  active hours, and an outside uptime check on `/healthz`.
+  None of the three was done as of 2026-11-06.
+
+### Also before a beta
+
+- [ ] **B1. Cloudflare Access,** covering the whole site including
+  /admin. Required before any outside user signs in.
+- [ ] **B2. The lawyer's sign-off,** from
+  `docs/data-handling-for-lawyer.md`:
+  - case material on AWS (this decides Bedrock or the 14B)
+  - retention against record-keeping
+  - Cloudflare seeing case text in transit
+  - the claims and disclaimers in the decks
+- [ ] **B3. The hosting decision:** home or AWS
+  (`plans/aws-hosting-plan.md`). It changes the data-handling slide and
+  what testers are told.
+- [ ] **B4. The beta terms:**
+  - cases per tester
+  - which case material testers may use (**decided 2026-11-06:
+    fictional only**)
+  - where feedback goes (**decided 2026-11-06: by email**; the address
+    is still to fill)
+  - when setup links arrive
+- [ ] **B5. A lawyer's review of the expected-authority lists.** Quality
+  numbers stay provisional until then.
+- [ ] **B6. If Bedrock: test it on the server.** First the semantic
+  search check that's already set up (5¢, then about $1). **The 5¢
+  check passed 2026-11-18** ($0.047, 4/4 core); the $1 run is next. Then deploy
+  the server's Bedrock setup. That frees the GPU and makes the
+  GPU-sharing check moot.
+
+Not needed for a beta: case law, more states, and the next search stage.
+
 ## Presentation for beta testers and prospective users (drafted, not finished)
 
 **Status: registered 2026-10-12. Two decks drafted 2026-10-14.** They
@@ -1953,7 +2035,7 @@ its Share › Export menu. Both are private until shared from that menu.
 | Deck | Link | Slides |
 |---|---|---|
 | Beta testers | https://claude.ai/artifact/VyakD4yL9DCit4ALmGcfn7 | 15 |
-| Prospective users | https://claude.ai/artifact/PW4nt5xcX1UaXCw54kHh5A | 15 |
+| Prospective users | https://claude.ai/artifact/PW4nt5xcX1UaXCw54kHh5A | 16 |
 
 - **Shared in both:**
   - cover
@@ -1977,6 +2059,20 @@ its Share › Export menu. Both are private until shared from that menu.
   filling in hosting, has to be made in both decks.
 - **The walk-through slides are drawn mock-ups, not screenshots.** Swap
   in real screenshots when there are results worth showing.
+- **Updated 2026-11-05** (beta deck version 14, prospects version 8):
+  - Coverage: four states including Alaska, about 397,000 sections,
+    checked weekly.
+  - Data handling: today the server; Bedrock in Oregon planned once the
+    lawyer approves.
+  - The beta deck's notes give the 14B's limits: 43% of core law cited,
+    against 65% for larger models.
+  - Beta feedback slide: now 6 cards, adding "Features you'd want" and
+    "What it was worth". The second asks for hours saved and what
+    testers would pay, before they see any price.
+  - Prospects: a new slide 15, "What features would make it more useful
+    to you?"
+  - The working copies were in that session's scratch folder. Read a
+    deck back with the Artifact tool before editing it again.
 - **Bracketed placeholders still to fill:**
   - Both decks:
     - hosting, on the data-handling slide
@@ -2366,9 +2462,60 @@ its Share › Export menu. Both are private until shared from that menu.
          sections, with no loss in what gets cited. It doesn't make the
          briefs cite more: that's search (stages 2 and 3) and selection
          (item B). Worth deploying.
-  2. **Stage 2: keyword search on passages.** A passage table in
-     law.sqlite, hits mapped back to their section. No re-embed. Measure
-     with `evaluate --research-only` on all seven cases.
+  2. **Stage 2: keyword search on passages. BUILT AND MEASURED
+     2026-11-18, off (not committed or deployed).** No re-embed.
+     - Decided 2026-11-18: passages of up to 1,500 characters with no
+       overlap (the size semantic search embeds, so stage 3 can embed the
+       same ones); passages *replace* whole-section ranking rather than
+       being merged with it; measured with free replays first.
+     - `battle_test/passages.py`: the stage 1 block splitter, moved out of
+       `grounding.py`, plus `split()`. Passages are whole blocks; a block
+       with no break (a table) is cut at spaces.
+     - `law.sqlite`: a `passages` table (section id, order, state and
+       status copied from the section) and a contentless FTS5 index
+       `passages_fts` with the same columns and weights as
+       `sections_fts`. 743,708 passages from 396,975 sections; the index
+       grew 1,357 → 1,836 MB. `corpus build` (and so the weekly refresh)
+       makes them; `corpus passages` adds them to an existing index in
+       about 1.5 minutes, on a copy that's swapped in, keeping `built_at`
+       so the vectors still match.
+     - `[search] keyword = "passages" | "sections"` (default `sections`),
+       and `evaluate --keyword`. An index without passages: evaluations
+       refuse, a user's case falls back to sections with a warning.
+     - Speed: the first version took 72 s a query, because grouping
+       carried every match's text. Ranking section ids first, then
+       fetching the winners, made it 0.3–1.2 s, slightly faster than by
+       section.
+     - **`evaluate --replay`**: scores search alone on saved queries, no
+       model calls. It reads a `research.md` or a full evaluation's
+       folder (both sides' queries from every run report). Replaying with
+       `--keyword sections` reproduces the original numbers exactly
+       (23/59 for `20261105-104405-run`; 52/111 core for the gpt-oss
+       Bedrock run), so the replay is sound.
+     - **Results, keyword only (laptop, 2026-11-18):**
+
+       | Queries replayed | By section | By passage |
+       |---|---|---|
+       | Qwen3 32B research-only, 7 cases | 23/59 | 24/59 |
+       | gpt-oss 120B Bedrock, 21 runs, both sides | 75/177 | **80/177** |
+       | … of which core | 52/111 | 52/111 |
+       | … of which useful | 23/66 | **28/66** |
+
+       Gained: Cal. BPC § 7159 (3 runs), Cal. CIV § 1717, Tex. B&C
+       § 17.50, Utah Code §§ 78B-5-826 and 13-11-4. Lost: Utah Code
+       §§ 70A-2-608 and 70A-2-725 (one run each), and once Tex. CPRC
+       § 16.004 (core) on the Qwen queries.
+     - **Reading:** a small gain, all in useful authorities; no core
+       gain. The headline miss is already fixed by better queries:
+       gpt-oss's lease queries find Cal. CIV § 1950.5 both ways. The
+       core still missed are mostly short sections (Cal. CCP §§ 85, 395),
+       which passages can't help: that's the chapter-names question.
+     - **Not yet measured: with semantic search,** the live setup. The
+       laptop had 1.9 GB of memory free, and semantic runs have run out
+       of memory here before. Command (your own PowerShell window, after
+       closing other programs):
+       `.venv\Scripts\python -m battle_test.evaluate --config config.tunnel-bedrock.toml --replay output\eval61105-104924-bedrock-gptoss120b-all --keyword sections --label replay-gptoss21-semantic-sections`,
+       then the same with `--keyword passages` and `-passages` in the label.
   3. **Stage 3: semantic search on passages.** Only long sections need
      more than one vector, so the incremental embed covers only those.
      `refresh.py`, `promote` and `rollback` must handle the passage table
@@ -2379,93 +2526,83 @@ its Share › Export menu. Both are private until shared from that menu.
 ## Restart prompt
 
 Paste this into a new Claude Code session, opened in the `battle_test`
-folder, to pick up where the 2026-10-16 session left off:
+folder, to pick up where the 2026-11-05 session left off:
 
 ```
 We're continuing work on battle_test, the legal adversarial argument system.
 Start by reading docs/README.md and the files it points to (how-it-works,
 code-guide, running-locally, running-on-server, running-on-bedrock,
-development). Then read plans/plan.md (especially "Status", build step 5,
-"Decisions made" and "Open questions"), plans/aws-bedrock-plan.md
-(especially the notes under Phase 1 and Phase 2, and "Development and
-testing costs"), and plans/server-migration-plan.md. Then skim the code in
-battle_test/ (including battle_test/web/) and tests/.
+development, data-handling-for-lawyer). Then read plans/plan.md
+(especially "Status", build step 5, "Decisions made" and "Open
+questions"), plans/aws-bedrock-plan.md (especially the dated notes from
+2026-10-23 to 2026-11-05 under Phase 1, and "Development and testing
+costs"), plans/aws-hosting-plan.md and plans/server-migration-plan.md.
+Then skim the code in battle_test/ (including battle_test/web/), scripts/
+and tests/.
 
 THE DIRECTION CHANGED on 2026-10-12: correct references over complete
 ones (plan.md, "Decisions made"). The output is a starting point for a
 lawyer, not a file to submit. A reference the model isn't sure of is left
-out. The 3b work on finding MORE law (semantic search, selection with
-both lists, the research prompt) was PAUSED then. Picked up again on
-2026-10-16: the broader cases showed search, not the checks, is now the
-main gap (item A below).
+out.
 
-Next up (as of 2026-10-16). The fit check is consistent and both checks
-are live (2026-10-15). The evaluation set now has seven cases, three of
-them not construction (2026-10-16). Semantic search is on at
-battle.smarkiq.us, and a weekly law refresh waits for my approval before
-new law goes live (docs/running-on-server.md, "Law updates").
-A. Search misses most core law outside construction. Found 2026-10-16
-   (plan.md, Open questions, "Broader evaluation set"): California
-   statutes have no titles or named headings in the data, keyword ranking
-   penalises long sections, and semantic search embeds only the first
-   1,500 characters. Decide with me between:
-   - passage indexing: split long sections into ~1,500-character passages
-     for keyword and semantic search, map hits to sections, and show the
-     drafting model and checker the matching passage (also fixes the
-     checker judging long sections from their first 3,000 characters);
-   - adding California chapter and article names from leginfo, as Alaska's
-     came from akleg.
-   Plan it with me before building; a re-embed is needed for passages.
-   DECIDED 2026-10-22: passage indexing, in three stages (plan.md, Open
-   questions, "Passages, decided 2026-10-22"). Stage 1, showing the
-   matching part of long sections (grounding.relevant_excerpt), is BUILT
-   and evaluated, NOT deployed. Next: deploy it if I agree, then stage 2
-   (keyword search on passages, no re-embed).
-B. Selection and the fit check drop most of what search finds: with
-   semantic search, core found 21/51 but cited 22/51 (some cited from
-   memory). Look at it after A.
-C. Lawyer review of the seven expected-authority lists.
-D. Finish the presentation decks (item 4 below).
-E. Case law (build step 4, CourtListener). It needs my free API token.
-
-1. Larger models on Bedrock. BLOCKED by AWS (Error 002) until AWS
-   answers the Support case I opened on 2026-10-14. Ask me whether they
-   have. Whether REAL case material may go to AWS is still the lawyer's
-   call, so Bedrock runs fictional cases only.
-   - BUILT 2026-10-14: one run can use two providers.
-     config.tunnel-bedrock.toml drafts with the server's 14B through the
-     tunnel and checks with a Bedrock model (qwen3-235b by default,
-     `--checker NAME` for another). Tested with stand-ins only. First
-     comparison, 3 runs per case: about $0.25 on Qwen3 235B, about $1.00
-     on Claude Sonnet 5 (plans/aws-bedrock-plan.md).
-   - Still blocked on 2026-10-14 after the payment method, with every
-     account setting checked and normal. I OPENED the AWS Support case
-     on 2026-10-14 (Account and billing). Ask me whether AWS has replied.
-     My admin sign-in is the Identity Center portal,
-     https://d-9267cc86b3.awsapps.com/start (account 548108386131).
-   - Order once Bedrock works (revised 2026-10-14): the $0.002
-     research-only check, then on Qwen3 235B BOTH a checker-only run
-     (config.tunnel-bedrock.toml, ~$0.25 for 9 runs) and an all-Bedrock
-     run (config.bedrock.toml --model qwen3-235b, ~$0.70), then Claude
-     Sonnet 5 for everything (~$2.90+). The end state is Bedrock for both
-     drafting and checking. config.bedrock.toml names a checker
-     (qwen3-235b) since 2026-10-14. Give me an estimate before each paid
-     run.
-2. Quality with the local models, through config.tunnel.toml (see
-   "Added 2026-10-12" below): the fit check's two Utah misses were fixed
-   on 2026-10-14, at the cost of a little more wrong law getting
-   through (item A above). It hasn't been run with the 7B drafting.
-3. Live at battle.smarkiq.us as of 2026-10-16 (commit de56c35): both
-   checks (since 2026-10-15), semantic search, and the weekly law refresh
-   (Task Scheduler, Sundays 3 am; approve with `corpus promote`). Check
-   Admin -> Activity log for "law checked" entries each week.
-4. Other open work: Cloudflare Access, and finishing the two
-   presentation decks drafted on 2026-10-14, one for beta testers and
-   one for prospective users (plan.md has a section with their links
-   and the placeholders still to fill).
-   Web UI part 3 is complete: upload with text extraction was built and
-   deployed on 2026-10-14 (plan.md, step 5, "Part 3"). Nobody has tried
-   a signed-in upload on the live site yet.
+Next up (as of 2026-11-06): work through plan.md, "Before a demo and a
+beta (checklist, 2026-11-06)". The items below feed into it.
+A. BEDROCK WORKS since 2026-11-05. AWS lifted the fraud-prevention hold
+   on account 548108386131 (Support case, Kyle W.). The member account
+   399258986934 would need a case of its own. Fictional cases only until
+   the lawyer agrees to case material going to AWS.
+   - Done: gpt-oss 120B for everything on Bedrock, KEYWORD search only
+     (config.bedrock.toml), 21 runs, $0.996. Core cited 64/111, 0
+     off-topic, 7 ❌, 26% flagged, 6–7 min a run. On Ollama Cloud with
+     semantic search, the same model scored 72/111, 4 off-topic, 20 ❌,
+     about 3 min a run. The gap looks like search: 52 core found
+     against about 67.
+   - The semantic repeat on the laptop was stopped by Claude Code after
+     4 of 21 runs, because the laptop ran low on memory (about $0.21
+     spent). Don't run long semantic evaluations on the laptop.
+   - SET UP, NOT RUN: Bedrock evaluations with semantic search ON THE
+     SERVER. Files: config.server-bedrock.toml and
+     scripts\server-bedrock-eval.ps1; how-to in docs/running-on-bedrock.md,
+     "Long evaluations on the server". The script copies the config and
+     short-lived credentials to C:\Users\smark\battle-eval on the server,
+     then starts the container battle-eval there. The credentials come
+     from the profile battle-test-eval: permission set
+     BedrockInvokeOnly, model calls only, 4-hour session. It was created
+     and checked on 2026-11-05. AdministratorAccess sessions last only
+     1 hour, too short for a run.
+   - NEXT: I sign in myself (`aws sso login --profile battle-test-eval`).
+     Then propose the one-case check, about $0.05:
+     `.\scripts\server-bedrock-eval.ps1 -Label server-bedrock-check -Case alaska_boiler -Repeats 1`.
+     If that works, the full semantic run, about $1 and 2¼ hours:
+     `-Label bedrock-gptoss120b-all-semantic`. Each needs my go-ahead.
+     Afterwards, copy the results back and clean up (docker rm
+     battle-eval, delete the battle-eval folder). The script itself is
+     untested past its dry run.
+   - Later: other models (Qwen3 235B, Claude Sonnet 5;
+     plans/aws-bedrock-plan.md). gpt-oss 120B is the first choice so far.
+B. Hosting: plans/aws-hosting-plan.md (written 2026-11-05), NOT DECIDED.
+   It recommends moving the site to EC2 if the lawyer approves case files
+   on AWS. Otherwise stay home, with the models on Bedrock. Either way,
+   make the cheap reliability fixes from the 13-hour outage
+   (server-migration-plan.md): Tailscale "Run unattended", Windows Update
+   active hours, and an outside uptime check. Ask me which I've done.
+C. Search misses core law. Passage indexing was decided on 2026-10-22
+   (plan.md, Open questions, "Passages, decided 2026-10-22"). Stage 1,
+   showing the matching part of long sections, is in commit 4500ce8.
+   Next is stage 2: keyword search on passages, with no re-embed. Plan
+   it with me before building.
+D. Lawyer: docs/data-handling-for-lawyer.md (2026-10-31) is ready for
+   them. It covers case material on AWS, Cloudflare, and retention. Also
+   waiting: a review of the seven expected-authority lists.
+E. The decks were updated 2026-11-05: Alaska, Bedrock, and feedback on
+   features and on what it was worth. The placeholders are still open
+   (plan.md, "Presentation for beta testers and prospective users").
+F. Case law (build step 4, CourtListener). It needs my free API token.
+G. Cloudflare Access is still REQUIRED before any real users or real
+   cases. It should cover /admin.
+H. Identity Center's KMS key: the us-east-1 copy is deleted on
+   2026-11-08 and the primary around 2026-11-15. If `aws sso login`
+   breaks, see the KMS note of 2026-11-01 in plans/aws-bedrock-plan.md.
 
 Where things stand:
 - The dev laptop is NOT a model machine any more (2026-10-14). Its C: drive
@@ -2662,7 +2799,8 @@ Where things stand:
   - config.bedrock.toml has profile = "battle-test" and all five model
     IDs. Llama 3.3 70B and Claude Sonnet 5 are only offered through a
     "us." inference profile, which may process in any US region.
-  - BLOCKED: every call fails with "Error 002: Access to Bedrock models
+  - UNBLOCKED 2026-11-05 (item A above). Until then it was blocked:
+    every call failed with "Error 002: Access to Bedrock models
     is not allowed for this account" (Qwen3 32B, DeepSeek v3.2, Llama 3.3
     70B, from our client and the AWS CLI). The sign-in, the IDs and
     per-model availability all check out. Nothing has been billed.
@@ -2704,12 +2842,19 @@ Where things stand:
     cases, and it should cover /admin), my signed-in checks, and the
     GPU-sharing check, which Bedrock may make moot.
 - Waiting on me, for Bedrock:
-  - AWS's reply to the Support case I opened on 2026-10-14 (Account and
-    billing, Error 002, account 548108386131, us-west-2).
-  - The Anthropic use-case form for Claude Sonnet 5 (its agreement shows
-    as not available).
+  - Signing in (`aws sso login --profile battle-test-eval`) and saying
+    yes to the one-case server check (item A).
   - Checking the Llama 3.3 70B and Claude Sonnet 5 prices by eye on the
     Bedrock pricing page.
+  - Claude Sonnet 5: the Anthropic use-case form was submitted on
+    2026-10-15. Its first call must use battle-test (AdministratorAccess),
+    because BedrockInvokeOnly can't subscribe to a Marketplace model.
+- Uncommitted at the end of 2026-11-05: config.bedrock.toml and
+  config.tunnel-bedrock.toml (the gpt-oss-120b entry),
+  config.server-bedrock.toml, scripts/server-bedrock-eval.ps1,
+  docs/running-on-bedrock.md, docs/running-on-server.md,
+  plans/aws-bedrock-plan.md, plans/aws-hosting-plan.md and
+  plans/plan.md. I commit them myself.
 - Waiting on the lawyer: sending case material to AWS (including that two
   of the models may process in any US region), a review of the
   expected-authority lists, the Texas Property Code § 27.004 question,
@@ -2718,7 +2863,7 @@ Where things stand:
 
 Before doing anything else:
 1. Run `python -m unittest` (use .venv/Scripts/python) and confirm all
-   tests pass (267 as of 2026-10-14).
+   tests pass (308 as of 2026-11-05).
 2. Check that data/law.sqlite exists. If it doesn't, rebuild it with
    `python -m battle_test.corpus build`.
 3. Check `git status` is clean, and that the latest commit is pushed to
@@ -2726,21 +2871,17 @@ Before doing anything else:
    behind what's pushed.
 4. Check the server over SSH (Windows ssh.exe, key loaded in ssh-agent):
    that both stacks are running (docker ps) and battle.smarkiq.us and
-   llm.smarkiq.us answer. Read-only checks only.
-5. Ask me whether AWS has lifted the Bedrock block, and whether I've
-   signed in today (`aws sso login --profile battle-test`, which I run
-   myself). If both, propose the first paid step: the research-only
-   check on the cheapest model, which I approved on 2026-10-06 (about
-   $0.002 expected, $0.06 at most):
-   `python -m battle_test.evaluate --config config.bedrock.toml --model
-   qwen3-32b --research-only --label bedrock-qwen3-32b`.
-   Report the real token counts and cost against the estimates, then
-   propose ONE single-case run (about a cent) and wait for me to confirm
-   before anything bigger. If the block is still there, suggest what can
-   be done at no cost meanwhile (for example the two-provider change, or
-   the fit check's Utah misses). On 2026-10-14 the block was still there
-   after a payment method was added (plans/aws-bedrock-plan.md, Phase
-   1): retry once, then the AWS Support case is mine to open.
+   llm.smarkiq.us answer. Read-only checks only. At the end of
+   2026-11-05 SSH was refused with "Permission denied (publickey)". If
+   it still is, the key probably needs loading again (ssh-add, in
+   docs/running-on-server.md). Ask me to do that.
+5. Ask whether I've signed in today with
+   `aws sso login --profile battle-test-eval`, which I run myself. If
+   so, check it with
+   `.\scripts\server-bedrock-eval.ps1 -Label test -DryRun`, which is
+   free. Then propose the one-case server check from item A, about
+   $0.05, and wait for my yes. Report the real cost against the
+   estimate before proposing the full run.
 
 Working rules for this project:
 - Don't git commit or push. I handle all commits and pushes myself. When
@@ -2764,7 +2905,13 @@ Working rules for this project:
   That includes every Bedrock call. Unit tests must never call AWS.
 - Never set real passwords or put credentials (including AWS keys) in
   files, commands or chat. Interactive steps like creating accounts and
-  `aws sso login` are mine to run.
+  `aws sso login` are mine to run. The one exception is
+  scripts\server-bedrock-eval.ps1: it copies short-lived credentials to
+  the server for a run I've approved, and only from the Bedrock-only
+  profile battle-test-eval, never AdministratorAccess.
+- AWS access settings (IAM, Identity Center, permission sets) are mine
+  to change in the console. Claude can write the steps and check the
+  result read-only.
 - Don't restart or change anything on the server without asking first.
 - On Windows Git Bash, set MSYS_NO_PATHCONV=1 when passing container paths
   like /data/... to docker.

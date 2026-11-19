@@ -132,6 +132,38 @@ class EvaluateTest(unittest.TestCase):
         self.assertLess(md.index("**Total:"), md.index("**Model usage:"))
         self.assertLess(md.index("**Model usage:"), md.index("## t:"))
 
+    def test_saved_queries_read_back_from_a_research_report(self):
+        from battle_test.evaluate import saved_queries
+
+        queries = ["limitation of actions", "summary judgment rule"]
+        md = render_research([(self.case, queries, ["Utah R. Civ. P. 56"])], "test", note="Search: x.")
+        self.assertIn("returned. Search: x.", md)
+        self.assertLess(md.index("**Total:"), md.index("## t:"))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "research.md"
+            path.write_text(md, encoding="utf-8")
+            self.assertEqual(saved_queries(path), {"t": queries})
+            path.write_text("# nothing here\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "no cases"):
+                saved_queries(path)
+
+    def test_saved_queries_read_from_a_full_evaluation_folder(self):
+        from battle_test.evaluate import case_of_run, saved_queries
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "t.md").write_text(
+                "# Case\n\n**Plaintiff research queries:** “breach of contract”; “venue”\n\n"
+                "**Defendant research queries:** “mitigation of damages”; “venue”\n", encoding="utf-8")
+            (folder / "t-2.md").write_text("**Plaintiff research queries:** “summary judgment”\n", encoding="utf-8")
+            (folder / "summary.md").write_text("# Summary\n", encoding="utf-8")
+            self.assertEqual(saved_queries(folder), {
+                "t": ["breach of contract", "venue", "mitigation of damages"],  # both sides, once each
+                "t-2": ["summary judgment"],
+            })
+        self.assertEqual(case_of_run("utah_roofing-2"), "utah_roofing")
+        self.assertEqual(case_of_run("utah_roofing"), "utah_roofing")
+
     def test_any_alternative_counts(self):
         run = self.run_with(Document("Motion", "plaintiff", "", True, checks=(check(LIMITS),)))
         s = score(run, self.case)

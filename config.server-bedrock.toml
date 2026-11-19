@@ -1,0 +1,87 @@
+# battle_test evaluations on the smark_iq server with the models on Amazon
+# Bedrock. Search runs on the server: the law index and vectors in the
+# battle-law volume, and the embedding model on the server's Ollama. Used
+# only for evaluations, started from the laptop with
+# scripts/server-bedrock-eval.ps1 (see docs/running-on-bedrock.md). Not used
+# by the live site.
+#
+# FICTIONAL CASES ONLY until the lawyer has agreed to case material going to
+# AWS. Every run costs money: get an estimate first
+# (plans/aws-bedrock-plan.md).
+#
+# No credentials go in this file. The script passes short-lived ones from the
+# laptop's `aws sso login` into the container, so there's no profile here.
+
+[ollama]
+# Only for the embedding model; the drafting models are on Bedrock.
+url = "http://host.docker.internal:11434"
+timeout_seconds = 1800
+keep_alive = "30s"
+
+[models]
+provider = "bedrock"
+# Names from [bedrock.models] below. `evaluate --model NAME` overrides both.
+plaintiff = "gpt-oss-120b"
+defendant = "gpt-oss-120b"
+checker = "gpt-oss-120b"
+
+[generation]
+temperature = 0.4
+checker_temperature = 0.0
+
+[pipeline]
+rounds = 2
+# Inside the cases volume, as config.server.toml.
+output_dir = "/data/cases/output"
+
+[corpus]
+snapshot = "v2026.09.1"
+base_url = "https://oss-data-us.vaquill.ai"
+data_dir = "/data/law"
+jurisdictions = ["ut", "ca", "tx", "ak", "federal"]
+document_types = ["statutes", "constitutions", "court_rules"]
+
+[search]
+# As config.server.toml and config.tunnel.toml, so results compare with
+# their runs.
+semantic = true
+embedding_model = "nomic-embed-text"
+embedding_url = "http://host.docker.internal:11434"
+
+[bedrock]
+region = "us-west-2"
+max_tokens = 16000
+timeout_seconds = 600
+
+# The same models and prices as config.bedrock.toml. Keep the two in step.
+[bedrock.models.qwen3-32b]
+id = "qwen.qwen3-32b-v1:0"
+input_per_million = 0.15
+output_per_million = 1.20
+
+[bedrock.models.qwen3-235b]
+id = "qwen.qwen3-235b-a22b-2507-v1:0"
+input_per_million = 0.53
+output_per_million = 2.66
+
+[bedrock.models.gpt-oss-120b]
+id = "openai.gpt-oss-120b-1:0"
+# On demand in us-west-2, checked 2026-11-05.
+input_per_million = 0.15
+output_per_million = 0.60
+
+[bedrock.models.llama3-3-70b]
+id = "us.meta.llama3-3-70b-instruct-v1:0"
+input_per_million = 0.99
+output_per_million = 1.32
+
+[bedrock.models.deepseek-v3-2]
+id = "deepseek.v3.2"
+input_per_million = 0.62
+output_per_million = 1.85
+
+[bedrock.models.claude-sonnet-5]
+id = "us.anthropic.claude-sonnet-5"
+input_per_million = 2.20
+output_per_million = 11.00
+temperature = false

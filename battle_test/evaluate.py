@@ -4,6 +4,8 @@
     python -m battle_test.evaluate --case utah_roofing --rounds 1
     python -m battle_test.evaluate --validate                 # check the case files only
     python -m battle_test.evaluate --research-only            # fast: score the search step alone
+    python -m battle_test.evaluate --replay output/eval/<run>/research.md --keyword sections
+                                                              # free: same queries, this search setup
     python -m battle_test.evaluate --config config.bedrock.toml --model qwen3-235b --repeats 3
 
 Each case in examples/eval/*.toml names a facts file, the authorities a
@@ -16,6 +18,7 @@ setups, and each run's full document set.
 import argparse
 import dataclasses
 import json
+import re
 import sys
 import time
 import tomllib
@@ -27,7 +30,7 @@ from pathlib import Path
 from battle_test import grounding, semantic
 from battle_test.citations import PLACEHOLDER
 from battle_test.config import DEFAULT_CONFIG_PATH, load_config, load_corpus_config
-from battle_test.law_index import LawIndex
+from battle_test.law_index import KEYWORD_MODES, LawIndex, PassagesMissing
 from battle_test.models import ModelError, add_usage, make_client
 from battle_test.pipeline import CaseRun, run_case
 from battle_test.report import render_markdown, usage_summary
@@ -388,10 +391,67 @@ def research_queries(cfg, client, case: EvalCase, on_usage=None) -> list[str]:
         case.state)
 
 
+_RUN_QUERIES = re.compile(r"\*\*(?:Plaintiff|Defendant) research queries:\*\* (.*)")
+
+
+def saved_queries(source: Path) -> dict[str, list[str]]:
+    """Queries saved by an earlier evaluation, so another search setup can be
+    scored on exactly the same ones: run name -> queries.
+
+    `source` is a research.md from --research-only (or --replay), with one
+    run per case, or a full evaluation's folder, where each run's report
+    (<case>.md, <case>-2.md, ...) lists both sides' queries. Both sides count
+    there, as "core found by search" does in the full evaluation."""
+    if source.is_dir():
+        return _run_report_queries(source)
+    queries: dict[str, list[str]] = {}
+    case = None
+    in_queries = False
+    for line in source.read_text(encoding="utf-8").splitlines():
+        if m := re.match(r"## (\S+): \d+/\d+ found", line):
+            case, in_queries = m.group(1), False
+            queries[case] = []
+        elif case and line.startswith("**Queries:**"):
+            in_queries = True
+        elif case and line.startswith("**"):
+            in_queries = False
+        elif case and in_queries and line.startswith("- "):
+            queries[case].append(line[2:].strip())
+    if not queries:
+        raise ValueError(f"{source} has no cases with saved queries (expected a research.md from --research-only).")
+    return queries
+
+
+def _run_report_queries(folder: Path) -> dict[str, list[str]]:
+    queries: dict[str, list[str]] = {}
+    for report in sorted(folder.glob("*.md")):
+        found = [q for line in report.read_text(encoding="utf-8").splitlines()
+                 if (m := _RUN_QUERIES.match(line)) for q in re.findall(r"“([^”]+)”", m.group(1))]
+        if found:
+            queries[report.stem] = list(dict.fromkeys(found))
+    if not queries:
+        raise ValueError(f"{folder} has no run reports with saved research queries.")
+    return queries
+
+
+def case_of_run(run: str) -> str:
+    """"utah_roofing-2" -> "utah_roofing"."""
+    return re.sub(r"-\d+$", "", run)
+
+
+def search_setup(law) -> str:
+    """How the law was searched, for reports: by passage or whole section,
+    and whether semantic search was on."""
+    keyword = "keyword by passage" if getattr(law, "keyword", "sections") == "passages" else "keyword by section"
+    return keyword + (" + semantic" if hasattr(law, "semantic_search") else "")
+
+
 def render_research(rows: list[tuple[EvalCase, list[str], list[str]]], label: str,
-                    usage: dict[str, dict[str, int]] | None = None, cost_usd: float | None = None) -> str:
+                    usage: dict[str, dict[str, int]] | None = None, cost_usd: float | None = None,
+                    note: str = "") -> str:
     lines = [f"# Research-only check — {label}", "",
-             "Plaintiff research step only: which expected authorities the law-index search returned.", ""]
+             "Plaintiff research step only: which expected authorities the law-index search returned."
+             + (f" {note}" if note else ""), ""]
     total = found = 0
     for case, queries, candidates in rows:
         hits = [e for e in case.expected if any(c in candidates for c in e.citations)]
@@ -423,6 +483,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--validate", action="store_true", help="Only check the case files.")
     parser.add_argument("--research-only", action="store_true",
                         help="Only run the plaintiff's research step and score the search (fast).")
+    parser.add_argument("--replay", type=Path, metavar="RESEARCH_MD",
+                        help="Score the search alone on the queries saved in a research.md from an earlier "
+                             "--research-only run. No model calls, so free, and the same queries every time.")
+    parser.add_argument("--keyword", choices=KEYWORD_MODES,
+                        help="Keyword search by best passage or whole section, instead of the config's "
+                             "search.keyword.")
     parser.add_argument("--model", help="Use this model for both roles, instead of the config's [models].")
     parser.add_argument("--checker", help="Check what each citation is cited for with this model, "
                                           "instead of the config's [models] checker.")
@@ -456,8 +522,8 @@ def main(argv: list[str] | None = None) -> int:
     db_path = load_corpus_config(args.config).db_path
     with LawIndex(db_path) as index:
         try:
-            law = index if args.validate else semantic.attach(index, args.config, db_path)
-        except ModelError as e:
+            law = index if args.validate else semantic.attach(index, args.config, db_path, keyword=args.keyword)
+        except (ModelError, PassagesMissing) as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
         invalid = {c.name: p for c in cases if (p := validate(c, law))}
@@ -471,9 +537,35 @@ def main(argv: list[str] | None = None) -> int:
             print("Fix the case files (or run --validate) before evaluating.", file=sys.stderr)
             return 1
 
-        client = make_client(cfg)
         started = datetime.now()
         out_dir = cfg.output_dir / "eval" / f"{started:%Y%m%d-%H%M%S}-{args.label}"
+
+        if args.replay:
+            try:
+                saved = saved_queries(args.replay)
+            except (OSError, ValueError) as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 1
+            by_name = {c.name: c for c in cases}
+            if args.case:
+                saved = {run: q for run, q in saved.items() if case_of_run(run) in by_name}
+            unknown = sorted({case_of_run(run) for run in saved} - set(by_name))
+            if unknown or not saved:
+                print(f"error: {args.replay}: no case file for {', '.join(unknown) or 'any run'}", file=sys.stderr)
+                return 1
+            rows = []
+            for run, queries in saved.items():
+                case = by_name[case_of_run(run)]
+                found = grounding.gather_candidates(law, queries, case.state.lower())
+                rows.append((dataclasses.replace(case, name=run), queries, [c.citation for c in found]))
+            report = render_research(rows, args.label, note=f"Queries replayed from `{args.replay.as_posix()}`. "
+                                                            f"Search: {search_setup(law)}.")
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "research.md").write_text(report, encoding="utf-8")
+            print(report)
+            return 0
+
+        client = make_client(cfg)
         out_dir.mkdir(parents=True, exist_ok=True)
 
         if args.research_only:
@@ -487,7 +579,7 @@ def main(argv: list[str] | None = None) -> int:
                 except ModelError as e:
                     print(f"error: {e}", file=sys.stderr)
                     return 1
-            report = render_research(rows, args.label, usage, cfg.cost(usage))
+            report = render_research(rows, args.label, usage, cfg.cost(usage), note=f"Search: {search_setup(law)}.")
             (out_dir / "research.md").write_text(report, encoding="utf-8")
             print(report)
             return 0
@@ -501,7 +593,7 @@ def main(argv: list[str] | None = None) -> int:
                                        f"temperature {cfg.checker_temperature:g})" if cfg.checker_model else "none"),
             "fit check before drafting": "on" if cfg.checker_model and cfg.fit_check else "off",
             "rounds": str(args.rounds or cfg.rounds),
-            "search": f"keyword + semantic ({search_cfg.embedding_model})" if search_cfg.semantic else "keyword",
+            "search": search_setup(law) + (f" ({search_cfg.embedding_model})" if search_cfg.semantic else ""),
             "runs per case": str(args.repeats),
             "law snapshot": law.meta().get("snapshot", "?"),
         }

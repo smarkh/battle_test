@@ -204,5 +204,122 @@ class AlaskaHeadingsTest(unittest.TestCase):
         self.assertIsNone(_ak_heading("56", names))  # a court rule number
 
 
+
+@unittest.skipIf(pa is None, "pyarrow not installed")
+class PassageSearchTest(unittest.TestCase):
+    """Keyword search by best passage (plans/plan.md, "Passages", stage 2)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from battle_test import passages
+
+        cls.tmp = tempfile.TemporaryDirectory()
+        root = Path(cls.tmp.name)
+        # Like Cal. CIV § 1950.5: a long section whose rule on the topic is
+        # one paragraph far from the start, among many on other things.
+        filler = "\n".join(f"({n}) The landlord shall keep the premises in repair and comply with "
+                           f"the housing code, including part {n} of the rules on heating and "
+                           f"plumbing fixtures." for n in range(1, 120))
+        long_text = (filler + "\n(z) Within 21 days after the tenant vacates, the landlord shall "
+                     "return the security deposit with an itemized statement of deductions.")
+        assert len(passages.split(long_text)) > 5
+        rows = [_row("CA1", "Cal. CIV § 1950.5", "Section 1950.5", long_text)]
+        # Short sections that each share a word or two with the query.
+        rows += [_row(f"CA{n}", f"Cal. CIV § {n}", f"Section {n}", text) for n, text in [
+            (2, "A security deposit of money with a bank shall be returned on demand."),
+            (3, "Notice to the tenant shall be given within 21 days."),
+            (4, "An itemized statement of goods sold, returned within 21 days."),
+            (5, "The tenant may vacate on notice, after the security deposit is paid."),
+        ]]
+        path = root / "us_ca_statutes.parquet"
+        pq.write_table(pa.Table.from_pylist(rows), path)
+        cls.cfg = CorpusConfig("vTEST", "http://unused", root, ("ca",), ("statutes",))
+        build_index(cls.cfg, {"snapshot_date": "2026-08-14"}, [path])
+        cls.query = "return of security deposit itemized statement 21 days after tenant vacates"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_build_gives_every_section_passages(self):
+        from battle_test import passages
+
+        with LawIndex(self.cfg.db_path) as law:
+            db = law._db
+            self.assertEqual(db.execute("SELECT COUNT(DISTINCT section_id) FROM passages").fetchone()[0],
+                             db.execute("SELECT COUNT(*) FROM sections").fetchone()[0])
+            self.assertGreater(db.execute("SELECT COUNT(*) FROM passages").fetchone()[0], 5 + 4)
+            self.assertEqual(law.meta()["passages"], passages.PASSAGES_VERSION)
+
+    def test_a_long_section_is_found_by_its_matching_passage(self):
+        with LawIndex(self.cfg.db_path, keyword="passages") as law:
+            self.assertEqual(law.search(self.query, "ca")[0].citation, "Cal. CIV § 1950.5")
+        # By whole section, its length buries it under the short ones.
+        with LawIndex(self.cfg.db_path) as law:
+            cites = [s.citation for s in law.search(self.query, "ca")]
+            self.assertNotEqual(cites[0], "Cal. CIV § 1950.5")
+
+    def test_each_section_appears_once_and_the_limit_counts_sections(self):
+        with LawIndex(self.cfg.db_path, keyword="passages") as law:
+            cites = [s.citation for s in law.search("landlord premises repair housing", "ca", limit=3)]
+        self.assertEqual(cites, ["Cal. CIV § 1950.5"])  # many passages match, one section
+        with LawIndex(self.cfg.db_path, keyword="passages") as law:
+            self.assertEqual(len(law.search(self.query, "ca", limit=3)), 3)
+
+    def test_an_index_without_passages_refuses_or_falls_back(self):
+        import shutil
+        import sqlite3
+        from unittest import mock
+
+        from battle_test import semantic
+        from battle_test.corpus import _cmd_passages
+        from battle_test.law_index import PassagesMissing
+
+        root = Path(self.tmp.name) / "old"
+        root.mkdir()
+        old = CorpusConfig("vTEST", "http://unused", root, ("ca",), ("statutes",))
+        shutil.copyfile(self.cfg.db_path, old.db_path)
+        db = sqlite3.connect(old.db_path)
+        db.executescript("DROP TABLE passages_fts; DROP TABLE passages; DELETE FROM meta WHERE key = 'passages';")
+        db.commit()
+        db.close()
+        config = root / "config.toml"
+        config.write_text('[search]\nkeyword = "passages"\n', encoding="utf-8")
+
+        with LawIndex(old.db_path) as law:
+            self.assertFalse(law.has_passages)
+            with self.assertRaisesRegex(PassagesMissing, "corpus passages"):
+                law.use_keyword("passages")
+            with self.assertRaises(PassagesMissing):  # an evaluation must not measure the wrong setup
+                semantic.attach(law, config, old.db_path)
+            with mock.patch("sys.stderr") as stderr:  # a user's case still runs
+                self.assertIs(semantic.attach(law, config, old.db_path, fallback=True), law)
+            self.assertEqual(law.keyword, "sections")
+            self.assertIn("by whole section", "".join(c.args[0] for c in stderr.write.call_args_list))
+            built_at = law.meta()["built_at"]
+
+        with mock.patch("sys.stdout"):
+            _cmd_passages(old)
+        with LawIndex(old.db_path, keyword="passages") as law:
+            self.assertEqual(law.meta()["built_at"], built_at)  # the section vectors still match
+            self.assertEqual(law.search(self.query, "ca")[0].citation, "Cal. CIV § 1950.5")
+
+    def test_keyword_mode_comes_from_the_config(self):
+        from battle_test import semantic
+
+        config = Path(self.tmp.name) / "modes.toml"
+        config.write_text('[search]\nkeyword = "passages"\n', encoding="utf-8")
+        with LawIndex(self.cfg.db_path) as law:
+            self.assertIs(semantic.attach(law, config, self.cfg.db_path), law)
+            self.assertEqual(law.keyword, "passages")
+            semantic.attach(law, config, self.cfg.db_path, keyword="sections")  # evaluate --keyword
+            self.assertEqual(law.keyword, "sections")
+        config.write_text("[search]\n", encoding="utf-8")
+        self.assertEqual(semantic.load_search_config(config).keyword, "sections")  # the default
+        config.write_text('[search]\nkeyword = "chunks"\n', encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "search.keyword"):
+            semantic.load_search_config(config)
+
+
 if __name__ == "__main__":
     unittest.main()

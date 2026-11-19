@@ -140,6 +140,16 @@ California, Texas, Alaska and federal law.
 - Search is **keyword search**. It returns only law that's in force, from
   the chosen state and federal law, with the state's law ranked slightly
   higher.
+- **Ranking by passage (built 2026-11-18, off until decided).** Ranking
+  whole sections favours short ones, so a long statute with one paragraph
+  on the topic (Cal. Civ. Code § 1950.5 is 26,000 characters) ranks below
+  short sections that mention the same words once. With `keyword =
+  "passages"` under `[search]`, each section is cut into passages of up
+  to 1,500 characters, and a section ranks by its best passage. The index
+  keeps a word index of the passages (`corpus passages` adds it to an
+  existing index, and `corpus build` makes it). Results are still whole
+  sections. The default is `"sections"`, the old ranking. An index
+  without passages falls back to it for a user's case, with a warning.
 - **Semantic search** runs alongside it on the live site (`semantic =
   true` under `[search]` in `config.server.toml`, since 2026-10-16). It's
   off in the laptop's `config.toml` and on in `config.tunnel.toml`. Keyword search only matches shared words,

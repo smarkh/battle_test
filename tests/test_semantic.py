@@ -229,6 +229,9 @@ class SemanticSearchTest(unittest.TestCase):
         on = self.config('[search]\nsemantic = true\nembedding_model = "fake-embed"\n')
 
         class Rebuilt:
+            def use_keyword(self, mode):
+                pass
+
             def meta(self):
                 return {"built_at": "2030-01-01T00:00:00"}
 
