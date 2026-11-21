@@ -116,6 +116,12 @@ clients offer it:
 `provider` in `[models]` chooses. Either way, the law index, the search
 and the citation check run locally.
 
+**The live site uses Bedrock** (gpt-oss 120B in Oregon) from the lawyers'
+beta on (decided 2026-11-20), with fictional cases only. It authenticates
+with a Bedrock API key read from a file (`bedrock.api_key_file`), mounted
+as a Docker secret. The laptop and evaluations sign in with `aws sso
+login` instead.
+
 Both clients report the tokens each call used. A run records the totals
 per model, and when the config has a price for the model, an estimated
 cost. Bedrock has no JSON mode, so research and selection replies are read
@@ -380,19 +386,23 @@ image sets it to the server config. Most commands also take `--config`.
 
 ```
 browser ──https──▶ Cloudflare ──tunnel──▶ battle-test-cloudflared ──▶ battle-test:8000
-                                                                           │
-                                                                           ▼
-                                                        Ollama on the server (the GPU)
+                                                                │          │
+                                                                ▼          ▼
+                                    Amazon Bedrock, Oregon (drafting, checks)   Ollama on the server (search embeddings)
 ```
 
 - Two Docker containers on a home server: the app (`battle-test`) and its
   own Cloudflare Tunnel connector (`battle-test-cloudflared`).
 - The connector dials out to Cloudflare, so no ports are open on the
   router, and the app publishes no port on the server.
-- Ollama runs natively on the server, not in a container. The app reaches
-  it at `host.docker.internal:11434`.
+- The drafting and checking models are on Amazon Bedrock (since the
+  beta config of 2026-11-20). Ollama runs natively on the server, not in a
+  container, for the search embedding model only. The app reaches it at
+  `host.docker.internal:11434`.
+- Cloudflare Access is to be put in front of the whole site before the
+  beta testers arrive (`running-on-server.md`, "Cloudflare Access").
 - The same server runs an unrelated project, smark_iq (containers
   `open-webui`, `caddy` and `cloudflared`). The two share nothing but the
-  GPU. battle_test unloads its model 30 seconds after a run to free it.
+  GPU, which battle_test now uses only for search.
 
 See [running-on-server.md](running-on-server.md) for operating it.

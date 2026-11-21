@@ -702,7 +702,14 @@ how to run it". That replaces the separate `deploy.md` planned here.
     - Until that's deployed: purge the cache in the Cloudflare
       dashboard (Caching → Configuration → Purge Everything, which also
       affects `llm.smarkiq.us`), or wait 4 hours, and hard-refresh.
-  - **Last done 2026-11-20:** commit `7802e3a` (from `363e014`). It
+  - **Last done 2026-11-20 (later):** commit `2fc7d56`: "New case" moved
+    beside the case lists. It also carried the Bedrock API key code
+    (`bedrock_client.py`, `config.py`), which is unused while
+    `config.server.toml` says `provider = "ollama"` (checked in the running
+    container). Same steps as below; image `2d3a6de78b38`, healthy, new
+    stylesheet served. The switch to Bedrock is a separate, later deploy,
+    and needs the API key secret on the server first.
+  - **Done before, 2026-11-20:** commit `7802e3a` (from `363e014`). It
     brought the formal "Battle Test" look for the pages and the Word and
     PDF downloads, the username hint on sign-in, and the fix for the
     "served on this computer only" banner showing on the live site. It also

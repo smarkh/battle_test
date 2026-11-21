@@ -19,6 +19,7 @@ No winner is declared.
 | Set up and run it on your own machine | [running-locally.md](running-locally.md) |
 | Start, stop, update or check the deployed copy | [running-on-server.md](running-on-server.md) |
 | Run the models on Amazon Bedrock instead of your own GPU | [running-on-bedrock.md](running-on-bedrock.md) |
+| Add a beta tester, look after the beta, and end it | [beta.md](beta.md) |
 | Make a change: tests, evaluation, and the project's rules | [development.md](development.md) |
 | See how case data is handled, or get the lawyer's sign-off on it | [data-handling-for-lawyer.md](data-handling-for-lawyer.md) |
 
@@ -30,14 +31,22 @@ server, and running-on-bedrock only when you want hosted models.
 
 - It runs in two places: on a development laptop, and on a home server,
   public at `https://battle.smarkiq.us`.
-- Only **fictional** cases may be used on the public site, until Cloudflare
-  Access is added in front of it.
-- The models can also run on Amazon Bedrock. That's built and set up, but
-  AWS is blocking Bedrock for the account (2026-10-06), so no model has
-  answered yet. It's for fictional cases only too.
-- The citation checking works. The quality of the legal choices doesn't
-  yet: the models often pick the wrong law, because the search step doesn't
-  find the right sections. That's the main open problem.
+- **A beta with a group of lawyers is being prepared (2026-11-20).** 5 to
+  10 testers are expected, each with 15 cases over 60 days, fictional cases
+  only. Expected cost: under $1 per tester. See `plans/beta-plan.md` for
+  the decisions and cost, and [beta.md](beta.md) for running it.
+- **The live site moves to Amazon Bedrock** (gpt-oss 120B, Oregon) for the
+  beta. The config is ready; it goes live once the Bedrock API key is on
+  the server ([running-on-server.md](running-on-server.md), "Bedrock API
+  key").
+- **Cloudflare Access** goes in front of the site before any tester signs
+  in. Not set up yet.
+- Only **fictional** cases may be used, on every provider, until the
+  lawyer signs off ([data-handling-for-lawyer.md](data-handling-for-lawyer.md)).
+- The citation checking works. The legal choices are better on gpt-oss
+  120B (58–65% of the core law cited, nothing off-topic) than on the
+  server's 14B (about 43%), but search still misses some of the right
+  sections. That's the main open problem.
 
 ## Other documents
 
@@ -50,4 +59,5 @@ folder records why it is that way and what's next:
 | `plans/server-migration-plan.md` | How the server deployment was built, what went wrong along the way, and the incident log |
 | `plans/aws-bedrock-plan.md` | The plan to move the models to Amazon Bedrock and the app to AWS, with costs |
 | `plans/profitability-plan.md` | Pricing, costs and profit scenarios |
+| `plans/beta-plan.md` | The lawyers' beta: decisions, expected cost per tester, and the launch checklist |
 | `README.md` (repo root) | A short overview and a usage reference for the commands |

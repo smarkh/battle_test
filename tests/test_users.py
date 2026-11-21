@@ -33,6 +33,10 @@ period = "total"
 [plans.solo]
 label = "Solo"
 cases = 30
+[plans.beta]
+label = "Beta"
+cases = 15
+period = "total"
 [plans.unlimited]
 """
 
@@ -78,7 +82,7 @@ class PlansConfigTest(unittest.TestCase):
                 plans = load_plans(ROOT / name)
                 self.assertEqual(plans.default, "trial")  # an account nobody gave a plan gets the smallest
                 self.assertEqual({n: p.cases for n, p in plans.by_name.items()},
-                                 {"trial": 5, "solo": 30, "pro": 100, "firm": 60, "unlimited": None})
+                                 {"trial": 5, "beta": 15, "solo": 30, "pro": 100, "firm": 60, "unlimited": None})
         self.assertEqual(load_web_config(ROOT / "config.server.toml").base_url, "https://battle.smarkiq.us")
         self.assertEqual(load_web_config(ROOT / "config.toml").base_url, "http://127.0.0.1:8000")
         self.assertEqual(load_web_config(ROOT / "config.toml").max_active_cases, 3)
@@ -122,12 +126,50 @@ class UsersCommandTest(unittest.TestCase):
         _, listing, _ = self.run_users("list")
         self.assertRegex(listing, r"dana\s+solo\s+created \d{4}-\d{2}-\d{2}  \(no password set yet\)")
 
+    def test_beta_makes_each_tester_with_a_link_the_plan_and_an_end_date(self):
+        from datetime import timedelta
+        with mock.patch("getpass.getpass", side_effect=AssertionError("must not prompt")):
+            code, out, err = self.run_users("beta", "jdoe", "Asmith", "--days", "60")
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(len(re.findall(r"https://battle\.example/setup/\S+", out)), 2)
+        ends = (datetime.now() + timedelta(days=60)).strftime("%Y-%m-%d")
+        self.assertIn(f"Beta plan (15 cases in total), able to start cases through {ends}", out)
+        store = self.store()
+        for name in ("jdoe", "asmith"):
+            user = store.get_user(name)
+            self.assertEqual((user.plan, user.paid_through, user.firm, user.is_admin), ("beta", ends, "", False))
+            self.assertTrue(user.needs_setup)  # nobody but the tester will know the password
+
+    def test_beta_creates_nothing_if_any_name_is_wrong(self):
+        self.assertEqual(self.run_users("add", "taken")[0], 0)
+        for names, message in [(("new1", "taken"), "Already an account: taken"),
+                               (("new1", "someone@firm.com"), "Not a valid username: someone@firm.com"),
+                               (("new1", "NEW1"), "listed twice")]:
+            with self.subTest(names=names):
+                code, out, err = self.run_users("beta", *names)
+                self.assertEqual(code, 1)
+                self.assertIn(message, err)
+                self.assertIn("Nothing was created", err)
+                self.assertIsNone(self.store().get_user("new1"))
+        self.assertIn("--days must be 1 or more", self.run_users("beta", "new2", "--days", "0")[2])
+        self.assertIn("No plan 'gold'", self.run_users("beta", "new2", "--plan", "gold")[2])
+
+    def test_beta_testers_can_share_a_firm_allowance(self):
+        code, out, _ = self.run_users("beta", "a1", "a2", "--firm", "smith-law")
+        self.assertEqual(code, 0)
+        self.assertIn("2 seats (a1, a2), sharing 30 cases in total", out)
+
+    def test_beta_plan_is_on_the_laptop_and_the_live_site(self):
+        for name in ("config.toml", "config.server.toml"):
+            with self.subTest(config=name):
+                self.assertEqual(astuple(load_plans(ROOT / name).get("beta")), ("beta", "Beta", 15, "total"))
+
     def test_add_uses_the_default_plan_and_refuses_unknown_ones(self):
         code, out, _ = self.run_users("add", "dana")
         self.assertIn("on the Trial plan (1 cases in total)", out)
         code, _, err = self.run_users("add", "erin", "--plan", "platinum")
         self.assertEqual(code, 1)
-        self.assertIn("No plan 'platinum'. The config has: trial, solo, unlimited.", err)
+        self.assertIn("No plan 'platinum'. The config has: trial, solo, beta, unlimited.", err)
         self.assertIsNone(self.store().get_user("erin"))
 
     def test_add_with_password_prompts_instead(self):

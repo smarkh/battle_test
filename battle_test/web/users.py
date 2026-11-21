@@ -2,6 +2,7 @@
 
     python -m battle_test.web.users add NAME --plan solo   # prints a one-time setup link
     python -m battle_test.web.users add NAME --admin --password   # prompts for a password
+    python -m battle_test.web.users beta NAME [NAME...] --days 60  # beta testers: a setup link each
     python -m battle_test.web.users invite NAME          # a new setup link (forgotten password)
     python -m battle_test.web.users passwd NAME          # set a new password
     python -m battle_test.web.users plan NAME PLAN       # change the account's plan
@@ -27,7 +28,7 @@ so they don't end up in shell history.
 import argparse
 import getpass
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from battle_test.config import DEFAULT_CONFIG_PATH, Plan, Plans, load_plans, load_web_config
@@ -106,6 +107,14 @@ def main(argv: list[str] | None = None) -> int:
                      help="The last day the plan is paid for (YYYY-MM-DD). Default: no end.")
     add.add_argument("--password", action="store_true",
                      help="Type the password here instead of printing a setup link (for your own account).")
+    beta = sub.add_parser("beta", help="Create beta tester accounts and print a one-time setup link for each.")
+    beta.add_argument("usernames", nargs="+", metavar="username")
+    beta.add_argument("--days", type=int, default=60,
+                      help="How long the beta lasts: the accounts can start cases until today plus this many days. "
+                           "Default: 60.")
+    beta.add_argument("--plan", default="beta", help="The plan, from [plans] in the config. Default: beta.")
+    beta.add_argument("--firm", default="", help="A firm whose shared case allowance they all join. Default: none, "
+                                                 "so each tester has their own.")
     for name, help_text in (("invite", "Print a new one-time setup link."), ("passwd", "Set a new password."),
                             ("disable", "Block sign-in."), ("enable", "Allow sign-in again.")):
         sub.add_parser(name, help=help_text).add_argument("username")
@@ -144,6 +153,31 @@ def main(argv: list[str] | None = None) -> int:
                 print(_firm_summary(store, plans, user.firm))
             if password is None:
                 _print_setup_link(store, user.username, web.base_url)
+        elif args.command == "beta":
+            if args.days < 1:
+                raise AuthError(f"--days must be 1 or more, got {args.days}.")
+            ends = (datetime.now() + timedelta(days=args.days)).strftime("%Y-%m-%d")
+            # Checked before any account is made, so a typo doesn't leave half a batch.
+            bad = [n for n in args.usernames
+                   if not n.strip() or not n.strip().replace("_", "").replace("-", "").replace(".", "").isalnum()]
+            if bad:
+                raise AuthError(f"Not a valid username: {', '.join(bad)}. Usernames may contain only letters, "
+                                "digits, '.', '_' and '-' (not an email address). Nothing was created.")
+            if len({n.strip().lower() for n in args.usernames}) != len(args.usernames):
+                raise AuthError("A username is listed twice. Nothing was created.")
+            taken = [n for n in args.usernames if store.get_user(n) is not None]
+            if taken:
+                raise AuthError(f"Already an account: {', '.join(taken)}. Nothing was created. Use `invite` for a "
+                                "new setup link, or `paid NAME DATE` to extend one.")
+            print(f"Beta accounts on the {plans.get(plan).label} plan ({_allowance(plans.get(plan))}), able to "
+                  f"start cases through {ends}.\n")
+            for name in args.usernames:
+                user = store.create_user(name, None, plan=plan, firm=args.firm, by=BY)
+                store.set_paid_through(user.username, ends, by=BY)
+                _print_setup_link(store, user.username, web.base_url)
+                print()
+            if args.firm:
+                print(_firm_summary(store, plans, args.firm))
         elif args.command == "invite":
             _print_setup_link(store, args.username, web.base_url)
         elif args.command == "passwd":

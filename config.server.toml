@@ -4,31 +4,38 @@
 
 [ollama]
 # Ollama runs natively on the server; containers reach the host this way.
+# Since the beta (2026-11-20) it runs only the search embedding model; the
+# drafting and checking models are on Bedrock.
 url = "http://host.docker.internal:11434"
 timeout_seconds = 1800
-# The GPU is shared with smark_iq's Open WebUI (one 16 GB card). Unload the
-# model 30 s after the last request: it stays loaded through a run, whose
-# calls come back to back, and frees the card soon after (decided 2026-09-28,
-# "option 1"; hosted models via Bedrock may replace this later).
+# The GPU is shared with smark_iq's Open WebUI (one 16 GB card). Unload a
+# model 30 s after the last request (decided 2026-09-28, "option 1").
 keep_alive = "30s"
 
 [models]
-# "ollama" (models on this machine) or "bedrock" (hosted, see
-# config.bedrock.toml and plans/aws-bedrock-plan.md).
-provider = "ollama"
-# Decided 2026-09-25: start with 14B (fits fully on the 16 GB GPU with a
-# 12k context), then compare ~30B options with the evaluation.
-plaintiff = "qwen2.5:14b"
-defendant = "qwen2.5:14b"
+# "ollama" (models on this machine) or "bedrock" (hosted).
+# Decided 2026-11-20, for the lawyers' beta: gpt-oss 120B on Bedrock for
+# drafting and both checks. It cited 58-65% of core law with 0 off-topic in
+# the evaluations, against about 43% for the server's 14B, at about $0.05 a
+# case (plans/beta-plan.md). Fictional cases only, until the lawyer agrees to
+# case material going to AWS.
+#
+# Needs the Bedrock API key in secrets/bedrock_api_key on the server before
+# deploying (docs/running-on-server.md, "Bedrock API key").
+#
+# To go back to the server's GPU: provider = "ollama", all three models
+# "qwen2.5:14b", and workers = 1 under [web].
+provider = "bedrock"
+plaintiff = "gpt-oss-120b"
+defendant = "gpt-oss-120b"
 # Checks, before drafting, whether each selected section fits the case, and
 # afterwards whether each cited section says what the draft cites it for
-# (plans/plan.md, 3a). On since 2026-10-15, after a look at a results page:
-# about a minute more per case. Only "does not support" is marked inline.
-# Leave it out to turn both checks off.
-checker = "qwen2.5:14b"
+# (plans/plan.md, 3a). Only "does not support" is marked inline. Leave it out
+# to turn both checks off.
+checker = "gpt-oss-120b"
 
 [generation]
-num_ctx = 12288
+num_ctx = 12288         # Ollama only
 temperature = 0.4
 # The checker's temperature, for both checks: 0 gives the same section the
 # same verdict every time it's asked (the default, if left out).
@@ -58,6 +65,23 @@ semantic = true
 # (the [ollama] url), next to the drafting model: 274 MB of the 16 GB card.
 embedding_model = "nomic-embed-text"
 
+[bedrock]
+# Oregon. gpt-oss 120B is called by its regional model ID, not a "us."
+# inference profile, so its calls stay in us-west-2.
+region = "us-west-2"
+# No profile: the live site uses a Bedrock API key, mounted from the server
+# as a Docker secret (docker-compose.yml). The key never goes in this file.
+api_key_file = "/run/secrets/bedrock_api_key"
+max_tokens = 16000
+timeout_seconds = 600
+
+# As in config.bedrock.toml. Keep the two in step.
+[bedrock.models.gpt-oss-120b]
+id = "openai.gpt-oss-120b-1:0"
+# On demand in us-west-2, checked 2026-11-05.
+input_per_million = 0.15
+output_per_million = 0.60
+
 [web]
 # 0.0.0.0 inside the container. No port is published on the host: only Caddy,
 # on smark_iq's Docker network, can reach it. Allowed only because
@@ -69,9 +93,13 @@ data_dir = "/data/cases"
 secure_cookies = true
 behind_proxy = true
 retention_days = 90
-# How many cases one user may have waiting or running at once. Runs go one
-# at a time, so this stops one person filling the queue. 0 = no cap.
+# How many cases one user may have waiting or running at once, so one person
+# can't fill the queue. 0 = no cap.
 max_active_cases = 3
+# How many cases run at once. On Bedrock there's no GPU to wait for (search
+# still uses the server's embedding model, which is quick). Kept at 2 for the
+# beta: the container's 3 GB memory limit hasn't been tried with more.
+workers = 2
 # Where users reach the site, for the one-time setup links the admin command
 # prints.
 public_url = "https://battle.smarkiq.us"
@@ -87,6 +115,15 @@ default = "trial"
 label = "Trial"
 cases = 5
 period = "total"    # never renews
+
+[plans.beta]
+# The lawyers' beta (decided 2026-11-20): 15 cases in total, for 60 days.
+# The 60 days is the paid-through date, set when the account is made:
+# `python -m battle_test.web.users beta NAME... --days 60`. Cost: about $0.05
+# a case on Bedrock, so at most about $0.90 per tester (plans/beta-plan.md).
+label = "Beta"
+cases = 15
+period = "total"
 
 [plans.solo]
 label = "Solo"

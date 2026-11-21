@@ -127,6 +127,32 @@ class BedrockClientTest(unittest.TestCase):
         with self.assertRaises(ZeroDivisionError):
             client(FakeRuntime()).chat("cheap", "s", "u", on_token=broken)
 
+    def test_an_api_key_file_is_sent_as_a_bearer_token_and_never_shown(self):
+        import os
+        from unittest import mock
+        from battle_test.bedrock_client import API_KEY_ENV
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(API_KEY_ENV, None)
+            key = Path(tmp) / "bedrock_api_key"
+            key.write_text("  test-key-not-real\n", encoding="utf-8")
+            BedrockClient("us-west-2", MODELS, 16000, 0.4, api_key_file=str(key))._client()  # calls nothing
+            self.assertEqual(os.environ[API_KEY_ENV], "test-key-not-real")
+            key.write_text("\n", encoding="utf-8")
+            with self.assertRaisesRegex(ModelError, "is empty"):
+                BedrockClient("us-west-2", MODELS, 16000, 0.4, api_key_file=str(key))._client()
+            with self.assertRaisesRegex(ModelError, "can't read the API key file .*Bedrock API key") as raised:
+                BedrockClient("us-west-2", MODELS, 16000, 0.4, api_key_file=str(Path(tmp) / "gone"))._client()
+            self.assertNotIn("test-key-not-real", str(raised.exception))
+
+    def test_no_api_key_file_leaves_the_usual_credentials_alone(self):
+        import os
+        from unittest import mock
+        from battle_test.bedrock_client import API_KEY_ENV
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(API_KEY_ENV, None)
+            BedrockClient("us-west-2", MODELS, 16000, 0.4)._client()
+            self.assertNotIn(API_KEY_ENV, os.environ)
+
     def test_retries_are_bounded(self):
         # Every attempt that reaches a model is billed, so retrying forever
         # is a way to run up a bill.
@@ -137,12 +163,26 @@ class BedrockClientTest(unittest.TestCase):
 
 
 class ProviderConfigTest(unittest.TestCase):
-    def test_laptop_and_server_stay_on_ollama(self):
-        for name in ("config.toml", "config.server.toml"):
-            with self.subTest(config=name):
-                cfg = load_config(ROOT / name)
-                self.assertEqual(cfg.provider, "ollama")
-                self.assertIsInstance(make_client(cfg), OllamaClient)
+    def test_laptop_stays_on_ollama(self):
+        cfg = load_config(ROOT / "config.toml")
+        self.assertEqual(cfg.provider, "ollama")
+        self.assertIsInstance(make_client(cfg), OllamaClient)
+
+    def test_live_site_drafts_and_checks_on_bedrock_with_an_api_key_file(self):
+        # Decided 2026-11-20, for the lawyers' beta.
+        cfg = load_config(ROOT / "config.server.toml")
+        self.assertEqual((cfg.provider, cfg.bedrock_region), ("bedrock", "us-west-2"))
+        self.assertEqual({cfg.plaintiff_model, cfg.defendant_model, cfg.checker_model}, {"gpt-oss-120b"})
+        self.assertFalse(cfg.split_providers)
+        model = cfg.bedrock_models["gpt-oss-120b"]
+        # A regional ID, not a "us." inference profile, so calls stay in Oregon.
+        self.assertFalse(model.id.startswith("us."))
+        self.assertGreater(model.input_price, 0)
+        self.assertEqual(model, load_config(ROOT / "config.bedrock.toml").bedrock_models["gpt-oss-120b"])
+        self.assertEqual((cfg.bedrock_profile, cfg.bedrock_api_key_file), ("", "/run/secrets/bedrock_api_key"))
+        # Search still embeds on the server's Ollama.
+        self.assertEqual(cfg.ollama_url, "http://host.docker.internal:11434")
+        self.assertIsInstance(make_client(cfg), BedrockClient)
 
     def test_bedrock_config(self):
         cfg = load_config(ROOT / "config.bedrock.toml")
@@ -171,7 +211,7 @@ class ProviderConfigTest(unittest.TestCase):
         # Several cases at once on Bedrock, with a place left when one user is at their cap.
         self.assertGreater(web.workers, web.max_active_cases)
         self.assertEqual(local.workers, 1)
-        self.assertEqual(load_web_config(ROOT / "config.server.toml").workers, 1)
+        self.assertEqual(load_web_config(ROOT / "config.server.toml").workers, 2)
 
     def test_workers_must_be_a_positive_number_and_one_on_ollama(self):
         from battle_test.config import load_web_config
@@ -198,10 +238,32 @@ class ProviderConfigTest(unittest.TestCase):
             app.state.store.close()
             app.state.auth.close()
 
+    def test_web_app_warns_at_startup_if_the_bedrock_key_file_is_missing(self):
+        # Compose only warns when a secret's file is missing; the app says
+        # plainly that cases will fail, but still starts.
+        try:
+            from battle_test.web.app import create_app
+        except ImportError:
+            self.skipTest("web dependencies not installed")
+        server = (ROOT / "config.server.toml").read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.toml"
+            missing = Path(tmp, "no-such-key").as_posix()
+            path.write_text(server.replace("/run/secrets/bedrock_api_key", missing), encoding="utf-8")
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                app = create_app(path, data_dir=Path(tmp) / "web", law_db=ROOT / "config.toml")
+            app.state.store.close()
+            app.state.auth.close()
+        self.assertIn("WARNING: every case will fail", err.getvalue())
+        self.assertIn("can't read the API key file", err.getvalue())
+
     def test_no_credentials_in_the_bedrock_configs(self):
-        for name in ("config.bedrock.toml", "config.tunnel-bedrock.toml"):
+        for name in ("config.bedrock.toml", "config.tunnel-bedrock.toml", "config.server.toml",
+                     "config.server-bedrock.toml"):
             text = (ROOT / name).read_text(encoding="utf-8").lower()
-            for marker in ("akia", "secret_access_key", "aws_session_token", "access_key_id"):
+            for marker in ("akia", "secret_access_key", "aws_session_token", "access_key_id", "bedrock-api-key-",
+                           "absk"):
                 with self.subTest(config=name, marker=marker):
                     self.assertNotIn(marker, text)
 

@@ -11,6 +11,7 @@ import hashlib
 import hmac
 import json
 import re
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -172,6 +173,21 @@ async def progress_events(worker: Worker, store: JobStore, job_id: str, poll_sec
         await asyncio.sleep(poll_seconds)
 
 
+def _warn_if_bedrock_key_missing(cfg) -> None:
+    """Docker compose only warns when a secret's file is missing, and the
+    app would start and fail every case. Say so in the app log at startup
+    instead of at the first case. The site still serves sign-in and old
+    cases."""
+    if "bedrock" not in (cfg.provider, cfg.checker_provider) or not cfg.bedrock_api_key_file:
+        return
+    from battle_test.bedrock_client import read_api_key
+    from battle_test.models import ModelError
+    try:
+        read_api_key(cfg.bedrock_api_key_file)
+    except ModelError as e:
+        print(f"WARNING: every case will fail until this is fixed. {e}", file=sys.stderr, flush=True)
+
+
 def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | None = None,
                model_label: str | None = None, data_dir: Path | None = None,
                law_db: Path | None = None, plans: Plans | None = None) -> FastAPI:
@@ -185,6 +201,8 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
     corpus = load_corpus_config(config_path)
     web = load_web_config(config_path)
     plans = plans or load_plans(config_path)
+    if client is None:
+        _warn_if_bedrock_key_missing(cfg)
     client = client or make_client(cfg)
     root = data_dir or web.data_dir
     store = JobStore(root)

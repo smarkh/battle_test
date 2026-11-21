@@ -36,10 +36,12 @@ kept.
    re-encrypts it to the app. Cloudflare therefore briefly handles case
    text in transit.
 2. **The app to an AI model.** Every model request contains the case text.
-   - **Today:** the models run on our own server, so case text doesn't
-     leave it.
-   - **Planned: Amazon Bedrock** (AWS), processing in the `us-west-2`
-     (Oregon) region. Two of the candidate models (Llama 3.3 70B and
+   - **Until the beta:** the models ran on our own server, so case text
+     didn't leave it.
+   - **For the lawyers' beta (from late 2026-11): Amazon Bedrock** (AWS),
+     processing in the `us-west-2` (Oregon) region, with gpt-oss 120B.
+     Beta testers are asked to use **fictional cases only**, so no real
+     case material goes to AWS before you decide question 1. Two of the candidate models (Llama 3.3 70B and
      Claude Sonnet 5) are only offered through AWS's "US" routing, which
      may process a request in **any US region**.
    - **For testing only: Ollama Cloud.** Hosted mainly in the US, but it
@@ -85,8 +87,8 @@ kept.
   reach the stored case files. The operator won't open case content
   unless a user asks for help with that case, or to fix a fault. *(Please
   confirm or change this commitment.)*
-- **Before any real case:** Cloudflare Access will be added in front of the
-  whole site, so only approved people can reach it. The AWS account's
+- **Before the beta's first tester:** Cloudflare Access will be in front
+  of the whole site, so only approved email addresses can reach it. The AWS account's
   root user has multi-factor sign-in and no access keys.
 
 ## 6. Duties that stay with the lawyer

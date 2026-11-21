@@ -1,5 +1,6 @@
 # Secrets - never commit
 .env
+secrets/
 
 # Case documents may be sensitive/privileged - never commit
 cases/
@@ -27,3 +28,8 @@ data/
 
 # Temporary compose override for private testing on the server (migration Phase 3)
 docker-compose.local-test.yml*
+
+# The beta package for the lawyers group: product material and a FICTIONAL
+# sample case only, so its Word files are tracked despite *.docx above. Never
+# put real case documents here.
+!beta-package/*.docx

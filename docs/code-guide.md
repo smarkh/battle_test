@@ -48,7 +48,7 @@ needed only to build the law index and to run the web UI.
 | `evaluate.py` | `python -m battle_test.evaluate`. Runs the sample cases and scores them against the expected authorities. | pipeline, report |
 | `models.py` | What the model clients share: `ModelError`, `Usage` (tokens one call used), and `make_client()`, which picks the client from `models.provider`. When `models.checker_provider` differs, it returns a `SplitClient` that sends the checker model's calls to the other provider. | none |
 | `ollama_client.py` | A minimal Ollama client: one `chat()` method, streaming, with a JSON mode. | models |
-| `bedrock_client.py` | The Amazon Bedrock client, with the same `chat()` method. Needs `boto3`, imported only when used. Retries are capped, because every attempt is billed. | models |
+| `bedrock_client.py` | The Amazon Bedrock client, with the same `chat()` method. Needs `boto3`, imported only when used. Retries are capped, because every attempt is billed. Reads a Bedrock API key from `bedrock.api_key_file` when set (the live site). | models |
 | `config.py` | Loads the TOML config into typed settings: `Config`, `CorpusConfig`, `WebConfig`, `Plans`. | none |
 
 ### How the pieces call each other
@@ -81,7 +81,7 @@ canned drafts.
 | `jobs.py` | `JobStore`: cases and the usage record in `cases.sqlite`, plus each case's folder. `Worker`: the background threads that run queued cases, one at a time or `[web] workers` at once. `Progress`: the in-memory event log the progress page reads. |
 | `auth.py` | `AuthStore`: accounts, password hashing, one-time setup links, sessions, login lockout, and the activity log, all in `users.sqlite`. |
 | `admin.py` | The `/admin` routes: accounts, plans, setup links, disable and enable, the activity log. |
-| `users.py` | `python -m battle_test.web.users`: the command-line account tool (`add`, `invite`, `passwd`, `plan`, `firm`, `paid`, `disable`, `enable`, `list`, `usage`). |
+| `users.py` | `python -m battle_test.web.users`: the command-line account tool (`add`, `beta`, `invite`, `passwd`, `plan`, `firm`, `paid`, `disable`, `enable`, `list`, `usage`). |
 | `render.py` | Turns a saved result into HTML: links ✅ citations to their source, highlights problems and placeholders. |
 | `extract.py` | Pulls the text out of an uploaded complaint (Word, PDF or text) for the new-case form. Limits the file size, how far a `.docx` may expand, and PDF pages. Rebuilds Word's automatic paragraph numbers, and tidies PDF text (headers, footers, page and line numbers, broken lines). Needs `python-docx` and `pypdf`. |
 | `export.py` | Builds the Word and PDF downloads. Both come from one list of blocks (`blocks()`), and are built in memory when asked for, so nothing extra is stored with a case. Needs `python-docx` and `reportlab`. |

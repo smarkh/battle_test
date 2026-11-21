@@ -3,8 +3,10 @@
 The deployed copy runs in Docker on the smark_iq home server and is public
 at **https://battle.smarkiq.us**.
 
-> **Fictional cases and test accounts only.** Cloudflare Access must be
-> added in front of the site before any real user or real case.
+> **Fictional cases only.** Cloudflare Access must be in front of the site
+> before any beta tester signs in (see "Cloudflare Access" below). Real
+> case material waits on the lawyer's sign-off
+> (`docs/data-handling-for-lawyer.md`).
 
 Commands marked **(laptop)** run in PowerShell on the laptop. Commands
 marked **(server)** run on the server, after connecting over SSH.
@@ -34,9 +36,14 @@ marked **(server)** run on the server, after connecting over SSH.
 | `battle-test-cloudflared` | battle_test | Its Cloudflare Tunnel connector, which makes the site public |
 | `open-webui`, `caddy`, `cloudflared` | smark_iq | An unrelated project. Leave these alone. |
 
+- **The drafting and checking models are on Amazon Bedrock** (gpt-oss
+  120B, Oregon), from the beta config of 2026-11-20 on. The app calls
+  them with a Bedrock API key (see "Bedrock API key"). A case takes about
+  6 minutes and costs about $0.05. Two cases run at once.
 - Ollama runs natively on the server (not in Docker) and serves
-  `qwen2.5:14b` on the GPU, plus `nomic-embed-text` for semantic
-  search. A case takes about 2 minutes with both checks on.
+  `nomic-embed-text` on the GPU for semantic search. It also still has
+  `qwen2.5:14b`, which the site used until the beta. Going back to it is a
+  config change (`config.server.toml`, `[models]`).
 - The two projects share only the GPU.
 - Data is in two Docker volumes: `battle_test_battle-law` (the law index,
   its section vectors, and the law refresh's `staging/` and `archive/`)
@@ -47,6 +54,8 @@ marked **(server)** run on the server, after connecting over SSH.
 - The server uses `config.server.toml`, which is built into the image.
 - The tunnel token is in `.env` in the battle_test folder on the server.
   It's gitignored and exists nowhere else.
+- The Bedrock API key is in `secrets\bedrock_api_key` in the same folder.
+  Also gitignored, kept out of the image, and nowhere else.
 
 ## Connect
 
@@ -204,12 +213,23 @@ That prints a one-time setup link. Send it to the user privately. They
 open it and choose their own password. The link works once and expires
 after 72 hours.
 
+**Beta testers** (one or several at once):
+```powershell
+docker compose run --rm battle-test python -m battle_test.web.users beta jdoe asmith --days 60
+```
+Each gets the Beta plan (15 cases in total), a paid-through date 60 days
+away, and their own setup link. Nothing is created if any name is taken or
+invalid. Usernames can't be email addresses. Each tester's email must also
+be allowed in Cloudflare Access. The whole routine, with an email to send,
+is in `docs/beta.md`.
+
 | To… | Replace `add NAME --plan solo` with |
 |---|---|
 | Issue a new setup link (forgotten password, expired link) | `invite NAME` |
 | Change the plan | `plan NAME PLAN` |
 | Put the account in a firm, or take it out | `firm NAME FIRM`, or `firm NAME` |
 | Set the last paid day, or remove it | `paid NAME 2026-11-30`, or `paid NAME` |
+| Add beta testers | `beta NAME [NAME...] --days 60` |
 | Block or restore sign-in | `disable NAME`, `enable NAME` |
 | List accounts | `list` |
 | Report cases per account | `usage` or `usage --month 2026-10` |
@@ -218,6 +238,150 @@ after 72 hours.
 
 Most of this can also be done by an admin in the browser at `/admin`.
 Creating or removing admins is command-line only.
+
+## Bedrock API key
+
+The live site calls Bedrock with a **long-term Bedrock API key**. It can
+call only Bedrock, it expires on a date chosen when it's made, and it's
+revoked in one click. An `aws sso login` sign-in doesn't work here: it
+lasts at most a few hours, and the site runs all the time.
+
+The key lives in one file on the server, `secrets\bedrock_api_key` next to
+`docker-compose.yml`. Compose mounts it read-only into the container at
+`/run/secrets/bedrock_api_key`, which `config.server.toml` names under
+`[bedrock]`. It's never in git, the image, an environment variable,
+`docker inspect`, or a command line.
+
+If the file is missing, compose only warns and starts the site anyway.
+Sign-in and old cases work, but every new case fails, and the app log
+starts with "WARNING: every case will fail".
+
+Console menus move, so treat the click paths as approximate.
+
+### Make the key (you, in the AWS console)
+
+1. Sign in through the portal as `smarkh`, account 548108386131,
+   `AdministratorAccess`. Set the region to **US West (Oregon)**.
+2. **Amazon Bedrock** → **API keys** → **Long-term API keys** →
+   **Generate long-term API key**.
+   - **Expiry: 90 days.** That covers a 60-day beta with room to spare.
+     Write the expiry date in `plans/beta-plan.md`.
+   - AWS makes an IAM user for the key (named like `BedrockAPIKey-…`) with
+     the managed policy `AmazonBedrockLimitedAccess`.
+3. **Copy the key now.** It's shown once. Don't paste it into chat, email
+   or a file on the laptop: it goes straight to the server (next section).
+4. **Tighten it** to the one model the site uses. IAM → **Users** → the
+   new `BedrockAPIKey-…` user → **Permissions**:
+   - Remove `AmazonBedrockLimitedAccess`.
+   - **Add permissions → Create inline policy → JSON**, name it
+     `battle-test-live-invoke`:
+     ```json
+     {
+       "Version": "2012-10-17",
+       "Statement": [
+         {
+           "Effect": "Allow",
+           "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+           "Resource": "arn:aws:bedrock:us-west-2::foundation-model/openai.gpt-oss-120b-1:0"
+         },
+         {
+           "Effect": "Allow",
+           "Action": "bedrock:CallWithBearerToken",
+           "Resource": "*"
+         }
+       ]
+     }
+     ```
+     `CallWithBearerToken` is what lets an API key be used at all. A
+     model added later (`config.server.toml`) needs its ARN added here, or
+     its calls are refused with `AccessDeniedException`.
+
+### Put it on the server (you, over SSH)
+
+**(laptop)** `ssh -t smark@smark-iq` (`-t`, so the hidden prompt works).
+Then **(server)**:
+```powershell
+cd C:\Users\smark\Documents\work\battle_test
+New-Item -ItemType Directory -Force secrets | Out-Null
+$k = Read-Host "Bedrock API key" -AsSecureString
+[IO.File]::WriteAllText("$PWD\secrets\bedrock_api_key", [Net.NetworkCredential]::new("", $k).Password)
+Remove-Variable k
+(Get-Item secrets\bedrock_api_key).Length   # more than 0; never print the key itself
+```
+Then deploy as in "Update the code", or, if the code is already deployed,
+`docker compose up -d --force-recreate battle-test` (between runs).
+
+**Check:** `docker logs --tail 20 battle-test` has no "WARNING: every case
+will fail". Then run one fictional sample case on the site (about $0.05)
+and check its report shows `gpt-oss-120b` and a cost.
+
+### Replace, revoke, expire
+
+- **Before it expires,** make a new key as above, write it over the old
+  file, and recreate the container between runs. Then delete the old
+  key's IAM user. The app reads the key when it makes its first Bedrock
+  call after starting, so it needs the restart.
+- **If the key may have leaked:** Bedrock → API keys → revoke it, or
+  delete the `BedrockAPIKey-…` user in IAM. Calls stop at once. Then make
+  a new one.
+- **When it expires or is revoked,** cases fail with "AWS didn't accept
+  the credentials". Sign-in and old cases keep working.
+- **The budget alerts** ($10 and $25) still apply. The beta should cost
+  about $5 to $11 in all (`plans/beta-plan.md`).
+
+## Cloudflare Access
+
+Access puts a Cloudflare sign-in in front of the whole site, so only
+approved emails reach even the sign-in page. **Required before any beta
+tester gets a link.** It's set in the dashboard, with no code change and no
+deploy. Free up to 50 users.
+
+Testers then sign in twice: first Cloudflare (their email, then a 6-digit
+code it emails them), then Battle Test (the username and password they
+chose). `docs/beta.md` has an email that explains this to them.
+
+### Set it up (you, in the Cloudflare dashboard)
+
+1. **Zero Trust** (one.dash.cloudflare.com). The first time, it asks for a
+   team name and a plan: choose **Free**. It may ask for a card even for
+   the free plan.
+2. **Settings → Authentication → Login methods:** check **One-time PIN**
+   is there (it's on by default). Nothing else is needed.
+3. **Access → Access groups → Add a group:** name `battle-beta`. Include →
+   **Emails** → your own email. Testers' emails are added here later, one
+   at a time.
+4. **Access → Applications → Add an application → Self-hosted:**
+   - Name `Battle Test`. Session duration **24 hours**.
+   - Domain `battle.smarkiq.us`, path **empty** (the whole site, so
+     `/admin` and `/setup/…` are covered too).
+   - Policy: name `Beta testers and admin`, action **Allow**, include →
+     **Access groups** → `battle-beta`.
+   - Login method: One-time PIN. Turn on **instant auth** if offered, so
+     testers go straight to the email box.
+5. **A bypass for the health check,** so the outside uptime check (D5)
+   still works. Add a second self-hosted application, `Battle Test
+   health`, domain `battle.smarkiq.us`, path `healthz`, with one policy:
+   action **Bypass**, include **Everyone**. `/healthz` shows only `ok`.
+
+### Check it
+
+- From a private window: `https://battle.smarkiq.us` shows Cloudflare's
+  page. Your email gets a code, and then the Battle Test sign-in appears.
+  Sign in, open a case, watch live progress on a running one, and download
+  a Word file.
+- An email not in `battle-beta` is refused (try a second address of
+  yours).
+- **(laptop)** `curl -s https://battle.smarkiq.us/healthz` still prints
+  `ok`, and `curl -sI https://battle.smarkiq.us/login` now redirects to
+  `cloudflareaccess.com`.
+- A phone on mobile data (D3 in `plans/plan.md`).
+
+### Add or remove a tester
+
+Access → Access groups → `battle-beta` → edit the emails. Removing an email
+stops new sign-ins at once. A session already open lasts until its 24
+hours run out, so also `disable` their Battle Test account if it must stop
+now.
 
 ## Evaluation and logs
 
@@ -364,11 +528,15 @@ Work through these in order:
 | A case fails with "Could not reach Ollama" | Ollama isn't running on the server |
 | Cases are slow, and Open WebUI chats are too | The two are sharing the GPU. It clears 30 seconds after a run. |
 | Cloudflare error 530 or 1033 | The connector isn't running or isn't registered |
+| Every case fails with "can't read the API key file", or the app log has "WARNING: every case will fail" | `secrets\bedrock_api_key` is missing or empty on the server ("Bedrock API key") |
+| Cases fail with "AWS didn't accept the credentials" | The Bedrock API key expired or was revoked. Make a new one. |
+| Cases fail with `AccessDeniedException` | The key's inline policy doesn't name the model in `config.server.toml` |
+| A tester sees Cloudflare's "That account does not have access" | Their email isn't in the `battle-beta` Access group |
 
 ## What's not done yet
 
-- **Cloudflare Access**, required before real users. It's a Cloudflare
-  dashboard setting and needs no code change.
+- **Cloudflare Access**, required before beta testers. The steps are
+  above ("Cloudflare Access"). Not set up as of 2026-11-20.
 - Plain `http://` requests aren't redirected to HTTPS. Sign-in can't work
   over HTTP, so nothing sensitive is exposed.
 - A check of how sharing the GPU with Open WebUI behaves under load.

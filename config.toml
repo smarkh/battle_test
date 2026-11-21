@@ -91,6 +91,11 @@ label = "Trial"
 cases = 5
 period = "total"    # never renews
 
+[plans.beta]
+label = "Beta"      # the lawyers' beta: 15 cases in total, 60 days (config.server.toml)
+cases = 15
+period = "total"
+
 [plans.solo]
 label = "Solo"
 cases = 30

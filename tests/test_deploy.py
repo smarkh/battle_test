@@ -56,10 +56,10 @@ class ServerConfigTest(unittest.TestCase):
         self.assertEqual(w.data_dir, Path("/data/cases"))
         self.assertEqual(w.retention_days, 90)
 
-    def test_server_uses_host_ollama_14b_and_the_volumes(self):
+    def test_server_uses_host_ollama_for_search_and_the_volumes(self):
         cfg = load_config(self.PATH)
         self.assertEqual(cfg.ollama_url, "http://host.docker.internal:11434")
-        self.assertEqual((cfg.plaintiff_model, cfg.defendant_model), ("qwen2.5:14b", "qwen2.5:14b"))
+        self.assertEqual((cfg.plaintiff_model, cfg.defendant_model), ("gpt-oss-120b", "gpt-oss-120b"))
         self.assertTrue(str(cfg.output_dir).replace("\\", "/").startswith("/data/cases"))
         self.assertEqual(load_corpus_config(self.PATH).db_path, Path("/data/law/law.sqlite"))
 
@@ -125,6 +125,18 @@ class DockerContextTest(unittest.TestCase):
         self.assertIn("BATTLE_TUNNEL_TOKEN=\n", example)  # placeholder, no value
         gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8").split()
         self.assertIn(".env", gitignore)
+
+
+    def test_bedrock_api_key_is_a_secret_file_kept_out_of_git_and_the_image(self):
+        active = "\n".join(self.active_compose_lines())
+        self.assertIn("- bedrock_api_key", active)
+        self.assertIn("file: ./secrets/bedrock_api_key", active)
+        self.assertNotIn("AWS_BEARER_TOKEN_BEDROCK", active)  # an env var would show in `docker inspect`
+        self.assertEqual(load_config(ROOT / "config.server.toml").bedrock_api_key_file,
+                         "/run/secrets/bedrock_api_key")  # where compose mounts it
+        for name in (".gitignore", ".dockerignore"):
+            with self.subTest(file=name):
+                self.assertIn("secrets/", (ROOT / name).read_text(encoding="utf-8").split())
 
 
 class KeepAliveTest(unittest.TestCase):

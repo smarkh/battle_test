@@ -5,6 +5,11 @@ the complaint (or takes yours) and a motion for summary judgment. A defendant
 model writes the opposition, and optionally the plaintiff model replies. No
 winner is declared. See `plans/plan.md` for the full design.
 
+**Beta (2026-11-20):** a beta with a group of lawyers is being prepared,
+on gpt-oss 120B on Bedrock, 15 cases per tester over 60 days, fictional
+cases only, at under $1 per tester. Decisions, cost and the launch
+checklist: `plans/beta-plan.md`. Adding testers: `docs/beta.md`.
+
 **New here? Start with [`docs/`](docs/README.md):** how the system works,
 what each file does, how to start and stop it on the laptop and on the
 server, and how to make a change.
@@ -133,6 +138,11 @@ python -m battle_test.web --demo-model    # canned drafts, no GPU needed
 - **Sign in** with that account. There's no self-signup, and each user sees
   only their own cases. Users can change their own password under their
   name in the header.
+- **Adding beta testers:** `python -m battle_test.web.users beta NAME [NAME...]
+  --days 60` makes each account on the Beta plan (15 cases in total), able
+  to start cases for 60 days, and prints a setup link for each. Nothing is
+  created if any name is taken or invalid. `--firm FIRM` pools them. See
+  `docs/beta.md`.
 - **Adding a user:** `python -m battle_test.web.users add NAME --plan solo`
   creates the account and prints a **one-time setup link**. Send it to the
   user privately. They open it and choose their own password, so nobody
@@ -160,8 +170,8 @@ python -m battle_test.web --demo-model    # canned drafts, no GPU needed
       admin account, are command-line only (`add NAME --admin --password`).
     - Anyone who isn't an admin gets a 404.
 - **Plans and usage:** each account is on a plan from `[plans]` in the
-  config (Trial 5 cases in total; Solo 30, Pro 100, Firm 60 a month;
-  Unlimited). `plan NAME PLAN` changes it, effective at once.
+  config (Trial 5 cases in total; Beta 15 in total; Solo 30, Pro 100,
+  Firm 60 a month; Unlimited). `plan NAME PLAN` changes it, effective at once.
   - A case counts when it's started. Monthly allowances renew on the 1st.
   - A run that fails, or a case deleted before it ran, isn't counted.
     Deleting a finished case doesn't give the use back.
@@ -361,16 +371,18 @@ aws sso login --profile battle-test
 python -m battle_test.evaluate --config config.bedrock.toml --model qwen3-32b --label bedrock-qwen3-32b --repeats 3
 ```
 
-- **Not working yet (2026-10-06):** AWS refuses every call with "Access
-  to Bedrock models is not allowed for this account". It needs an AWS
-  Support case.
+- **Working since 2026-11-05,** when AWS lifted the account hold. The
+  live site switches to it for the lawyers' beta (`config.server.toml`),
+  with a Bedrock API key on the server in place of a sign-in
+  (`docs/running-on-server.md`, "Bedrock API key").
 - **Before a run:** sign in with the AWS CLI. The model IDs and the
   profile name are in `config.bedrock.toml`. No credentials go in any
   file.
 - **Models** are listed under `[bedrock.models]` with their prices, which
   drive the cost estimate. Check the prices before relying on it.
-- **Cost:** about $0.01 to $0.22 per case depending on the model, and
-  nothing while idle. See `plans/aws-bedrock-plan.md`.
+- **Cost:** about $0.01 to $0.28 per case depending on the model, and
+  nothing while idle. gpt-oss 120B, which the beta uses, measured $0.047
+  a case. See `plans/aws-bedrock-plan.md` and `plans/beta-plan.md`.
 - A failed call is retried at most three times, then the run stops.
 - The web UI can run on it too, on port 8002 with its own accounts.
 

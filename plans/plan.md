@@ -37,6 +37,30 @@ guardrails-style network isolation and data handling).
   submit. A reference the model isn't sure of is left out of the draft.
   The 3b work on finding more authorities is paused, and 3a (the "does
   it say that?" check) moves up. See "Decisions made".
+- **2026-11-20: getting ready for a lawyers' beta.** A contact (not a
+  lawyer) in a group of about 20 lawyers will present it to them. 5 to 10
+  are expected to test it. Everything is in `plans/beta-plan.md` (decisions,
+  cost, launch checklist) and `docs/beta.md` (adding testers).
+  - **Decided:** gpt-oss 120B on Bedrock for the live site; 15 cases per
+    tester over 60 days; Cloudflare Access before any tester (you set it
+    up); fictional cases only, as before.
+  - **Cost:** $0.047 a case measured, so about $0.70 (at most about $0.90)
+    per tester who uses every case, and about $5 to $11 for the whole
+    beta with launch checks.
+  - **Built, not committed or deployed:** the `beta` plan, `users beta
+    NAME... --days 60`, the live config on Bedrock (`config.server.toml`,
+    workers 2), a Bedrock API key read from a Docker secret
+    (`bedrock.api_key_file`, `secrets/bedrock_api_key`), and a startup
+    warning in the app log if the key file is missing. Compose only warns
+    about a missing secret file, checked that day. 330 tests pass.
+  - **Note:** commit `2fc7d56` (another session's) swept in this
+    session's half-done `bedrock_client.py` and `config.py` changes. They
+    were complete and unused, so the deploy of `2fc7d56` changed nothing.
+  - **Docs:** `docs/running-on-server.md` has new "Bedrock API key" and
+    "Cloudflare Access" sections. README, docs/README, how-it-works,
+    code-guide and data-handling were updated.
+  - **Decks and the presenter's brief:** see "Presentation for beta
+    testers and prospective users".
 - **2026-11-18:**
   - **The server Bedrock script works.** The one-case check (alaska_boiler,
     gpt-oss 120B, keyword + semantic) cited 4/4 core, 0 off-topic, in 6
@@ -2027,7 +2051,9 @@ date.
 
 ### Before a demo
 
-- [ ] **D1. Which models the demo runs on.** The live site uses the
+- [x] **D1. Which models the demo runs on.** **Decided 2026-11-20:**
+  gpt-oss 120B on Bedrock, on the live site (`plans/beta-plan.md`).
+  Earlier notes: The live site uses the
   server's 14B, which cites about 43% of core law. gpt-oss 120B on
   Bedrock cites 58–65%, with 0 off-topic in the 2026-11-05 run. A
   gpt-oss demo runs from the laptop's Bedrock web UI (fictional cases
@@ -2050,17 +2076,25 @@ date.
 ### Also before a beta
 
 - [ ] **B1. Cloudflare Access,** covering the whole site including
-  /admin. Required before any outside user signs in.
+  /admin. Required before any outside user signs in. **Steps written
+  2026-11-20** (`docs/running-on-server.md`, "Cloudflare Access"). You set
+  it up.
 - [ ] **B2. The lawyer's sign-off,** from
   `docs/data-handling-for-lawyer.md`:
   - case material on AWS (this decides Bedrock or the 14B)
   - retention against record-keeping
   - Cloudflare seeing case text in transit
   - the claims and disclaimers in the decks
-- [ ] **B3. The hosting decision:** home or AWS
+- [x] **B3. The hosting decision, for the beta (2026-11-20):** home
+  server, with the models on Bedrock. The longer-term question stays open:
+  home or AWS
   (`plans/aws-hosting-plan.md`). It changes the data-handling slide and
   what testers are told.
-- [ ] **B4. The beta terms:**
+- [x] **B4. The beta terms (2026-11-20):** 15 cases in total for 60
+  days, fictional only, feedback by email, setup links sent by you once
+  each lawyer says yes (`docs/beta.md`). Feedback and sign-ups go to battle_test@smarkiq.us (forwarded to Gmail by Cloudflare Email Routing, set up 2026-11-20). The forwardable folder for the lawyers group (Word, PowerPoint and PDF copies) is
+  in `beta-package/`: the four files to send (built 2026-11-20; rebuilding is in `docs/beta.md`).
+  Earlier notes:
   - cases per tester
   - which case material testers may use (**decided 2026-11-06:
     fictional only**)
@@ -2131,7 +2165,29 @@ its Share › Export menu. Both are private until shared from that menu.
     to you?"
   - The working copies were in that session's scratch folder. Read a
     deck back with the Artifact tool before editing it again.
-- **Bracketed placeholders still to fill:**
+- **Updated 2026-11-20 for the lawyers' beta** (beta deck version 19,
+  prospects version 10):
+  - **Beta deck:** "Battle Test" in place of `battle_test`. Filled: 15
+    cases over 60 days, fictional or anonymised facts only, the address,
+    the two-step sign-in, the data slide (site on the home server, models
+    on Bedrock in Oregon, Cloudflare Access), current quality numbers (about
+    6 in 10 core cited, nothing off-topic, the checker doubting about 1 in
+    4), and a close that asks who wants to try it.
+  - **Every beta slide's speaker notes were rewritten** for a non-lawyer
+    presenter: plain words, no file paths or project history, and what not
+    to promise.
+  - **Prospects deck:** the name, the data slide and the case timing only.
+    The prices stay bracketed as proposed.
+  - **New: a presenter's brief** for the contact, as a Claude doc:
+    https://claude.ai/artifact/79oN5wo8pKuKqUrAr3ANS9. It covers what it
+    is, the beta offer, the running order, likely questions with answers,
+    what not to say, and what to send back.
+  - **Still to fill (beta deck and brief):** the presenter's name and
+    date (cover), your email (close), how many days until setup emails go
+    out (close), and the feedback address (feedback slide). The deck and
+    the brief are private until you share them from their Share menu.
+- **Bracketed placeholders still to fill (as of 2026-11-05; see above for
+  the beta deck):**
   - Both decks:
     - hosting, on the data-handling slide
     - the Cloudflare Access note

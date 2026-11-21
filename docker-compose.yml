@@ -20,6 +20,14 @@ services:
     volumes:
       - battle-law:/data/law                  # law index (rebuildable)
       - battle-cases:/data/cases              # accounts + case files (privileged)
+    # The Bedrock API key (config.server.toml, bedrock.api_key_file), mounted
+    # read-only at /run/secrets/bedrock_api_key. A file rather than an
+    # environment variable, so it isn't shown by `docker inspect`. If the
+    # file is missing, compose only warns and starts anyway: every case then
+    # fails, and the app log says why. See docs/running-on-server.md,
+    # "Bedrock API key".
+    secrets:
+      - bedrock_api_key
     read_only: true
     tmpfs:
       - /tmp
@@ -61,6 +69,12 @@ services:
     mem_limit: 256m
     cpus: 1
     restart: unless-stopped
+
+secrets:
+  bedrock_api_key:
+    # On the server only, next to this file. Gitignored and kept out of the
+    # image (.dockerignore). Never commit it or paste it anywhere.
+    file: ./secrets/bedrock_api_key
 
 volumes:
   battle-law:
