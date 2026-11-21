@@ -41,8 +41,10 @@ guardrails-style network isolation and data handling).
   - **The server Bedrock script works.** The one-case check (alaska_boiler,
     gpt-oss 120B, keyword + semantic) cited 4/4 core, 0 off-topic, in 6
     minutes, for $0.047 (estimate $0.05). Results copied to
-    `output/eval/20261119-030309-server-bedrock-check`, and the server
-    cleaned up. Next: the full semantic run, about $1, with your yes.
+    `output/eval/20261119-030309-server-bedrock-check`. The server
+    cleanup was missed then (the stopped `battle-eval` container and the
+    `battle-eval` folder were still there) and done on 2026-11-20. After
+    the full run, check both are gone. Next: the full semantic run, about $1, with your yes.
   - **Passages stage 2 built and measured** (not committed or deployed):
     keyword search by best passage, plus `evaluate --replay` for free
     search comparisons. On the 21 gpt-oss runs' queries, keyword only:
@@ -504,7 +506,7 @@ drafting, grounding and checking logic doesn't change.
 6. **Case history:** a list of past runs, reopenable. Users can **delete** a
    case, which removes its inputs and outputs from the server for good.
 
-### Look and feel (2026-11-20, not deployed)
+### Look and feel (2026-11-20, live since commit `7802e3a`)
 
 The pages looked like a generic web form, too informal for lawyers. **Decided
 2026-11-20:** a classic legal look, with the product name **Battle Test**
@@ -549,6 +551,11 @@ The pages looked like a generic web form, too informal for lawyers. **Decided
     at both files page by page. Fixes made during that check: column headings
     breaking mid-word in Word, the header's case name sitting mid-page, and
     the PDF header's letter spacing running past the margin.
+- **"New case" moved (2026-11-20, not yet deployed):** out of the top bar,
+  where it was hard to find, to the top right of each list of cases: a
+  navy button above the table on the Cases page, and a small one beside
+  "Your cases" on case pages. It isn't shown beside the new-case form
+  itself.
 - **Sign-in hint (2026-11-20):** "The username your admin gave you, not
   your email address" under the Username box. If what's typed contains "@",
   the error says it looks like an email address. Usernames can't contain

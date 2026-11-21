@@ -270,7 +270,14 @@ table.checks { margin-bottom: 1rem; }
 .layout.with-case-nav main { margin: 0; max-width: none; }
 .case-nav { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto;
   padding: 2rem 0 1.5rem 1.25rem; }
-.case-nav h2 { margin: 0.25rem 0 0.75rem; }
+/* "New case" sits at the top right of each list of cases. */
+.case-nav-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;
+  margin: 0.25rem 0 0.75rem; padding-bottom: 0.45rem; border-bottom: 1px solid var(--rule); }
+.case-nav-head h2 { margin: 0; padding: 0; border: 0; }
+.button.small { padding: 0.25rem 0.65rem; font-size: 0.8rem; }
+.list-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;
+  margin: 0.5rem 0 0.75rem; }
+.list-head p { margin: 0; }
 .case-nav ul { list-style: none; margin: 0; padding: 0; }
 .case-nav a { display: block; padding: 0.6rem 0.7rem; border-left: 3px solid transparent; border-bottom: 1px solid var(--border);
   text-decoration: none; color: var(--text); }

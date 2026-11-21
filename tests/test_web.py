@@ -561,6 +561,16 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("Draft the complaint and the motion", new)
         self.assertIn("Use my complaint, draft only the motion", new)
 
+    def test_new_case_button_sits_with_the_case_lists(self):
+        self.assertEqual(self.submit().status_code, 303)
+        home = self.client.get("/").text
+        header = home.split("</header>")[0]
+        self.assertNotIn("/cases/new", header)
+        self.assertIn('<a class="button primary" href="/cases/new">New case</a>', home)
+        case = self.client.get(re.search(r'href="(/cases/[0-9a-f]+)"', home).group(1)).text
+        self.assertIn('<a class="button primary small" href="/cases/new">New case</a>', case)
+        self.assertNotIn('class="button primary small" href="/cases/new"', self.client.get("/cases/new").text)
+
     def test_email_in_the_username_box_gets_a_hint(self):
         page = self.login("dana@example.com")
         self.assertEqual(page.status_code, 401)
@@ -727,7 +737,7 @@ class WebAppTest(unittest.TestCase):
         for url in (first, failed):  # a results page and a failure page
             with self.subTest(url=url):
                 nav = re.search(r'<nav class="case-nav".*?</nav>', self.client.get(url).text, re.DOTALL).group()
-                self.assertEqual(re.findall(r'href="(/cases/\w+)"', nav), [failed, second, first])
+                self.assertEqual(re.findall(r'href="(/cases/[0-9a-f]{32})"', nav), [failed, second, first])
                 self.assertEqual(re.findall(r'href="(/cases/\w+)" aria-current="page"', nav), [url])
                 self.assertNotIn("Someone Else", nav)
         self.assertNotIn(theirs, self.client.get(first).text)

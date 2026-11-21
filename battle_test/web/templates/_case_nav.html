@@ -1,6 +1,10 @@
 {# The user's cases, newest first, beside the case being viewed (or the new-case form, which has no `job`). #}
 <nav class="case-nav" aria-label="Your cases">
-  <h2>Your cases</h2>
+  <div class="case-nav-head">
+    <h2>Your cases</h2>
+    {# Not on the new-case form itself, which this column sits beside. #}
+    {% if job is defined %}<a class="button primary small" href="/cases/new">New case</a>{% endif %}
+  </div>
   <ul>
   {% for other in nav_jobs %}
     <li>

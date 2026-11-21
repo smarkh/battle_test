@@ -14,7 +14,6 @@
     {% if session %}
     <nav>
       <a href="/">Cases</a>
-      <a class="button" href="/cases/new">New case</a>
       {% if session.user.is_admin %}<a href="/admin">Admin</a>{% endif %}
       <a href="/account" class="muted">{{ session.user.username }}</a>
       <form method="post" action="/logout" class="inline">

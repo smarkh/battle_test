@@ -6,11 +6,15 @@ models is a config change.
 
 Credentials never appear here or in a config file. boto3 finds them the
 usual way: an AWS profile on the laptop (`aws sso login`), or the instance
-role on an AWS server.
+role on an AWS server. The live site on the home server instead reads a
+Bedrock API key from a file (`bedrock.api_key_file`, a Docker secret), which
+can only call Bedrock and expires on a date set when it's made.
 """
 
+import os
 import sys
 import threading
+from pathlib import Path
 from typing import Callable
 
 from battle_test.models import ModelError, Usage
@@ -32,8 +36,13 @@ _HINTS = {
                            "`temperature = false` for the model) or need a smaller max_tokens.",
     "ThrottlingException": f"Still throttled after {MAX_ATTEMPTS} attempts. Wait, or ask AWS for a higher quota.",
     "ExpiredTokenException": "The AWS sign-in has expired. Run `aws sso login` again.",
-    "UnrecognizedClientException": "AWS didn't accept the credentials. Run `aws sso login` again.",
+    "UnrecognizedClientException": "AWS didn't accept the credentials. Run `aws sso login` again, or on the "
+                                   "live site, check that the Bedrock API key hasn't expired or been revoked "
+                                   "(docs/running-on-server.md, \"Bedrock API key\").",
 }
+
+# boto3 sends this as a Bearer token to Bedrock, in place of signed AWS credentials.
+API_KEY_ENV = "AWS_BEARER_TOKEN_BEDROCK"
 
 
 class BedrockError(ModelError):
@@ -62,9 +71,23 @@ def _explain(error: Exception) -> str:
     return f"Bedrock: {error}" + (f"\n{hint}" if hint else "")
 
 
+def read_api_key(path: str) -> str:
+    """The Bedrock API key in `path`, without surrounding whitespace. The key
+    itself never goes into an error message."""
+    try:
+        key = Path(path).read_text(encoding="utf-8").strip()
+    except OSError as e:
+        raise BedrockError(f"Bedrock: can't read the API key file {path} ({e.strerror}). On the live site it's "
+                           "the Docker secret secrets/bedrock_api_key next to docker-compose.yml "
+                           "(docs/running-on-server.md, \"Bedrock API key\").") from None
+    if not key:
+        raise BedrockError(f"Bedrock: the API key file {path} is empty.")
+    return key
+
+
 class BedrockClient:
     def __init__(self, region: str, models: dict, max_tokens: int, temperature: float, *,
-                 profile: str = "", timeout_seconds: int = 600, runtime=None):
+                 profile: str = "", timeout_seconds: int = 600, api_key_file: str = "", runtime=None):
         """`models` maps the names used in [models] to BedrockModel settings.
         `runtime` replaces the boto3 client (for tests)."""
         self.region = region
@@ -73,13 +96,15 @@ class BedrockClient:
         self.temperature = temperature
         self.profile = profile
         self.timeout_seconds = timeout_seconds
+        self.api_key_file = api_key_file
         self._runtime = runtime
         self._starting = threading.Lock()
 
     @classmethod
     def from_config(cls, cfg) -> "BedrockClient":
         return cls(cfg.bedrock_region, cfg.bedrock_models, cfg.max_tokens, cfg.temperature,
-                   profile=cfg.bedrock_profile, timeout_seconds=cfg.timeout_seconds)
+                   profile=cfg.bedrock_profile, timeout_seconds=cfg.timeout_seconds,
+                   api_key_file=cfg.bedrock_api_key_file)
 
     def _client(self):
         # Locked: with [web] workers above 1, several cases can make their first call at once.
@@ -93,6 +118,8 @@ class BedrockClient:
                 from botocore.config import Config as BotoConfig
             except ImportError as e:
                 raise BedrockError("The Bedrock provider needs boto3: pip install -r requirements.txt") from e
+            if self.api_key_file:
+                os.environ[API_KEY_ENV] = read_api_key(self.api_key_file)
             try:
                 session = boto3.Session(profile_name=self.profile or None, region_name=self.region)
                 self._runtime = session.client("bedrock-runtime", config=BotoConfig(

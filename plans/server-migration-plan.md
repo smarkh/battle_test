@@ -702,7 +702,28 @@ how to run it". That replaces the separate `deploy.md` planned here.
     - Until that's deployed: purge the cache in the Cloudflare
       dashboard (Caching → Configuration → Purge Everything, which also
       affects `llm.smarkiq.us`), or wait 4 hours, and hard-refresh.
-  - **Last done 2026-10-15:** commit `662a6d7`, which turns both checks
+  - **Last done 2026-11-20:** commit `7802e3a` (from `363e014`). It
+    brought the formal "Battle Test" look for the pages and the Word and
+    PDF downloads, the username hint on sign-in, and the fix for the
+    "served on this computer only" banner showing on the live site. It also
+    brought the passage search code, which stays off (`config.server.toml`
+    sets no `keyword`, so search is by section).
+    - No case was queued or running. No database change.
+    - `git pull` over SSH, then the **classic builder over SSH worked**
+      (image `403f8daed0be`). Sent as `powershell -EncodedCommand`,
+      because quotes in a plain `ssh "..."` command were stripped. Then
+      `docker compose up -d`: healthy in about 20 seconds.
+    - Checked afterwards: `/healthz` 200 through Cloudflare, the live
+      sign-in page has the new header, the hint and the new banner text
+      (no "Local preview"), the new stylesheet is served, and
+      `llm.smarkiq.us` is unaffected.
+    - **Not checked:** signed-in pages and a Word/PDF download on the live
+      site, since that needs your account.
+    - `docker compose up` warned about the orphan container `battle-eval`
+      left from the 2026-11-18 Bedrock check (see aws-bedrock-plan.md).
+      Removed the same day with your OK, along with `C:\Users\smark\battle-eval`
+      (its config and expired credentials).
+  - **Done before, 2026-10-15:** commit `662a6d7`, which turns both checks
     on (`checker = "qwen2.5:14b"` in `config.server.toml`) and brings
     the consistent fit check. `git pull` over SSH worked, but `docker
     compose build` over SSH failed again with the credentials error

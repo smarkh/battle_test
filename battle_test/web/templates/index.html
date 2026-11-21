@@ -4,7 +4,10 @@
 {% if jobs %}
 <h1>Cases</h1>
 {% if deleted %}<p class="notice" role="status">Case deleted.</p>{% endif %}
-{% if retention_days > 0 %}<p class="muted">Finished cases are deleted automatically {{ retention_days }} days after they're started.</p>{% endif %}
+<div class="list-head">
+  <p class="muted">{% if retention_days > 0 %}Finished cases are deleted automatically {{ retention_days }} days after they're started.{% endif %}</p>
+  <a class="button primary" href="/cases/new">New case</a>
+</div>
 <table class="cases">
   <thead><tr><th>Case</th><th>State</th><th>Drafted</th><th>Rounds</th><th>Started</th><th>Status</th><th>Deleted on</th></tr></thead>
   <tbody>

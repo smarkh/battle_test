@@ -44,6 +44,9 @@ class Config:
     provider: str = "ollama"  # or "bedrock"
     bedrock_region: str = ""
     bedrock_profile: str = ""  # an AWS profile name. "" = boto3's default credentials.
+    # A file holding a Bedrock API key (the live site: a Docker secret). ""
+    # = none. When set, the key is used instead of a profile or role.
+    bedrock_api_key_file: str = ""
     max_tokens: int = 16000  # the most a Bedrock model may write in one reply
     bedrock_models: dict[str, BedrockModel] = field(default_factory=dict)
     # The model that checks whether each cited section says what the draft
@@ -140,6 +143,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
         provider=provider,
         bedrock_region=bedrock.get("region", ""),
         bedrock_profile=bedrock.get("profile", ""),
+        bedrock_api_key_file=bedrock.get("api_key_file", ""),
         max_tokens=bedrock.get("max_tokens", 16000),
         bedrock_models={
             name: BedrockModel(m.get("id", ""), m.get("input_per_million"), m.get("output_per_million"),
