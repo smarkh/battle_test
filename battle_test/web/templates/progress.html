@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Running: {{ job.title }}{% endblock %}
 {% block content %}
+<p class="kicker">Review in progress</p>
 <h1>{{ job.title }}</h1>
 <p class="muted">{{ states[job.state_code] }} · {{ job.rounds }} round{{ "s" if job.rounds > 1 }} · started {{ job.created_at.replace("T", " ")[:16] }}</p>
 

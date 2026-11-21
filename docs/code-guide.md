@@ -87,7 +87,7 @@ canned drafts.
 | `export.py` | Builds the Word and PDF downloads. Both come from one list of blocks (`blocks()`), and are built in memory when asked for, so nothing extra is stored with a case. Needs `python-docx` and `reportlab`. |
 | `demo.py` | `DemoClient`: canned drafts for working on the UI without a GPU. Research, selection and checking still run for real. |
 | `templates/` | Jinja pages. `base.html` is the layout. `_case_form.html`, `_case_nav.html` (the case list down the left of a case page and the new-case form) and `_events.html` are shared fragments. |
-| `static/app.css`, `static/app.js` | The stylesheet, and the one script: the form mode switch, document tabs, and live progress. |
+| `static/app.css`, `static/app.js` | The stylesheet (the classic legal look: colours and fonts are variables at the top, with dark-mode values below them), and the one script: the form mode switch, document tabs, and live progress. |
 
 ### The life of a web case
 

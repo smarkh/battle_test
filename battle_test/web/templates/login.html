@@ -14,6 +14,7 @@
   <form method="post" action="/login" class="case-form">
     <input type="hidden" name="next" value="{{ next }}">
     <label class="field"><span>Username</span>
+      <small>The username your admin gave you, not your email address.</small>
       <input type="text" name="username" value="{{ username }}" autocomplete="username" required autofocus></label>
     <label class="field"><span>Password</span>
       <input type="password" name="password" autocomplete="current-password" required></label>

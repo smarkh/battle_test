@@ -30,6 +30,7 @@ SESSION_LIFETIME = timedelta(days=7)
 MAX_FAILED_LOGINS = 5
 LOCKOUT_SECONDS = 15 * 60
 SETUP_LINK_LIFETIME = timedelta(hours=72)
+WRONG_LOGIN = "Wrong username or password."
 SETUP_LINK_INVALID = "This link has expired or was already used. Ask your admin for a new one."
 # Stored instead of a hash until the user sets a password. It never verifies.
 NO_PASSWORD = "!"
@@ -369,7 +370,7 @@ class AuthStore:
         stored = row[-1] if known else hash_password(secrets.token_hex(8))
         if not verify_password(password, stored) or not known or row[3]:
             self._failures.setdefault(key, []).append(self._clock())
-            raise AuthError("Wrong username or password.")
+            raise AuthError(WRONG_LOGIN)
         self._failures.pop(key, None)
         return _user(row[:-1])
 

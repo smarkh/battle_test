@@ -3,6 +3,7 @@
 {% block content %}
 <div class="result-head">
   <div>
+    <p class="kicker">Review complete</p>
     <h1>{{ job.title }}</h1>
     <p class="muted">{{ result.state }} and federal law · {{ job.rounds }} round{{ "s" if job.rounds > 1 }} ·
       plaintiff model <code>{{ result.plaintiff_model }}</code> · defendant model <code>{{ result.defendant_model }}</code>
@@ -80,7 +81,7 @@
 </div>
 {% for doc in documents %}
 <section class="tab-panel" id="doc-{{ loop.index }}" {% if not loop.first %}hidden{% endif %}>
-  <p class="muted">{{ doc.role|title }} · {{ "LLM-generated" if doc.generated else "user-supplied" }}</p>
+  <p class="muted doc-meta">{{ doc.role|title }} · {{ "LLM-generated" if doc.generated else "user-supplied" }}</p>
   <div class="document">{{ doc.html }}</div>
 </section>
 {% endfor %}

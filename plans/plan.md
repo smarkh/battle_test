@@ -504,6 +504,57 @@ drafting, grounding and checking logic doesn't change.
 6. **Case history:** a list of past runs, reopenable. Users can **delete** a
    case, which removes its inputs and outputs from the server for good.
 
+### Look and feel (2026-11-20, not deployed)
+
+The pages looked like a generic web form, too informal for lawyers. **Decided
+2026-11-20:** a classic legal look, with the product name **Battle Test**
+(tagline "Adversarial case review") in place of the code name `battle_test`.
+- Navy header ruled off in brass; warm off-white background; serif headings
+  (Palatino / Georgia) and Segoe UI for the interface. Only fonts already on
+  Windows and macOS: the Content-Security-Policy allows no outside fonts, and
+  that keeps the site from contacting a font service.
+- Section headings as small tracked capitals over a hairline rule, square
+  corners, tables ruled rather than boxed, status tags in small capitals.
+- The new-case form is one white sheet with numbered sections. Drafted
+  documents show as a page (Times, generous margins). Citations in lists are
+  set in the serif, not code type.
+- Dark mode kept, with its own colours.
+- **Fixed:** the banner said "Local preview, served on this computer only"
+  on the live site too. It now says that only when `behind_proxy` is false;
+  the live site shows "Drafts for attorney review. Not legal advice."
+- A footer on every page: "Generated drafts for review by a licensed
+  attorney. Not legal advice." (no new legal claims; the lawyer's review of
+  disclaimers, B2, still applies).
+- Only `app.css`, `base.html`, small class changes in `_case_form.html`,
+  `result.html` and `progress.html`, and one line in `app.py`. Checked with
+  the demo model in Chrome (results, new case, case list, sign in, admin).
+  **Not yet checked:** a phone, and dark mode, by eye.
+- **Word and PDF downloads restyled to match (2026-11-20),** in
+  `battle_test/web/export.py`. Both formats are still built from one block list:
+  - First page: a brass "Battle Test · Adversarial case review" label, the
+    case name as the title over a brass rule, the disclaimer in a shaded
+    box with a brass left edge, and the run details as a ruled two-column
+    table instead of bullets.
+  - Each document starts on a new page with a small label (for example
+    "Plaintiff · LLM-generated") and a serif title. Drafts stay in Times.
+  - The citation check table is ruled like the web page's, and a problem
+    count above zero is shown in red. "[CITATION NEEDED]" is shaded in the
+    site's cream, not Word's bright yellow.
+  - From page 2 on, a running header shows "BATTLE TEST" and the case name.
+    Every page has a footer with the disclaimer and the page number.
+  - Word uses Palatino Linotype for headings, Times New Roman for text and
+    Arial for labels. The PDF uses only the standard Times and Helvetica,
+    which need no font files.
+  - Checked by opening the Word file in Word (no repair warning) and looking
+    at both files page by page. Fixes made during that check: column headings
+    breaking mid-word in Word, the header's case name sitting mid-page, and
+    the PDF header's letter spacing running past the margin.
+- **Sign-in hint (2026-11-20):** "The username your admin gave you, not
+  your email address" under the Username box. If what's typed contains "@",
+  the error says it looks like an email address. Usernames can't contain
+  "@", so this reveals nothing about which accounts exist. Prompted by the
+  user typing their email on the live site.
+
 ### Recommended architecture
 
 - **Standalone app, not an Open WebUI plugin.** Open WebUI's chat layout

@@ -32,7 +32,7 @@ from battle_test.report import HELD_BACK, SET_ASIDE_NOTE, possible_references_no
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from battle_test.web import admin, export, extract, render
-from battle_test.web.auth import SETUP_LINK_INVALID, AuthError, AuthStore, Session, User
+from battle_test.web.auth import SETUP_LINK_INVALID, WRONG_LOGIN, AuthError, AuthStore, Session, User
 from battle_test.web.jobs import DONE, FAILED, QUEUED, RUNNING, Job, JobStore, QueueFull, QuotaExceeded, Worker
 
 HERE = Path(__file__).resolve().parent
@@ -235,6 +235,8 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
     templates.env.globals["static_version"] = static_version
     templates.env.globals.update(states=SUPPORTED_STATES, fact_fields=FACT_FIELDS, modes=MODES,
                                  retention_days=web.retention_days,
+                                 # The "served on this computer only" banner: not on the deployed site.
+                                 local_preview=not web.behind_proxy,
                                  max_upload_mb=extract.MAX_UPLOAD_BYTES // (1024 * 1024))
 
     def deletes_on(job: Job) -> str:
@@ -351,7 +353,11 @@ def create_app(config_path: Path = DEFAULT_CONFIG_PATH, *, client: ChatClient | 
             known = auth.get_user(username)
             if known:  # never a mistyped name: people type passwords into that box
                 auth.log("sign-in failed", known.username, detail=origin)
-            response = page(request, "login.html", None, next=target, error=str(e), username=username,
+            error = str(e)
+            # Usernames can't contain "@", so this reveals nothing about which accounts exist.
+            if "@" in username and error == WRONG_LOGIN:
+                error = "That looks like an email address. Sign in with your username instead."
+            response = page(request, "login.html", None, next=target, error=error, username=username,
                             no_accounts=not auth.list_users())
             response.status_code = 401
             return response

@@ -561,11 +561,26 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("Draft the complaint and the motion", new)
         self.assertIn("Use my complaint, draft only the motion", new)
 
+    def test_email_in_the_username_box_gets_a_hint(self):
+        page = self.login("dana@example.com")
+        self.assertEqual(page.status_code, 401)
+        self.assertIn("That looks like an email address. Sign in with your username instead.", page.text)
+        self.assertIn("Wrong username or password.", self.login("nobody").text)
+        self.assertIn("not your email address", page.text)  # the hint under the Username box
+
+    def test_local_preview_banner_only_off_the_server(self):
+        self.assertIn("Local preview, served on this computer only.", self.client.get("/").text)
+        from jinja2 import Environment, FileSystemLoader
+        env = Environment(loader=FileSystemLoader(Path(__file__).parents[1] / "battle_test" / "web" / "templates"))
+        deployed = env.get_template("base.html").render(local_preview=False, static_version="x")
+        self.assertNotIn("Local preview", deployed)
+        self.assertIn("Drafts for attorney review. Not legal advice.", deployed)
+
     def test_empty_case_list_shows_the_form(self):
         home = self.client.get("/").text
         self.assertIn("<h1>Start your first case</h1>", home)
         self.assertNotIn("Start one", home)
-        self.assertIn('<form method="post" action="/cases" class="case-form" enctype="multipart/form-data">', home)
+        self.assertIn('<form method="post" action="/cases" class="case-form sheet" enctype="multipart/form-data">', home)
         self.assertIn("Draft the complaint and the motion", home)
         self.assertIn("Use my complaint, draft only the motion", home)
         self.assertNotIn('<table class="cases">', home)
@@ -673,7 +688,8 @@ class WebAppTest(unittest.TestCase):
         self.assertRegex(word.headers["content-disposition"], r'attachment; filename="battle-test-ut-[\d-]+\.docx"')
         import docx
         text = "\n".join(p.text for p in docx.Document(io.BytesIO(word.content)).paragraphs)
-        for expected in ("Battle test: Dana Whitfield v. Summit Peak Roofing LLC", "not legal advice", "Complaint",
+        for expected in ("Dana Whitfield v. Summit Peak Roofing LLC", "Battle Test · Adversarial case review",
+                         "not legal advice", "Complaint",
                          "Opposition to Motion for Summary Judgment", "Utah Code § 99-99-999",
                          "[⚠ NOT FOUND: no such section in the law index]", "[CITATION NEEDED:",
                          "Authorities quoted to the models", "https://le.utah.gov/"):
@@ -820,7 +836,8 @@ class RenderTest(unittest.TestCase):
         result = {**ExportTest.RESULT, "checker_model": "c", "documents": [
             {**ExportTest.RESULT["documents"][0], **doc}]}
         blocks = export.blocks(result, "A v. B", "now")
-        texts = [t for b in blocks for t in [b.text, *(i[0] for i in b.items if b.kind == "bullets")]]
+        texts = [t for b in blocks for t in [b.text, *(i[0] for i in b.items if b.kind == "bullets"),
+                                             *(": ".join(i) for i in b.items if b.kind == "facts")]]
         self.assertIn("Citation checker model: c", texts)
         self.assertIn("⚠ may not support what it's cited for: § 1-1-1. Checker's note: It is about <fees>.", texts)
         self.assertTrue(any("A model also compared each one" in t for t in texts))
